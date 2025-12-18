@@ -22,7 +22,7 @@ public class CommandProcessor
     {
         Console.WriteLine("Commands:");
         Console.WriteLine("  open <path>              Open .bin file");
-        Console.WriteLine("  save [path]              Save to original path or provided path");
+        Console.WriteLine("  save [path]              Save to original path, provided path, or auto-generated filename");
         Console.WriteLine("  unload                   Unload current image");
         Console.WriteLine("  info                     Show info about loaded image");
         Console.WriteLine("  print                    Print table of blocks");
@@ -130,13 +130,37 @@ public class CommandProcessor
     private void Save(string? path)
     {
         RequireLoaded();
-        var target = path ?? _current!.SourcePath;
-        if (string.IsNullOrWhiteSpace(target))
-            throw new InvalidOperationException("No path specified, and current image has no source path.");
-        var ext = GetFormatFromPath(target!);
+        string target;
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            target = path;
+        }
+        else if (!string.IsNullOrWhiteSpace(_current!.SourcePath))
+        {
+            target = _current.SourcePath;
+        }
+        else
+        {
+            // Generate filename from page 0 blocks
+            var sb = new StringBuilder();
+            sb.Append("elevator-t55xx-");
+            for (int block = 0; block < _current.BlockCount; block++)
+            {
+                uint blockValue = _current.GetBlock(0, block);
+                sb.Append(blockValue.ToString("X8"));
+                if (block < _current.BlockCount - 1)
+                {
+                    sb.Append('-');
+                }
+            }
+            sb.Append(".bin");
+            target = sb.ToString();
+        }
+
+        var ext = GetFormatFromPath(target);
         if (!_writersByExt.TryGetValue(ext, out var writer))
             throw new InvalidOperationException($"Unsupported format '.{ext}'");
-        writer.WriteBlocks(target!, _current!.Blocks);
+        writer.WriteBlocks(target, _current!.Blocks);
         _current!.SourcePath = target;
         _current.MarkSaved();
         Console.WriteLine($"Saved to '{target}'.");
