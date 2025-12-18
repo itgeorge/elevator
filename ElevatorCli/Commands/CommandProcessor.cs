@@ -59,7 +59,7 @@ public class CommandProcessor
                     break;
                 case "info":
                     RequireLoaded();
-                    Console.WriteLine($"Blocks: {_current!.BlockCount}, Pages: {_current.PageCount}, Path: {_current.SourcePath ?? "<new>"}, Dirty: {_current.IsDirty}");
+                    PrintInfo();
                     break;
                 case "print":
                     RequireLoaded();
@@ -195,7 +195,7 @@ public class CommandProcessor
         _current!.SetBlock(0, 5, block);
         SyncMirrors(5); // Copy from block 5 to block 6
         Console.WriteLine($"Set rides to {remaining} (block: {block:X8})");
-        Console.WriteLine($"Blocks: {_current!.BlockCount}, Pages: {_current.PageCount}, Path: {_current.SourcePath ?? "<new>"}, Dirty: {_current.IsDirty}");
+        PrintInfo();
     }
 
     private void AddRides(int more)
@@ -205,6 +205,12 @@ public class CommandProcessor
         uint currentRides = TokenBlockUtils.DecodeFromBlock(currentBlock);
         uint newRides = currentRides + (uint)more;
         SetRides((int)newRides);
+    }
+
+    private void PrintInfo()
+    {
+        Console.WriteLine($"Blocks: {_current!.BlockCount}, Pages: {_current.PageCount}, Path: {_current.SourcePath ?? "<new>"}, Dirty: {_current.IsDirty}");
+        TablePrinter.PrintTable(_current!, Console.Out);
     }
 
     private static string GetFormatFromPath(string path)
