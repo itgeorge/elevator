@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorCli", "ElevatorCli\ElevatorCli.csproj", "{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorCli.Tests", "ElevatorCli.Tests\ElevatorCli.Tests.csproj", "{7A08AE2F-047F-4306-9B44-168F2A826F0C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A08AE2F-047F-4306-9B44-168F2A826F0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A08AE2F-047F-4306-9B44-168F2A826F0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A08AE2F-047F-4306-9B44-168F2A826F0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A08AE2F-047F-4306-9B44-168F2A826F0C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
