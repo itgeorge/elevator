@@ -4,46 +4,84 @@ namespace ElevatorCli;
 
 static class TokenBlockUtils
 {
-    public static List<(int v, uint expected)> ParseTable(string table)
+    public record Family(uint High16, uint XorConst);
+
+    public static class Families
     {
-        var rows = new List<(int v, uint expected)>();
+        public static readonly Family Family0To127 = new(0xCCC7, 0x0000);
+        public static readonly Family Family128To255 = new(0x3FC7, 0x8008);
+        public static readonly Family Family256To383 = new(0xCCC6, 0x0010);
+        public static readonly Family Family384To500 = new(0x3FC6, 0x8018);
 
-        var lines = table.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var raw in lines)
+        private static uint GetHigh16FromBlock(uint block)
         {
-            var line = raw.Trim();
-            if (line.Length == 0) continue;
-
-            // Split on whitespace
-            var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2) continue;
-
-            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int v))
-                throw new FormatException($"Could not parse value from: '{line}'");
-
-            // hex block word
-            if (!uint.TryParse(parts[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint expected))
-                throw new FormatException($"Could not parse hex block from: '{line}'");
-
-            rows.Add((v, expected));
+            return block >> 16;
         }
 
-        return rows;
+        public static Family GetFamilyFromBlock(uint block)
+        {
+            uint high16 = GetHigh16FromBlock(block);
+            if (high16 == Family0To127.High16)
+            {
+                return Family0To127;
+            }
+
+            if (high16 == Family128To255.High16)
+            {
+                return Family128To255;
+            }
+
+            if (high16 == Family256To383.High16)
+            {
+                return Family256To383;
+            }
+
+            if (high16 == Family384To500.High16)
+            {
+                return Family384To500;
+            }
+
+            throw new ArgumentException($"Block {block:X8} is out of range (unknown high 16 {high16})");
+        }
+
+        public static Family GetFamilyFromRides(uint ridesRemaining)
+        {
+            if (ridesRemaining <= 127)
+            {
+                return Family0To127;
+            }
+
+            if (ridesRemaining <= 255)
+            {
+                return Family128To255;
+            }
+
+            if (ridesRemaining <= 383)
+            {
+                return Family256To383;
+            }
+
+            if (ridesRemaining <= 500)
+            {
+                return Family384To500;
+            }
+
+            throw new ArgumentException($"Rides remaining {ridesRemaining} is out of range");
+        }
     }
 
-    public static uint EncodeForBlock(uint ridesRemaining)
+    private static ushort EncodeBaseLow16Only(uint m)
     {
-        uint g = ridesRemaining >> 4; // group 0..6 (for your dataset)
-        uint o = ridesRemaining & 0xF; // offset 0..15
+        uint g = m >> 4;
+        uint o = m & 0xFu;
 
         uint hb = (((g + 4u) & 0x7u) << 4) | (o ^ 0x9u);
         uint lb = ((o ^ 0xCu) << 4) | (g + (g < 4u ? 0xCu : 0x4u));
 
-        uint low16 = (hb << 8) | lb;
-        return 0xCCC70000u | low16;
+        return (ushort)((hb << 8) | lb);
     }
 
-    public static uint DecodeFromBlock(uint block)
+    private static uint DecodeFromBaseBlock(uint block)
     {
         // Extract low 16 bits
         uint low16 = block & 0xFFFF;
@@ -84,5 +122,44 @@ static class TokenBlockUtils
 
         // Combine g and o to get rides remaining
         return (g << 4) | o;
+    }
+    
+    public static uint EncodeByFamily(uint value, Family family)
+    {
+        uint m = value & 0x7Fu;
+        ushort base16 = EncodeBaseLow16Only(m);
+        uint low16 = (uint)(base16 ^ (ushort)family.XorConst);
+        return (family.High16 << 16) | low16;
+    }
+
+    public static uint Encode(uint ridesRemaining) 
+    {
+        return EncodeByFamily(ridesRemaining, Families.GetFamilyFromRides(ridesRemaining));
+    }
+
+    public static uint Decode(uint block)
+    {
+        var family = Families.GetFamilyFromBlock(block);
+
+        // 1) Unmask the payload (XOR is on low16, not on the decoded number)
+        uint low16Masked = block & 0xFFFFu;
+        uint low16Base = low16Masked ^ family.XorConst;
+
+        // 2) Build a "base-format" block and decode m in [0..127]
+        // DecodeFromBlock only relies on low16, but we keep the header consistent.
+        uint baseBlock = 0xCCC70000u | (low16Base & 0xFFFFu);
+        uint m = DecodeFromBaseBlock(baseBlock); // 0..127
+
+        // 3) Expand to full range based on which family we’re in
+        uint baseOffset =
+            family == Families.Family0To127 ? 0u :
+            family == Families.Family128To255 ? 128u :
+            family == Families.Family256To383 ? 256u :
+            family == Families.Family384To500 ? 384u :
+            throw new ArgumentException($"Unknown family for block {block:X8}");
+
+        uint ridesRemaining = baseOffset + m;
+
+        return ridesRemaining;
     }
 }
