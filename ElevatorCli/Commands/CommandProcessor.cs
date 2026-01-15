@@ -34,6 +34,7 @@ public class CommandProcessor
         Console.WriteLine("  sync-mirrors [src=5|6]   Copy Page0 block src to the other");
         Console.WriteLine("  set-rides <remaining>    Set rides remaining to specified value");
         Console.WriteLine("  add-rides <more>         Add rides to current remaining count");
+        Console.WriteLine("  get-rides                Get rides remaining from current loaded image");
         Console.WriteLine("  help                     Show this help");
         Console.WriteLine("  exit                     Quit");
     }
