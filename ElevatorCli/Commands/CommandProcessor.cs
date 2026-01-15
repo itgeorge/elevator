@@ -29,7 +29,7 @@ public class CommandProcessor
         Console.WriteLine("  info                     Show info about loaded image");
         Console.WriteLine("  print                    Print table of blocks");
         Console.WriteLine("  get <page> <block>       Get word at page/block");
-        Console.WriteLine("  set <page> <block> (-x HEX | -b BITS32)  Set word");
+        Console.WriteLine("  set <page> <block> <HEX> [-x] [-b BITS32]  Set word (hex default)");
         Console.WriteLine("  verify-mirrors           Check Page0 blocks 5 and 6 equality");
         Console.WriteLine("  sync-mirrors [src=5|6]   Copy Page0 block src to the other");
         Console.WriteLine("  set-rides <remaining>    Set rides remaining to specified value");
@@ -208,31 +208,43 @@ public class CommandProcessor
 
     private void HandleSet(string[] args)
     {
-        RequireArgs(args, 5, "set <page> <block> (-x HEX | -b BITS32)");
+        if (args.Length < 4 || args.Length > 5)
+            throw new ArgumentException("Usage: set <page> <block> <HEX> or set <page> <block> (-x HEX | -b BITS32)");
+
         var page = ParseInt(args[1], "page");
         var block = ParseInt(args[2], "block");
-        var mode = args[3];
-        if (mode == "-x")
+
+        uint val;
+        if (args.Length == 4)
         {
-            var hex = args[4];
-            if (hex.Length != 8 || !uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var val))
+            // Default to hex mode: set <page> <block> <HEX>
+            var hex = args[3];
+            if (hex.Length != 8 || !uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out val))
                 throw new ArgumentException("HEX must be exactly 8 hex chars");
-            _current!.SetBlock(page, block, val);
-            Console.WriteLine($"Set P{page}B{block} = {val:X8}");
         }
-        else if (mode == "-b")
+        else // args.Length == 5
         {
-            var bits = args[4];
-            if (bits.Length != 32 || bits.Any(c => c != '0' && c != '1'))
-                throw new ArgumentException("BITS32 must be exactly 32 chars of 0/1");
-            uint val = Convert.ToUInt32(bits, 2);
-            _current!.SetBlock(page, block, val);
-            Console.WriteLine($"Set P{page}B{block} = {val:X8}");
+            var mode = args[3];
+            var value = args[4];
+            if (mode == "-x")
+            {
+                if (value.Length != 8 || !uint.TryParse(value, System.Globalization.NumberStyles.HexNumber, null, out val))
+                    throw new ArgumentException("HEX must be exactly 8 hex chars");
+            }
+            else if (mode == "-b")
+            {
+                if (value.Length != 32 || value.Any(c => c != '0' && c != '1'))
+                    throw new ArgumentException("BITS32 must be exactly 32 chars of 0/1");
+                val = Convert.ToUInt32(value, 2);
+            }
+            else
+            {
+                throw new ArgumentException("Invalid mode. Use -x for hex or -b for binary, or omit for default hex");
+            }
         }
-        else
-        {
-            throw new ArgumentException("Expected -x or -b");
-        }
+
+        _current!.SetBlock(page, block, val);
+        Console.WriteLine($"Set P{page}B{block} = {val:X8}");
     }
 
     private void VerifyMirrors()
