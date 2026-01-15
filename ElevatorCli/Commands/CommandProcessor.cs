@@ -250,7 +250,7 @@ public class CommandProcessor
     private void SetRides(int remaining)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to set rides."); return; }
-        uint block = TokenBlockUtils.EncodeBaseLow16((uint)remaining);
+        uint block = TokenBlockUtils.Encode((uint)remaining);
         _current!.SetBlock(0, 5, block);
         SyncMirrors(5); // Copy from block 5 to block 6
         Console.WriteLine($"Set rides to {remaining} (block: {block:X8})");
@@ -261,7 +261,7 @@ public class CommandProcessor
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to add rides."); return; }
         uint currentBlock = _current!.GetBlock(0, 5);
-        uint currentRides = TokenBlockUtils.DecodeFromBlock(currentBlock);
+        uint currentRides = TokenBlockUtils.Decode(currentBlock);
         uint newRides = currentRides + (uint)more;
         SetRides((int)newRides);
     }
