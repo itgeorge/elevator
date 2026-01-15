@@ -105,6 +105,10 @@ public class CommandProcessor
                     RequireLoaded();
                     AddRides(ParseInt(args[1], "more"));
                     break;
+                case "get-rides":
+                    RequireLoaded();
+                    GetRides();
+                    break;
                 case "help":
                     PrintHelp();
                     break;
@@ -264,6 +268,14 @@ public class CommandProcessor
         uint currentRides = TokenBlockUtils.Decode(currentBlock);
         uint newRides = currentRides + (uint)more;
         SetRides((int)newRides);
+    }
+
+    private void GetRides()
+    {
+        if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to get rides."); return; }
+        uint block = _current!.GetBlock(0, 5);
+        uint rides = TokenBlockUtils.Decode(block);
+        Console.WriteLine($"Rides remaining: {rides} (block: {block:X8})");
     }
 
     private void PrintInfo()
