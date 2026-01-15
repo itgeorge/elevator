@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using ElevatorCli.IO;
 using ElevatorCli.Models;
@@ -21,6 +22,7 @@ public class CommandProcessor
     public void PrintHelp()
     {
         Console.WriteLine("Commands:");
+        Console.WriteLine("  default                  Load embedded default-500-rides.bin");
         Console.WriteLine("  open <path>              Open .bin file");
         Console.WriteLine("  save [path]              Save to original path, provided path, or auto-generated filename");
         Console.WriteLine("  unload                   Unload current image");
@@ -46,6 +48,9 @@ public class CommandProcessor
         {
             switch (cmd)
             {
+                case "default":
+                    LoadDefault();
+                    break;
                 case "open":
                     RequireArgs(args, 2, "open <path>");
                     Open(args[1]);
@@ -125,6 +130,36 @@ public class CommandProcessor
         var blocks = reader.ReadBlocks(path);
         _current = new T55xxImage(blocks, path);
         Console.WriteLine($"Loaded {_current.BlockCount} blocks from '{path}'.");
+    }
+
+    private void LoadDefault()
+    {
+        var assembly = typeof(CommandProcessor).Assembly;
+        var resourceName = assembly
+            .GetManifestResourceNames()
+            .FirstOrDefault(name => name.EndsWith("default-500-rides.bin", StringComparison.OrdinalIgnoreCase));
+        if (resourceName is null)
+            throw new InvalidOperationException("Embedded resource 'default-500-rides.bin' not found.");
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+            throw new InvalidOperationException("Failed to load embedded resource stream.");
+
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var bytes = ms.ToArray();
+        if (bytes.Length % 4 != 0)
+            throw new InvalidDataException(".bin length must be a multiple of 4 bytes");
+
+        var blocks = new List<uint>(bytes.Length / 4);
+        for (var i = 0; i < bytes.Length; i += 4)
+        {
+            var word = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(i, 4));
+            blocks.Add(word);
+        }
+
+        _current = new T55xxImage(blocks, "default-500-rides.bin");
+        Console.WriteLine($"Loaded {_current.BlockCount} blocks from embedded 'default-500-rides.bin'.");
     }
 
     private void Save(string? path)
@@ -215,7 +250,7 @@ public class CommandProcessor
     private void SetRides(int remaining)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to set rides."); return; }
-        uint block = TokenBlockUtils.EncodeForBlock((uint)remaining);
+        uint block = TokenBlockUtils.EncodeBaseLow16((uint)remaining);
         _current!.SetBlock(0, 5, block);
         SyncMirrors(5); // Copy from block 5 to block 6
         Console.WriteLine($"Set rides to {remaining} (block: {block:X8})");

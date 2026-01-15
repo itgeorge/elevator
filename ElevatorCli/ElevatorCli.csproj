@@ -7,4 +7,11 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <None Remove="Data\default-500-rides.bin" />
+      <EmbeddedResource Include="Data\default-500-rides.bin">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </EmbeddedResource>
+    </ItemGroup>
+
 </Project>
