@@ -198,7 +198,7 @@ public class CommandProcessor
         writer.WriteBlocks(target, _current!.Blocks);
         _current!.SourcePath = target;
         _current.MarkSaved();
-        Console.WriteLine($"Saved to '{target}'.");
+        Console.WriteLine($"Saved to '{Path.GetFullPath(target)}'.");
     }
 
     private void HandleSet(string[] args)
