@@ -47,6 +47,7 @@ public class Pm3
     
     public async Task<bool> WritePage0BlockAsync(uint block, T55Block data) // only works with page 0
     {
+        if (block == 0) throw new ArgumentException("Block 0 (configuration) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 0.");
         if (block == 7) throw new ArgumentException("Block 7 (pasword) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 7.");
 
         EnsureT55SessionActive();
