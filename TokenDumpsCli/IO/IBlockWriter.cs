@@ -1,4 +1,4 @@
-namespace ElevatorCli.IO;
+namespace TokenDumpsCli.IO;
 
 public interface IBlockWriter
 {

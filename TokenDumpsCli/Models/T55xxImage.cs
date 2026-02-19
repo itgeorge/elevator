@@ -1,4 +1,4 @@
-namespace ElevatorCli.Models;
+namespace TokenDumpsCli.Models;
 
 public class T55xxImage
 {
@@ -58,5 +58,4 @@ public class T55xxImage
         IsDirty = false;
     }
 }
-
 

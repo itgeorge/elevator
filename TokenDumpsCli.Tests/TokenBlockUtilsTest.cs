@@ -1,11 +1,11 @@
-using ElevatorCli;
+using TokenDumpsCli;
 using JetBrains.Annotations;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace ElevatorCli.Tests;
+namespace TokenDumpsCli.Tests;
 
 [TestFixture]
 [TestOf(typeof(TokenBlockUtils))]

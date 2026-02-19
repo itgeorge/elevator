@@ -1,7 +1,7 @@
-﻿using ElevatorCli.Commands;
-using ElevatorCli.IO;
+using TokenDumpsCli.Commands;
+using TokenDumpsCli.IO;
 
-namespace ElevatorCli;
+namespace TokenDumpsCli;
 
 class Program
 {

@@ -1,6 +1,6 @@
-using ElevatorCli.Models;
+using TokenDumpsCli.Models;
 
-namespace ElevatorCli.Printing;
+namespace TokenDumpsCli.Printing;
 
 public static class TablePrinter
 {
@@ -52,5 +52,4 @@ public static class TablePrinter
         return new string(new[] { ToPrintable(bytes[0]), ToPrintable(bytes[1]), ToPrintable(bytes[2]), ToPrintable(bytes[3]) });
     }
 }
-
 

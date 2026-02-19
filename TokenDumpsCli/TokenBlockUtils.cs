@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace ElevatorCli;
+namespace TokenDumpsCli;
 
 static class TokenBlockUtils
 {
@@ -150,7 +150,7 @@ static class TokenBlockUtils
         uint baseBlock = 0xCCC70000u | (low16Base & 0xFFFFu);
         uint m = DecodeFromBaseBlock(baseBlock); // 0..127
 
-        // 3) Expand to full range based on which family we’re in
+        // 3) Expand to full range based on which family we're in
         uint baseOffset =
             family == Families.Family0To127 ? 0u :
             family == Families.Family128To255 ? 128u :

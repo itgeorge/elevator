@@ -1,10 +1,10 @@
 using System.Buffers.Binary;
 using System.Text;
-using ElevatorCli.IO;
-using ElevatorCli.Models;
-using ElevatorCli.Printing;
+using TokenDumpsCli.IO;
+using TokenDumpsCli.Models;
+using TokenDumpsCli.Printing;
 
-namespace ElevatorCli.Commands;
+namespace TokenDumpsCli.Commands;
 
 public class CommandProcessor
 {

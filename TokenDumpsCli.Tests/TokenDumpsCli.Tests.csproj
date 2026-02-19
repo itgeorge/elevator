@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ElevatorCli\ElevatorCli.csproj" />
+    <ProjectReference Include="..\TokenDumpsCli\TokenDumpsCli.csproj" />
   </ItemGroup>
   
 </Project>

@@ -1,8 +1,8 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorCli", "ElevatorCli\ElevatorCli.csproj", "{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TokenDumpsCli", "TokenDumpsCli\TokenDumpsCli.csproj", "{99CDFEB5-7789-4CA8-A2E1-A2502AB613D3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorCli.Tests", "ElevatorCli.Tests\ElevatorCli.Tests.csproj", "{7A08AE2F-047F-4306-9B44-168F2A826F0C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TokenDumpsCli.Tests", "TokenDumpsCli.Tests\TokenDumpsCli.Tests.csproj", "{7A08AE2F-047F-4306-9B44-168F2A826F0C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

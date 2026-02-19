@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace ElevatorCli.IO;
+namespace TokenDumpsCli.IO;
 
 public class BinBlockReader : IBlockReader
 {
