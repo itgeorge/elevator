@@ -200,7 +200,7 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **3.1** Create `Pm3UsbApi/Session/Pm3Session.cs`:
+- [x] **3.1** Create `Pm3UsbApi/Session/Pm3Session.cs`:
   - Constructor takes `IPm3CommandExecutor` and `Pm3Options`.
   - Implement `IAsyncDisposable`.
   - Internal state:
@@ -208,38 +208,38 @@ Pm3UsbApi/
     - `DateTime _lastDetectTime` for session cache
     - `TimeSpan _detectCacheTtl = TimeSpan.FromSeconds(5)`
 
-- [ ] **3.2** Implement `ConnectAsync(CancellationToken ct)`:
+- [x] **3.2** Implement `ConnectAsync(CancellationToken ct)`:
   - Execute `["hw version"]` via the executor.
   - If successful (no errors, exit code 0), set `_connected = true`.
   - If failed, throw `Pm3ConnectionException` with details.
   - Log the version info for diagnostics.
 
-- [ ] **3.3** Implement `DisconnectAsync()`:
+- [x] **3.3** Implement `DisconnectAsync()`:
   - Set `_connected = false`.
   - Dispose the executor.
 
-- [ ] **3.4** Implement `IsConnectedAsync(CancellationToken ct)`:
+- [x] **3.4** Implement `IsConnectedAsync(CancellationToken ct)`:
   - If not `_connected`, return false.
   - Optionally run a quick `hw version` ping to verify device still responds.
 
-- [ ] **3.5** Implement `ExecuteT55CommandAsync(string command, TimeSpan? timeout, CancellationToken ct)`:
+- [x] **3.5** Implement `ExecuteT55CommandAsync(string command, TimeSpan? timeout, CancellationToken ct)`:
   - Chains `lf t55 detect` before the provided command.
   - For per-invocation mode, always chain detect since each invocation is a new process.
   - Calls executor with `["lf t55 detect", command]`.
   - Returns `CommandResult` (output from both commands).
 
-- [ ] **3.6** Implement `ExecuteCommandAsync(string command, TimeSpan? timeout, CancellationToken ct)`:
+- [x] **3.6** Implement `ExecuteCommandAsync(string command, TimeSpan? timeout, CancellationToken ct)`:
   - For non-T55 commands (e.g., `hw version`, `lf tune`).
   - Calls executor with `[command]`.
   - Returns `CommandResult`.
 
-- [ ] **3.7** (Optional) Implement transcript logging:
+- [x] **3.7** (Optional) Implement transcript logging:
   - If `Pm3Options.EnableTranscriptLogging` is true:
     - Open/create log file at `TranscriptPath` (or auto-generate path).
     - Log timestamped entries: `[timestamp] >>> command` and `[timestamp] <<< output lines`.
   - Use a simple `StreamWriter` with auto-flush.
 
-- [ ] **3.8** Verify session layer works end-to-end:
+- [x] **3.8** Verify session layer works end-to-end:
   - Connect, run `lf t55 detect` (with a tag on the reader), verify output.
 
 ---
