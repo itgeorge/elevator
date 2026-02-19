@@ -1,44 +1,4 @@
-using System.Globalization;
-
 namespace Tokens;
-
-public readonly struct T55Block
-{
-    public uint Value { get; }
-
-    public T55Block(uint value) => Value = value;
-
-    public string ToHex(bool addPrefix0x = false) =>
-        addPrefix0x ? $"0x{Value:X8}" : Value.ToString("X8");
-
-    public static T55Block FromHex(string hex)
-    {
-        var s = hex.AsSpan().Trim();
-        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            s = s[2..];
-        if (s.Length != 8 || !uint.TryParse(s.ToString(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v))
-            throw new ArgumentException($"Invalid hex block: '{hex}' (expected 8 hex digits)", nameof(hex));
-        return new T55Block(v);
-    }
-
-    public string ToBin() => Convert.ToString(Value, 2).PadLeft(32, '0');
-
-    public static T55Block FromBin(string bin)
-    {
-        var s = bin.AsSpan().Trim();
-        if (s.Length != 32)
-            throw new ArgumentException($"Invalid binary block: '{bin}' (expected 32 bits)", nameof(bin));
-        uint v = 0;
-        for (int i = 0; i < 32; i++)
-        {
-            char c = s[i];
-            if (c != '0' && c != '1')
-                throw new ArgumentException($"Invalid binary block: '{bin}' (expected only 0/1)", nameof(bin));
-            v = (v << 1) | (uint)(c - '0');
-        }
-        return new T55Block(v);
-    }
-}
 
 public static class TokenBlockUtils
 {

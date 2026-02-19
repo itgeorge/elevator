@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
 using TokenDumpsCli.IO;
-using TokenDumpsCli.Models;
 using TokenDumpsCli.Printing;
 using Tokens;
 
@@ -77,7 +76,7 @@ public class CommandProcessor
                     RequireLoaded();
                     var (pgG, blG) = (ParseInt(args[1], "page"), ParseInt(args[2], "block"));
                     var w = _current!.GetBlock(pgG, blG);
-                    Console.WriteLine(w.ToString("X8"));
+                    Console.WriteLine(w.ToHex());
                     break;
                 case "set":
                     RequireLoaded();
@@ -157,11 +156,11 @@ public class CommandProcessor
         if (bytes.Length % 4 != 0)
             throw new InvalidDataException(".bin length must be a multiple of 4 bytes");
 
-        var blocks = new List<uint>(bytes.Length / 4);
+        var blocks = new List<T55Block>(bytes.Length / 4);
         for (var i = 0; i < bytes.Length; i += 4)
         {
             var word = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(i, 4));
-            blocks.Add(word);
+            blocks.Add(new T55Block(word));
         }
 
         _current = new T55xxImage(blocks, "default-500-rides.bin");
@@ -187,8 +186,8 @@ public class CommandProcessor
             sb.Append("elevator-t55xx-");
             for (int block = 0; block < _current.BlockCount; block++)
             {
-                uint blockValue = _current.GetBlock(0, block);
-                sb.Append(blockValue.ToString("X8"));
+                var blockValue = _current.GetBlock(0, block);
+                sb.Append(blockValue.ToHex());
                 if (block < _current.BlockCount - 1)
                 {
                     sb.Append('-');
@@ -203,7 +202,6 @@ public class CommandProcessor
             throw new InvalidOperationException($"Unsupported format '.{ext}'");
         writer.WriteBlocks(target, _current!.Blocks);
         _current!.SourcePath = target;
-        _current.MarkSaved();
         Console.WriteLine($"Saved to '{Path.GetFullPath(target)}'.");
     }
 
@@ -244,7 +242,7 @@ public class CommandProcessor
             }
         }
 
-        _current!.SetBlock(page, block, val);
+        _current!.SetBlock(page, block, new T55Block(val));
         Console.WriteLine($"Set P{page}B{block} = {val:X8}");
     }
 
@@ -253,7 +251,7 @@ public class CommandProcessor
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to verify mirrors."); return; }
         var b5 = _current!.GetBlock(0, 5);
         var b6 = _current!.GetBlock(0, 6);
-        Console.WriteLine(b5 == b6 ? "Mirrors match" : $"Mismatch: B5={b5:X8}, B6={b6:X8}");
+        Console.WriteLine(b5.Value == b6.Value ? "Mirrors match" : $"Mismatch: B5={b5.ToHex()}, B6={b6.ToHex()}");
     }
 
     private void SyncMirrors(int src)
@@ -262,14 +260,14 @@ public class CommandProcessor
         int dst = src == 5 ? 6 : 5;
         var val = _current!.GetBlock(0, src);
         _current!.SetBlock(0, dst, val);
-        Console.WriteLine($"Copied P0B{src} -> P0B{dst} ({val:X8})");
+        Console.WriteLine($"Copied P0B{src} -> P0B{dst} ({val.ToHex()})");
     }
 
     private void SetRides(int remaining)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to set rides."); return; }
         var block = TokenBlockUtils.Encode((uint)remaining);
-        _current!.SetBlock(0, 5, block.Value);
+        _current!.SetBlock(0, 5, block);
         SyncMirrors(5); // Copy from block 5 to block 6
         Console.WriteLine($"Set rides to {remaining} (block: {block.ToHex()})");
         PrintInfo();
@@ -278,7 +276,7 @@ public class CommandProcessor
     private void AddRides(int more)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to add rides."); return; }
-        var currentBlock = new T55Block(_current!.GetBlock(0, 5));
+        var currentBlock = _current!.GetBlock(0, 5);
         uint currentRides = TokenBlockUtils.Decode(currentBlock);
         uint newRides = currentRides + (uint)more;
         SetRides((int)newRides);
@@ -287,14 +285,14 @@ public class CommandProcessor
     private void GetRides()
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to get rides."); return; }
-        var block = new T55Block(_current!.GetBlock(0, 5));
+        var block = _current!.GetBlock(0, 5);
         uint rides = TokenBlockUtils.Decode(block);
         Console.WriteLine($"Rides remaining: {rides} (block: {block.ToHex()})");
     }
 
     private void PrintInfo()
     {
-        Console.WriteLine($"Blocks: {_current!.BlockCount}, Pages: {_current.PageCount}, Path: {_current.SourcePath ?? "<new>"}, Dirty: {_current.IsDirty}");
+        Console.WriteLine($"Blocks: {_current!.BlockCount}, Pages: {_current.PageCount}, Path: {_current.SourcePath ?? "<new>"}");
         TablePrinter.PrintTable(_current!, Console.Out);
     }
 

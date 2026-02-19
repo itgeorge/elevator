@@ -1,4 +1,4 @@
-using TokenDumpsCli.Models;
+using Tokens;
 
 namespace TokenDumpsCli.Printing;
 
@@ -13,10 +13,10 @@ public static class TablePrinter
 
         void PrintRow(int absIndex)
         {
-            uint word = image.Blocks[absIndex];
-            string hex = word.ToString("X8");
-            string bin = Convert.ToString(word, 2).PadLeft(32, '0');
-            string ascii = WordToAscii(word);
+            var block = image.Blocks[absIndex];
+            string hex = block.ToHex();
+            string bin = block.ToBin();
+            string ascii = WordToAscii(block.Value);
             writer.WriteLine($"[+]  {absIndex % 8:00} | {hex} | {bin} | {ascii}");
         }
 

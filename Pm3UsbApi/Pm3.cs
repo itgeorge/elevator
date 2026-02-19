@@ -1,4 +1,6 @@
-﻿namespace Pm3UsbApi;
+﻿using Tokens;
+
+namespace Pm3UsbApi;
 
 public class Pm3
 {
@@ -34,7 +36,7 @@ public class Pm3
         throw new NotImplementedException();
     }
 
-    public async Task<string> ReadPage0BlockAsync(int block) // only works with page 0
+    public async Task<string> ReadPage0BlockAsync(uint block) // only works with page 0
     {
         if (block < 0 || block > 7) throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 0 and 7");
 
@@ -43,7 +45,7 @@ public class Pm3
         throw new NotImplementedException();
     }
     
-    public async Task<bool> WritePage0BlockAsync(int block, string data) // only works with page 0
+    public async Task<bool> WritePage0BlockAsync(uint block, T55Block data) // only works with page 0
     {
         if (block == 7) throw new ArgumentException("Block 7 (pasword) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 7.");
 
