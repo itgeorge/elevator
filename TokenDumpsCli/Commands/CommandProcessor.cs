@@ -267,17 +267,17 @@ public class CommandProcessor
     private void SetRides(int remaining)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to set rides."); return; }
-        uint block = TokenBlockUtils.Encode((uint)remaining);
-        _current!.SetBlock(0, 5, block);
+        var block = TokenBlockUtils.Encode((uint)remaining);
+        _current!.SetBlock(0, 5, block.Value);
         SyncMirrors(5); // Copy from block 5 to block 6
-        Console.WriteLine($"Set rides to {remaining} (block: {block:X8})");
+        Console.WriteLine($"Set rides to {remaining} (block: {block.ToHex()})");
         PrintInfo();
     }
 
     private void AddRides(int more)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to add rides."); return; }
-        uint currentBlock = _current!.GetBlock(0, 5);
+        var currentBlock = new T55Block(_current!.GetBlock(0, 5));
         uint currentRides = TokenBlockUtils.Decode(currentBlock);
         uint newRides = currentRides + (uint)more;
         SetRides((int)newRides);
@@ -286,9 +286,9 @@ public class CommandProcessor
     private void GetRides()
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to get rides."); return; }
-        uint block = _current!.GetBlock(0, 5);
+        var block = new T55Block(_current!.GetBlock(0, 5));
         uint rides = TokenBlockUtils.Decode(block);
-        Console.WriteLine($"Rides remaining: {rides} (block: {block:X8})");
+        Console.WriteLine($"Rides remaining: {rides} (block: {block.ToHex()})");
     }
 
     private void PrintInfo()

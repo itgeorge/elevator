@@ -537,8 +537,8 @@ public class TokenBlockUtilsTest
 
         foreach (var (v, expected) in rows)
         {
-            uint got = TokenBlockUtils.EncodeByFamily((uint)v, new TokenBlockUtils.Family(high16, xorConst));
-            Assert.That(got, Is.EqualTo(expected), $"Value {v}: expected {expected:X8}, got {got:X8}");
+            var got = TokenBlockUtils.EncodeByFamily((uint)v, new TokenBlockUtils.Family(high16, xorConst));
+            Assert.That(got.Value, Is.EqualTo(expected), $"Value {v}: expected {expected:X8}, got {got.Value:X8}");
         }
     }
 
@@ -549,8 +549,8 @@ public class TokenBlockUtilsTest
 
         foreach (var (ridesRemaining, block) in rows)
         {
-            uint got = TokenBlockUtils.Encode((uint)ridesRemaining);
-            Assert.That(got, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {got:X8}");
+            var got = TokenBlockUtils.Encode((uint)ridesRemaining);
+            Assert.That(got.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {got.Value:X8}");
         }
     }
 
@@ -561,7 +561,7 @@ public class TokenBlockUtilsTest
 
         foreach (var (ridesRemaining, block) in rows)
         {
-            uint got = TokenBlockUtils.Decode(block);
+            uint got = TokenBlockUtils.Decode(new T55Block(block));
             Assert.That(got, Is.EqualTo(ridesRemaining), $"Block {block:X8}: expected {ridesRemaining}, got {got}");
         }
     }
@@ -571,11 +571,30 @@ public class TokenBlockUtilsTest
     {
         for (uint value = 0; value <= 500; value++)
         {
-            uint encoded = TokenBlockUtils.Encode(value);
+            var encoded = TokenBlockUtils.Encode(value);
             uint decoded = TokenBlockUtils.Decode(encoded);
             Assert.That(decoded, Is.EqualTo(value),
-                $"Round-trip failed for value {value}: encoded {encoded:X8}, decoded {decoded}");
+                $"Round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
         }
+    }
+
+    [Test]
+    public void T55Block_ToHex_FromHex_RoundTrip()
+    {
+        var block = new T55Block(0xCCC7363B);
+        Assert.That(block.ToHex(), Is.EqualTo("CCC7363B"));
+        Assert.That(block.ToHex(addPrefix0x: true), Is.EqualTo("0xCCC7363B"));
+        Assert.That(T55Block.FromHex("CCC7363B").Value, Is.EqualTo(0xCCC7363B));
+        Assert.That(T55Block.FromHex("0xCCC7363B").Value, Is.EqualTo(0xCCC7363B));
+    }
+
+    [Test]
+    public void T55Block_ToBin_FromBin_RoundTrip()
+    {
+        var block = new T55Block(0xCCC7363B);
+        var bin = block.ToBin();
+        Assert.That(bin.Length, Is.EqualTo(32));
+        Assert.That(T55Block.FromBin(bin).Value, Is.EqualTo(0xCCC7363B));
     }
 
     static List<(int v, uint expected)> ParseTable(string table)

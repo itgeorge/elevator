@@ -2,6 +2,44 @@ using System.Globalization;
 
 namespace TokenDumpsCli;
 
+readonly struct T55Block
+{
+    public uint Value { get; }
+
+    public T55Block(uint value) => Value = value;
+
+    public string ToHex(bool addPrefix0x = false) =>
+        addPrefix0x ? $"0x{Value:X8}" : Value.ToString("X8");
+
+    public static T55Block FromHex(string hex)
+    {
+        var s = hex.AsSpan().Trim();
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            s = s[2..];
+        if (s.Length != 8 || !uint.TryParse(s.ToString(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v))
+            throw new ArgumentException($"Invalid hex block: '{hex}' (expected 8 hex digits)", nameof(hex));
+        return new T55Block(v);
+    }
+
+    public string ToBin() => Convert.ToString(Value, 2).PadLeft(32, '0');
+
+    public static T55Block FromBin(string bin)
+    {
+        var s = bin.AsSpan().Trim();
+        if (s.Length != 32)
+            throw new ArgumentException($"Invalid binary block: '{bin}' (expected 32 bits)", nameof(bin));
+        uint v = 0;
+        for (int i = 0; i < 32; i++)
+        {
+            char c = s[i];
+            if (c != '0' && c != '1')
+                throw new ArgumentException($"Invalid binary block: '{bin}' (expected only 0/1)", nameof(bin));
+            v = (v << 1) | (uint)(c - '0');
+        }
+        return new T55Block(v);
+    }
+}
+
 static class TokenBlockUtils
 {
     public record Family(uint High16, uint XorConst);
@@ -18,9 +56,9 @@ static class TokenBlockUtils
             return block >> 16;
         }
 
-        public static Family GetFamilyFromBlock(uint block)
+        public static Family GetFamilyFromBlock(T55Block block)
         {
-            uint high16 = GetHigh16FromBlock(block);
+            uint high16 = GetHigh16FromBlock(block.Value);
             if (high16 == Family0To127.High16)
             {
                 return Family0To127;
@@ -41,7 +79,7 @@ static class TokenBlockUtils
                 return Family384To500;
             }
 
-            throw new ArgumentException($"Block {block:X8} is out of range (unknown high 16 {high16})");
+            throw new ArgumentException($"Block {block.Value:X8} is out of range (unknown high 16 {high16})");
         }
 
         public static Family GetFamilyFromRides(uint ridesRemaining)
@@ -124,25 +162,25 @@ static class TokenBlockUtils
         return (g << 4) | o;
     }
     
-    public static uint EncodeByFamily(uint value, Family family)
+    public static T55Block EncodeByFamily(uint value, Family family)
     {
         uint m = value & 0x7Fu;
         ushort base16 = EncodeBaseLow16Only(m);
         uint low16 = (uint)(base16 ^ (ushort)family.XorConst);
-        return (family.High16 << 16) | low16;
+        return new T55Block((family.High16 << 16) | low16);
     }
 
-    public static uint Encode(uint ridesRemaining) 
+    public static T55Block Encode(uint ridesRemaining) 
     {
         return EncodeByFamily(ridesRemaining, Families.GetFamilyFromRides(ridesRemaining));
     }
 
-    public static uint Decode(uint block)
+    public static uint Decode(T55Block block)
     {
         var family = Families.GetFamilyFromBlock(block);
 
         // 1) Unmask the payload (XOR is on low16, not on the decoded number)
-        uint low16Masked = block & 0xFFFFu;
+        uint low16Masked = block.Value & 0xFFFFu;
         uint low16Base = low16Masked ^ family.XorConst;
 
         // 2) Build a "base-format" block and decode m in [0..127]
@@ -156,7 +194,7 @@ static class TokenBlockUtils
             family == Families.Family128To255 ? 128u :
             family == Families.Family256To383 ? 256u :
             family == Families.Family384To500 ? 384u :
-            throw new ArgumentException($"Unknown family for block {block:X8}");
+            throw new ArgumentException($"Unknown family for block {block.Value:X8}");
 
         uint ridesRemaining = baseOffset + m;
 
