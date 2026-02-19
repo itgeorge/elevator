@@ -174,15 +174,12 @@ class Pm3CommandGenCliProgram
 
     static void AddRides(int count)
     {
-        if (count < 0)
-            throw new ArgumentException("Count must be non-negative");
-
         if (_current!.BlockCount < 7)
             throw new InvalidOperationException("Loaded dump has fewer than 7 blocks; cannot add rides.");
 
         var currentBlock = _current.GetBlock(0, 5);
         uint currentRides = TokenBlockUtils.Decode(currentBlock);
-        uint newRides = currentRides + (uint)count;
+        uint newRides = (uint)(currentRides + (int)count);
 
         var encoded = TokenBlockUtils.Encode(newRides);
         _current.SetBlock(0, 5, encoded);
