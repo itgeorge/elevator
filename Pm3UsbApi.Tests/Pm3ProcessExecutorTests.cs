@@ -7,7 +7,8 @@ namespace Pm3UsbApi.Tests;
 [TestFixture]
 public class Pm3ProcessExecutorTests
 {
-    private static Pm3ProcessExecutor CreateExecutor() => new(new Pm3Options());
+    private static Pm3ProcessExecutor CreateExecutor() =>
+        new(new Pm3Options { WorkingDirectory = Pm3Options.DevRunsDirectoryName });
 
     [Test]
     public void ExecuteAsync_LfTuneCombinedWithOtherCommands_Throws()
@@ -48,6 +49,7 @@ public class Pm3ProcessExecutorTests
         {
             DevicePort = "COM5",
             DefaultCommandTimeout = TimeSpan.FromSeconds(20),
+            WorkingDirectory = Pm3Options.DevRunsDirectoryName,
         };
         await using var executor = new Pm3ProcessExecutor(options);
         var sw = System.Diagnostics.Stopwatch.StartNew();

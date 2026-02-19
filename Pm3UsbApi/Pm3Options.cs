@@ -6,6 +6,19 @@ namespace Pm3UsbApi;
 public record Pm3Options
 {
     /// <summary>
+    /// Folder name for dev/test runs. Use with <see cref="WorkingDirectory"/> to isolate
+    /// proxmark3 output files (e.g. lf-t55xx-*.bin) from the repo. Ignore via .gitignore.
+    /// </summary>
+    public const string DevRunsDirectoryName = "proxmark-runs";
+
+    /// <summary>
+    /// Working directory for the proxmark3 process. When set, the process runs here (output files
+    /// like lf-t55xx-*.bin go here). When null, the process uses the current directory.
+    /// Set to <see cref="DevRunsDirectoryName"/> (or full path) for test/dev to avoid clutter.
+    /// Leave null for published executables.
+    /// </summary>
+    public string? WorkingDirectory { get; init; }
+    /// <summary>
     /// Absolute path to proxmark3 executable (or pm3.bat).
     /// null = auto-detect from PATH / common locations.
     /// </summary>

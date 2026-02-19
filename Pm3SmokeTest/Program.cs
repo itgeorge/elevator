@@ -21,6 +21,7 @@ var options = new Pm3Options
     Pm3ClientPath = string.IsNullOrEmpty(pm3Path) ? null : pm3Path,
     DevicePort = devicePort,
     DefaultCommandTimeout = TimeSpan.FromSeconds(20),
+    WorkingDirectory = Pm3Options.DevRunsDirectoryName, // isolate output files for dev runs
 };
 
 Console.WriteLine("Pm3 smoke test (Phase 5)");

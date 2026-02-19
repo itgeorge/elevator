@@ -64,5 +64,5 @@ dumps/*
 .vscode/*
 *.DotSettings.user
 
-# ProxMark3 files created in runs/tests
-.proxmark3/*
+# Proxmark3 run output (dump files, etc.) - process runs with WorkingDirectory here
+proxmark-runs/

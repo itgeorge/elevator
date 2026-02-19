@@ -55,6 +55,15 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
         var path = ResolvePm3ClientPath();
         var args = BuildArguments(commandString);
 
+        string? workingDir = null;
+        if (!string.IsNullOrWhiteSpace(_options.WorkingDirectory))
+        {
+            workingDir = Path.IsPathRooted(_options.WorkingDirectory)
+                ? _options.WorkingDirectory.Trim()
+                : Path.Combine(Directory.GetCurrentDirectory(), _options.WorkingDirectory.Trim());
+            Directory.CreateDirectory(workingDir);
+        }
+
         var startInfo = new ProcessStartInfo
         {
             FileName = path,
@@ -64,6 +73,8 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        if (workingDir is not null)
+            startInfo.WorkingDirectory = workingDir;
         EnsureProxSpacePath(startInfo, path);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
