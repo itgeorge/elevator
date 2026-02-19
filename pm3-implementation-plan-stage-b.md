@@ -44,7 +44,7 @@
 
 - [ ] **8b.2** Implement `CMD_MEASURE_ANTENNA_TUNING_LF` (0x0402):
   - Parse tuning response data.
-  - Map to `Pm3.StartLfTune()` / `Pm3.GetLfTunePeakMilliVolts()`.
+  - Map to `Pm3.StartLfTune()` / `Pm3.GetLfTuneLastMilliVolts()`.
 
 #### 8c: T55xx Read (requires signal processing)
 

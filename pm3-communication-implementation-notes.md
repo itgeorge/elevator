@@ -207,7 +207,7 @@ Keep a whitelist for known non-fatal warnings if needed.
 - Completion: read until prompt returns (interactive) or process exits (per-invocation).
 - Store the full output in a `LastTuneOutput` field (and timestamp).
 
-### 6.2 `GetLfTunePeakMilliVolts()`
+### 6.2 `GetLfTuneLastMilliVolts()`
 
 Parse the last tune output.
 
@@ -355,7 +355,7 @@ Feed stored real outputs into parsers and assert:
 - [ ] Implement `DisconnectAsync` (cleanup).
 - [ ] Implement `EnsureT55SessionActive` via chained detect.
 - [ ] Implement `StartLfTune` (`lf tune`) capturing output.
-- [ ] Implement `GetLfTunePeakMilliVolts` parser using regex.
+- [ ] Implement `GetLfTuneLastMilliVolts` parser using regex.
 - [ ] Implement `ReadBlockAsync` with page flag and hex parsing.
 - [ ] Implement `WritePage0BlockAsync` and optional read-back verify.
 - [ ] Add logging + transcripts.

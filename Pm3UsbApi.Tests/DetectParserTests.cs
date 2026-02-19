@@ -42,6 +42,18 @@ public class DetectParserTests
     }
 
     [Test]
+    public void Parse_DetectSuccessIcemanFormat_ReturnsChipFound()
+    {
+        var result = ToResult(TestFixtures.DetectSuccessIcemanFormat);
+        var parsed = DetectParser.Parse(result);
+
+        Assert.That(parsed.ChipFound, Is.True);
+        Assert.That(parsed.ChipType, Is.EqualTo("T55x7"));
+        Assert.That(parsed.Modulation, Is.EqualTo("ASK"));
+        Assert.That(parsed.Block0Hex, Is.EqualTo("00148040"));
+    }
+
+    [Test]
     public void Parse_DetectChipNone_ReturnsChipNotFound()
     {
         var result = ToResult(TestFixtures.DetectChipNone);

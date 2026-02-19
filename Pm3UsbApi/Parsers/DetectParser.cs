@@ -8,16 +8,19 @@ namespace Pm3UsbApi.Parsers;
 /// </summary>
 public static class DetectParser
 {
+    // Matches "Chip Type: T55x7" or "Chip type......... T55x7" (Iceman uses dots as fill)
     private static readonly Regex ChipTypeRegex = new(
-        @"Chip\s+Type\s*:\s*(.+?)(?:\s*$|\s*\[)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"Chip\s+[Tt]ype\s*(?::\s*|\.+\s+)(\S+)",
+        RegexOptions.Compiled);
 
+    // Matches "Modulation: ASK" or "Modulation........ ASK"
     private static readonly Regex ModulationRegex = new(
-        @"Modulation\s*:\s*(\S+)",
+        @"Modulation\s*(?::\s*|\.+\s+)(\S+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Matches "Block0: 0x00323240" or "Block 0 ......... 0x..." (Iceman uses dots as fill)
     private static readonly Regex Block0Regex = new(
-        @"Block0\s*:\s*(?:0x)?([0-9A-Fa-f]{8})\b",
+        @"Block\s*0\s*(?::\s*|\.+\s+)(?:0x)?([0-9A-Fa-f]{8})\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>

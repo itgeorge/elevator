@@ -357,58 +357,58 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **5.1** Update `Pm3.cs` constructor and lifecycle:
+- [x] **5.1** Update `Pm3.cs` constructor and lifecycle:
   - Accept `Pm3Options` parameter (with sensible defaults).
   - Internally create `Pm3ProcessExecutor` and `Pm3Session`.
   - Implement `IAsyncDisposable` to clean up session and executor.
 
-- [ ] **5.2** Implement `ConnectAsync()`:
+- [x] **5.2** Implement `ConnectAsync()`:
   - Delegate to `Pm3Session.ConnectAsync()`.
   - Return `true` on success, `false` on failure (or throw -- decide on convention).
 
-- [ ] **5.3** Implement `DisconnectAsync()`:
+- [x] **5.3** Implement `DisconnectAsync()`:
   - Delegate to `Pm3Session.DisconnectAsync()`.
 
-- [ ] **5.4** Implement `IsConnectedAsync()`:
+- [x] **5.4** Implement `IsConnectedAsync()`:
   - Delegate to `Pm3Session.IsConnectedAsync()`.
 
-- [ ] **5.5** Implement `EnsureT55SessionActive()`:
+- [x] **5.5** Implement `EnsureT55SessionActive()`:
   - Execute `lf t55 detect` via session.
   - Parse with `DetectParser`.
   - Throw `Pm3CommandException` if chip not found.
 
-- [ ] **5.6** Implement `ReadPage0BlockAsync(uint block)`:
+- [x] **5.6** Implement `ReadPage0BlockAsync(uint block)`:
   - Validate block 0-7 (existing check).
   - Execute `lf t55 read -b {block}` via session's `ExecuteT55CommandAsync` (which chains detect).
   - Parse with `BlockReadParser`.
   - Return hex string.
 
-- [ ] **5.7** Implement `WritePage0BlockAsync(uint block, T55Block data)`:
+- [x] **5.7** Implement `WritePage0BlockAsync(uint block, T55Block data)`:
   - Validate block 0-7, block != 7 (existing checks).
   - Execute `lf t55 write -b {block} -d {data.ToHex()}` via session's `ExecuteT55CommandAsync`.
   - Check for success in output.
   - (Optional) Read back and verify.
 
-- [ ] **5.8** Implement `Dump()`:
+- [x] **5.8** Implement `Dump()`:
   - Execute `lf t55 dump` via session's `ExecuteT55CommandAsync`.
   - Parse with `DumpParser` (or return raw output as currently designed).
   - Return raw output string.
 
-- [ ] **5.9** Implement `StartLfTune()`:
+- [x] **5.9** Implement `StartLfTune()`:
   - Execute `lf tune` via session's `ExecuteCommandAsync`.
-  - Store the `CommandResult` internally for later parsing by `GetLfTunePeakMilliVolts`.
+  - Store the `CommandResult` internally for later parsing by `GetLfTuneLastMilliVolts`.
 
-- [ ] **5.10** Implement `GetLfTunePeakMilliVolts()`:
+- [x] **5.10** Implement `GetLfTuneLastMilliVolts()`:
   - Parse stored tune output with `TuneParser`.
   - Throw if no tune output available (i.e., `StartLfTune` not called).
 
-- [ ] **5.11** Implement `StopLfTune()`:
+- [x] **5.11** Implement `StopLfTune()`:
   - For per-invocation mode: this is likely a no-op since `lf tune` runs and exits.
   - For interactive mode (future): send break signal.
 
-- [ ] **5.12** Add `CancellationToken` parameters to all public async methods.
+- [x] **5.12** Add `CancellationToken` parameters to all public async methods.
 
-- [ ] **5.13** Verify all methods work against real hardware (manual smoke test).
+- [x] **5.13** Verify all methods work against real hardware (manual smoke test).
 
 ---
 
@@ -435,7 +435,7 @@ Pm3UsbApi/
   | `disconnect`          | Disconnect                           | `Pm3.DisconnectAsync()`          |
   | `status`              | Show connection status               | `Pm3.IsConnectedAsync()`         |
   | `detect`              | Run T55 detect                       | `Pm3.EnsureT55SessionActive()`   |
-  | `tune`                | Run LF tune, show peak mV            | `StartLfTune` + `GetLfTunePeak`  |
+  | `tune`                | Run LF tune, show peak mV            | `StartLfTune` + `GetLfTuneLastMilliVolts`  |
   | `read <block>`        | Read page 0 block                    | `Pm3.ReadPage0BlockAsync(block)` |
   | `write <block> <hex>` | Write page 0 block                   | `Pm3.WritePage0BlockAsync(...)`  |
   | `dump`                | Dump all blocks                      | `Pm3.Dump()`                     |

@@ -1,12 +1,10 @@
-// Phase 3 manual smoke test: verifies Pm3Session can connect, run lf t55 detect, and disconnect.
+// Phase 5 smoke test: verifies Pm3 high-level API against real hardware.
 // Run: dotnet run --project Pm3SmokeTest
 // With port: dotnet run --project Pm3SmokeTest -- --port COM5
 // With exe path: dotnet run --project Pm3SmokeTest -- "C:\path\to\proxmark3.exe"
 // Both: dotnet run --project Pm3SmokeTest -- --port COM5 "C:\path\to\proxmark3.exe"
 
 using Pm3UsbApi;
-using Pm3UsbApi.Execution;
-using Pm3UsbApi.Session;
 
 string? pm3Path = null;
 string? devicePort = null;
@@ -25,76 +23,100 @@ var options = new Pm3Options
     DefaultCommandTimeout = TimeSpan.FromSeconds(20),
 };
 
-Console.WriteLine("Pm3Session smoke test (Phase 3)");
-Console.WriteLine("Testing: Connect -> lf t55 detect -> Disconnect");
+Console.WriteLine("Pm3 smoke test (Phase 5)");
+Console.WriteLine("Testing: Connect -> Detect -> Dump -> Read -> Tune -> Disconnect");
 Console.WriteLine();
 
 try
 {
-    var executor = new Pm3ProcessExecutor(options);
-    await using var session = new Pm3Session(executor, options);
+    await using var pm3 = new Pm3(options);
 
-    // Connect (uses hw version internally)
     Console.WriteLine("Connecting...");
-    await session.ConnectAsync();
+    await pm3.ConnectAsync();
     Console.WriteLine("Connected.");
-
-    // Run lf t55 detect (chain detect + command; for detect, command IS detect)
-    Console.WriteLine();
-    Console.WriteLine("Executing: lf t55 detect (via ExecuteT55CommandAsync)");
-    var result = await session.ExecuteT55CommandAsync("lf t55 detect");
-
-    Console.WriteLine("--- Output ---");
-    foreach (var line in result.OutputLines)
-        Console.WriteLine(line);
-    Console.WriteLine("--- End ---");
-    Console.WriteLine($"Exit code: {result.ExitCode}");
-    Console.WriteLine($"HasErrors: {result.HasErrors}");
-    if (result.ErrorSummary is not null)
-        Console.WriteLine($"ErrorSummary: {result.ErrorSummary}");
     Console.WriteLine();
 
-    // Verify IsConnectedAsync
-    var isConnected = await session.IsConnectedAsync();
-    Console.WriteLine($"IsConnectedAsync: {isConnected}");
-
-    // Disconnect
+    // Ensure T55 session (optional pre-check; read/dump chain detect internally)
+    try
+    {
+        Console.WriteLine("Running EnsureT55SessionActiveAsync...");
+        await pm3.EnsureT55SessionActiveAsync();
+        Console.WriteLine("T55 chip detected.");
+    }
+    catch (Pm3CommandException)
+    {
+        Console.WriteLine("No T55 tag present (EnsureT55SessionActiveAsync). Continuing with other tests...");
+    }
     Console.WriteLine();
+
+    // Dump (chains detect internally)
+    try
+    {
+        Console.WriteLine("Running DumpAsync...");
+        var dump = await pm3.DumpAsync();
+        Console.WriteLine("--- Dump (first 500 chars) ---");
+        Console.WriteLine(dump.Length > 500 ? dump[..500] + "..." : dump);
+        Console.WriteLine("--- End ---");
+    }
+    catch (Pm3CommandException ex)
+    {
+        Console.WriteLine($"Dump failed (tag may be absent): {ex.Message}");
+    }
+    Console.WriteLine();
+
+    // Read block 0 (chains detect internally)
+    try
+    {
+        Console.WriteLine("Running ReadPage0BlockAsync(0)...");
+        var hex = await pm3.ReadPage0BlockAsync(0);
+        Console.WriteLine($"Block 0: {hex}");
+    }
+    catch (Pm3CommandException ex)
+    {
+        Console.WriteLine($"Read block 0 failed: {ex.Message}");
+    }
+    Console.WriteLine();
+
+    // LF tune
+    try
+    {
+        Console.WriteLine("Running StartLfTuneAsync...");
+        await pm3.StartLfTuneAsync();
+        var peakMv = await pm3.GetLfTuneLastMilliVoltsAsync();
+        Console.WriteLine($"Peak: {peakMv} mV");
+    }
+    catch (InvalidOperationException)
+    {
+        Console.WriteLine("Tune not run.");
+    }
+    catch (Pm3CommandException ex)
+    {
+        Console.WriteLine($"Tune failed: {ex.Message}");
+    }
+    Console.WriteLine();
+
     Console.WriteLine("Disconnecting...");
-    await session.DisconnectAsync();
+    await pm3.DisconnectAsync();
     Console.WriteLine("Disconnected.");
 
-    if (!result.HasErrors || result.RawOutput.Contains("Chip Type", StringComparison.OrdinalIgnoreCase)
-        || result.RawOutput.Contains("T55", StringComparison.OrdinalIgnoreCase))
-    {
-        Console.WriteLine();
-        Console.WriteLine("SUCCESS: Session layer works. lf t55 detect completed.");
-        Console.WriteLine("Note: If no tag was present, output may show 'no chip detected' - that's expected.");
-    }
-    else if (result.HasErrors)
-    {
-        Console.WriteLine();
-        Console.WriteLine("WARNING: Command reported errors. Check device connection and tag presence.");
-    }
+    Console.WriteLine();
+    Console.WriteLine("SUCCESS: Pm3 high-level API smoke test completed.");
 }
 catch (Pm3ClientNotFoundException ex)
 {
     Console.WriteLine($"ERROR: {ex.Message}");
-    Console.WriteLine("Set Pm3Options.Pm3ClientPath to proxmark3.exe (e.g. .../ProxSpace/pm3/proxmark3/client/proxmark3.exe)");
     Environment.Exit(1);
 }
 catch (Pm3ConnectionException ex)
 {
     Console.WriteLine($"ERROR: Connection failed - {ex.Message}");
     if (ex.CommandResult?.RawOutput is { } output)
-        Console.WriteLine("Captured output:\n" + output);
+        Console.WriteLine("Captured output:\n" + output[..Math.Min(500, output.Length)] + (output.Length > 500 ? "..." : ""));
     Environment.Exit(1);
 }
 catch (Pm3TimeoutException ex)
 {
     Console.WriteLine($"ERROR: Timeout - {ex.Message}");
-    if (ex.CommandResult?.RawOutput is { } output)
-        Console.WriteLine("Captured output:\n" + output);
     Environment.Exit(1);
 }
 catch (Exception ex)

@@ -1,70 +1,152 @@
-﻿using Tokens;
+using Pm3UsbApi.Execution;
+using Pm3UsbApi.Parsers;
+using Pm3UsbApi.Session;
+using Tokens;
 
 namespace Pm3UsbApi;
 
-public class Pm3
+/// <summary>
+/// High-level Proxmark3 API for T55xx tag operations, LF tuning, and raw commands.
+/// </summary>
+public sealed class Pm3 : IAsyncDisposable
 {
-    public async Task<bool> IsConnectedAsync()
+    private readonly Pm3Session _session;
+    private readonly Pm3ProcessExecutor _executor;
+    private CommandResult? _lastTuneResult;
+
+    /// <summary>
+    /// Creates a new Pm3 instance with the given options.
+    /// </summary>
+    /// <param name="options">Configuration. Uses sensible defaults if null.</param>
+    public Pm3(Pm3Options? options = null)
     {
-        throw new NotImplementedException();
+        var opts = options ?? new Pm3Options();
+        _executor = new Pm3ProcessExecutor(opts);
+        _session = new Pm3Session(_executor, opts);
     }
 
-    public async Task<bool> ConnectAsync()
+    /// <summary>
+    /// Connect to the Proxmark3 device.
+    /// </summary>
+    /// <returns>True on success.</returns>
+    /// <exception cref="Pm3ConnectionException">When the device cannot be reached.</exception>
+    public async Task<bool> ConnectAsync(CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        await _session.ConnectAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
-    public async Task<bool> DisconnectAsync()
+    /// <summary>
+    /// Disconnect from the device and release resources.
+    /// </summary>
+    public async Task<bool> DisconnectAsync(CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        await _session.DisconnectAsync().ConfigureAwait(false);
+        return true;
     }
 
-    public async Task<bool> StartLfTune()
+    /// <summary>
+    /// Returns whether the session is connected and the device responds.
+    /// </summary>
+    public async Task<bool> IsConnectedAsync(CancellationToken ct = default)
     {
-        // lf tune
-        throw new NotImplementedException();
+        return await _session.IsConnectedAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<uint> GetLfTunePeakMilliVolts() // requires StartLfTune to be called first
+    /// <summary>
+    /// Ensures a T55xx tag is detected on the reader. Throws if no chip found.
+    /// </summary>
+    /// <exception cref="Pm3CommandException">When no T55xx chip is detected.</exception>
+    public async Task EnsureT55SessionActiveAsync(CancellationToken ct = default)
     {
-        // readn the lf tune peak voltage (in ProxSpace pm3 this looks like `[=] 60276 mV / 60 V / 60 Vmax`) and the value would be `60276`
-        throw new NotImplementedException();
+        var result = await _session.ExecuteT55CommandAsync("lf t55 detect", null, ct).ConfigureAwait(false);
+        var detect = DetectParser.Parse(result);
+        if (!detect.ChipFound)
+            throw new Pm3CommandException("No T55xx chip detected. Place a tag on the reader.", result);
     }
 
-    public async Task<bool> StopLfTune() // requires StartLfTune to be called first
+    /// <summary>
+    /// Read a block from page 0.
+    /// </summary>
+    /// <param name="block">Block number 0-7.</param>
+    /// <returns>8-character hex string (uppercase).</returns>
+    /// <exception cref="Pm3CommandException">When read fails.</exception>
+    public async Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        if (block > 7)
+            throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 0 and 7.");
+
+        var result = await _session.ExecuteT55CommandAsync($"lf t55 read -b {block}", null, ct).ConfigureAwait(false);
+        var parsed = BlockReadParser.Parse(result, (int)block);
+        if (!parsed.Success || parsed.HexData is null)
+            throw new Pm3CommandException($"Failed to read block {block}.", result);
+        return parsed.HexData;
     }
 
-    public async Task<string> ReadPage0BlockAsync(uint block) // only works with page 0
+    /// <summary>
+    /// Write a block to page 0. Block 0 and 7 are forbidden for safety.
+    /// </summary>
+    /// <param name="block">Block number 1-6.</param>
+    /// <param name="data">Block data.</param>
+    /// <exception cref="Pm3CommandException">When write fails.</exception>
+    public async Task<bool> WritePage0BlockAsync(uint block, T55Block data, CancellationToken ct = default)
     {
-        if (block < 0 || block > 7) throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 0 and 7");
+        if (block == 0)
+            throw new ArgumentException("Block 0 (configuration) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 0.", nameof(block));
+        if (block == 7)
+            throw new ArgumentException("Block 7 (password) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 7.", nameof(block));
+        if (block > 7)
+            throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 1 and 6.");
 
-        EnsureT55SessionActive();
-        // lf t55 read -b <block>
-        throw new NotImplementedException();
-    }
-    
-    public async Task<bool> WritePage0BlockAsync(uint block, T55Block data) // only works with page 0
-    {
-        if (block == 0) throw new ArgumentException("Block 0 (configuration) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 0.");
-        if (block == 7) throw new ArgumentException("Block 7 (pasword) is forbidden for this tool, it is too dangerous to write to. NEVER WRITE TO BLOCK 7.");
-
-        EnsureT55SessionActive();
-        // lf t55 write -b <block> -d <data (hex string)>
-        throw new NotImplementedException();
+        var hex = data.ToHex();
+        var result = await _session.ExecuteT55CommandAsync($"lf t55 write -b {block} -d {hex}", null, ct).ConfigureAwait(false);
+        if (result.HasErrors)
+            throw new Pm3CommandException($"Failed to write block {block}. {result.ErrorSummary}", result);
+        return true;
     }
 
-    public async Task<string> Dump() 
+    /// <summary>
+    /// Dump all page 0 blocks from the tag.
+    /// </summary>
+    /// <returns>Raw dump output string.</returns>
+    public async Task<string> DumpAsync(CancellationToken ct = default)
     {
-        EnsureT55SessionActive();
-        // lf t55 dump
-        throw new NotImplementedException();
+        var result = await _session.ExecuteT55CommandAsync("lf t55 dump", null, ct).ConfigureAwait(false);
+        return result.RawOutput;
     }
-    
-    private async Task EnsureT55SessionActive() // requires a token to be placed on the pm3 reader
+
+    /// <summary>
+    /// Run LF tune to measure antenna characteristics. Call GetLfTuneLastMilliVoltsAsync to read the result.
+    /// </summary>
+    public async Task<bool> StartLfTuneAsync(CancellationToken ct = default)
     {
-        // lf t55 detect
-        throw new NotImplementedException();
+        _lastTuneResult = await _session.ExecuteCommandAsync("lf tune", null, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Get the last millivolt value from the most recent StartLfTuneAsync run.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">When StartLfTuneAsync has not been called.</exception>
+    public Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default)
+    {
+        if (_lastTuneResult is null)
+            throw new InvalidOperationException("Call StartLfTuneAsync first.");
+        var parsed = TuneParser.Parse(_lastTuneResult);
+        if (!parsed.Success)
+            throw new Pm3CommandException("No peak mV value in tune output.", _lastTuneResult);
+        return Task.FromResult(parsed.PeakMilliVolts);
+    }
+
+    /// <summary>
+    /// Stop LF tune. No-op for per-invocation mode (lf tune runs and exits).
+    /// </summary>
+    public Task<bool> StopLfTuneAsync(CancellationToken ct = default) => Task.FromResult(true);
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await _session.DisposeAsync().ConfigureAwait(false);
+        GC.SuppressFinalize(this);
     }
 }

@@ -9,12 +9,22 @@ namespace Pm3UsbApi.Execution;
 /// Requires the proxmark3 client (e.g., from ProxSpace) to be installed on the host.
 /// </summary>
 /// <remarks>
+/// <c>lf tune</c> has special handling: it runs continuously, so the executor interrupts it after
+/// <see cref="LfTuneCaptureInterval"/> and returns whatever output was captured (e.g. peak mV).
+/// <c>lf tune</c> cannot be combined with other commands in the same invocation.
+/// </remarks>
+/// <remarks>
 /// Windows (ProxSpace): The proxmark3.exe in client/ requires MinGW64 DLLs (libjansson, Qt5, etc.)
 /// on PATH. When the exe is under a ProxSpace layout, we derive msys2/mingw64/bin and prepend it to
 /// PATH before launching. Point Pm3ClientPath directly to proxmark3.exe.
 /// </remarks>
 public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
 {
+    /// <summary>
+    /// Duration to run lf tune before interrupting. Enough time to capture peak mV output.
+    /// </summary>
+    public static readonly TimeSpan LfTuneCaptureInterval = TimeSpan.FromSeconds(3);
+
     private readonly Pm3Options _options;
     private string? _resolvedPm3Path;
     private Process? _currentProcess;
@@ -36,7 +46,11 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
         if (commands is null || commands.Length == 0)
             throw new ArgumentException("At least one command is required.", nameof(commands));
 
-        var effectiveTimeout = timeout ?? _options.DefaultCommandTimeout;
+        if (ContainsLfTuneWithOthers(commands))
+            throw new InvalidOperationException("lf tune cannot be combined with other commands. Execute it alone.");
+
+        var isLfTuneOnly = IsLfTuneOnly(commands);
+        var effectiveTimeout = isLfTuneOnly ? LfTuneCaptureInterval : (timeout ?? _options.DefaultCommandTimeout);
         var commandString = string.Join("; ", commands);
         var path = ResolvePm3ClientPath();
         var args = BuildArguments(commandString);
@@ -73,15 +87,19 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
             catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
             {
                 try { _currentProcess.Kill(entireProcessTree: true); } catch { /* best effort */ }
-                var result = new CommandResult
+                var interruptedLines = outputLines.Select(OutputParser.StripAnsi).ToList();
+                var (interruptedHasErrors, interruptedErrorSummary) = OutputParser.DetectErrors(interruptedLines);
+                var interruptedResult = new CommandResult
                 {
                     Commands = commands,
-                    OutputLines = outputLines,
+                    OutputLines = interruptedLines,
                     ExitCode = -1,
-                    HasErrors = true,
-                    ErrorSummary = "Command timed out."
+                    HasErrors = interruptedHasErrors,
+                    ErrorSummary = interruptedHasErrors ? interruptedErrorSummary : null
                 };
-                throw new Pm3TimeoutException("Command execution timed out.", result);
+                if (isLfTuneOnly)
+                    return interruptedResult;
+                throw new Pm3TimeoutException("Command execution timed out.", interruptedResult);
             }
 
             var exitCode = _currentProcess.ExitCode;
@@ -260,6 +278,15 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
         }
         return null;
     }
+
+    private static bool IsLfTuneCommand(string command) =>
+        command.AsSpan().TrimStart().StartsWith("lf tune", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLfTuneOnly(string[] commands) =>
+        commands.Length == 1 && IsLfTuneCommand(commands[0]);
+
+    private static bool ContainsLfTuneWithOthers(string[] commands) =>
+        commands.Length > 1 && commands.Any(IsLfTuneCommand);
 
     private static async Task ReadStreamAsync(StreamReader reader, List<string> outputLines, CancellationToken ct)
     {

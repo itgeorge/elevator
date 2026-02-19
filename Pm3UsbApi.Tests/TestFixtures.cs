@@ -6,7 +6,7 @@ namespace Pm3UsbApi.Tests;
 /// </summary>
 public static class TestFixtures
 {
-    // --- lf t55 detect (successful, T55x7 chip found) ---
+    // --- lf t55 detect (successful, T55x7 chip found, colon format) ---
     public const string DetectSuccess = """
         [=] Session log C:/temp/.proxmark3/logs/log.txt
         [+] loaded preferences.json
@@ -26,6 +26,15 @@ public static class TestFixtures
         [=] Downlink Mode: default/fixed bit length
         [=] Password Set: No
 
+        [usb|script] pm3 -->
+        """;
+
+    // --- lf t55 detect (Iceman format with dots as fill) ---
+    public const string DetectSuccessIcemanFormat = """
+        [=]  Chip type......... T55x7
+        [=]  Modulation........ ASK
+        [=]  Bit rate.......... 5 - RF/64
+        [=]  Block 0 .......... 0x00148040
         [usb|script] pm3 -->
         """;
 
