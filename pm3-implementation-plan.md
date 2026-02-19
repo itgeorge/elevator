@@ -74,7 +74,7 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **1.1** Create `Pm3UsbApi/Pm3Options.cs`:
+- [x] **1.1** Create `Pm3UsbApi/Pm3Options.cs`:
   ```csharp
   public record Pm3Options
   {
@@ -107,7 +107,7 @@ Pm3UsbApi/
   }
   ```
 
-- [ ] **1.2** Create `Pm3UsbApi/CommandResult.cs`:
+- [x] **1.2** Create `Pm3UsbApi/CommandResult.cs`:
   ```csharp
   public class CommandResult
   {
@@ -120,14 +120,14 @@ Pm3UsbApi/
   }
   ```
 
-- [ ] **1.3** Create `Pm3UsbApi/Pm3Exception.cs` with hierarchy:
+- [x] **1.3** Create `Pm3UsbApi/Pm3Exception.cs` with hierarchy:
   - `Pm3Exception` (base; carries optional `CommandResult`)
   - `Pm3ConnectionException` (cannot reach device or pm3 client)
   - `Pm3CommandException` (command returned error output)
   - `Pm3TimeoutException` (command timed out)
   - `Pm3ClientNotFoundException` (pm3 executable not found)
 
-- [ ] **1.4** Create `Pm3UsbApi/Execution/IPm3CommandExecutor.cs`:
+- [x] **1.4** Create `Pm3UsbApi/Execution/IPm3CommandExecutor.cs`:
   ```csharp
   public interface IPm3CommandExecutor : IAsyncDisposable
   {
@@ -142,7 +142,7 @@ Pm3UsbApi/
   }
   ```
 
-- [ ] **1.5** Verify the project builds: `dotnet build Pm3UsbApi/Pm3UsbApi.csproj`
+- [x] **1.5** Verify the project builds: `dotnet build Pm3UsbApi/Pm3UsbApi.csproj`
 
 ---
 
