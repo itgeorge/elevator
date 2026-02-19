@@ -63,3 +63,6 @@ dumps/*
 .idea/*
 .vscode/*
 *.DotSettings.user
+
+# ProxMark3 files created in runs/tests
+.proxmark3/*

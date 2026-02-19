@@ -154,11 +154,11 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **2.1** Create `Pm3UsbApi/Parsers/OutputParser.cs` with shared utilities:
+- [x] **2.1** Create `Pm3UsbApi/Parsers/OutputParser.cs` with shared utilities:
   - `static string StripAnsi(string line)` -- regex `\x1B\[[0-9;]*[A-Za-z]` to remove ANSI escape sequences.
   - `static (bool hasErrors, string? errorSummary) DetectErrors(IReadOnlyList<string> lines)` -- scan for `[!]`, `[-]`, lines starting with `error` or `failed` (case-insensitive).
 
-- [ ] **2.2** Create `Pm3UsbApi/Execution/Pm3ProcessExecutor.cs`:
+- [x] **2.2** Create `Pm3UsbApi/Execution/Pm3ProcessExecutor.cs`:
   - Constructor takes `Pm3Options`.
   - `ExecuteAsync`:
     1. Resolve pm3 client path (from options or auto-detect).
@@ -172,19 +172,19 @@ Pm3UsbApi/
     9. Return `CommandResult`.
   - `CancelCurrentAsync`: kill the running process (if any).
 
-- [ ] **2.3** Implement pm3 client auto-detection in a helper method `ResolvePm3ClientPath()`:
+- [x] **2.3** Implement pm3 client auto-detection in a helper method `ResolvePm3ClientPath()`:
   - If `Pm3Options.Pm3ClientPath` is set and file exists, use it.
   - Search PATH for `proxmark3.exe` (Windows) or `proxmark3` (Linux/macOS).
   - Search common locations: `C:\ProxSpace\pm3\`, user's home directory, etc.
   - Throw `Pm3ClientNotFoundException` if not found.
   - Cache the resolved path after first successful resolution.
 
-- [ ] **2.4** Handle Windows-specific considerations:
+- [x] **2.4** Handle Windows-specific considerations:
   - ProxSpace builds may need certain DLLs on PATH. Document this as a requirement.
   - If using `pm3.bat`, the process may spawn a child shell -- handle accordingly or require direct `proxmark3.exe` path.
   - Ensure `CreateNoWindow = true` to avoid console window popups.
 
-- [ ] **2.5** Write a simple integration smoke test (manual, not automated):
+- [x] **2.5** Write a simple integration smoke test (manual, not automated):
   - Instantiate `Pm3ProcessExecutor` with appropriate options.
   - Execute `["hw version"]` and print the output.
   - Verify output contains Proxmark3 version information.
