@@ -252,7 +252,7 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **4.1** Create `Pm3UsbApi/Parsers/DetectResult.cs` and `DetectParser.cs`:
+- [x] **4.1** Create `Pm3UsbApi/Parsers/DetectResult.cs` and `DetectParser.cs`:
   ```csharp
   public record DetectResult(
       bool ChipFound,
@@ -268,7 +268,7 @@ Pm3UsbApi/
   - Parse lines for `Chip Type`, `Modulation`, `Block0` values.
   - `ChipFound = true` if `Chip Type` line present and does NOT contain `none` or `unknown`.
 
-- [ ] **4.2** Create `Pm3UsbApi/Parsers/TuneResult.cs` and `TuneParser.cs`:
+- [x] **4.2** Create `Pm3UsbApi/Parsers/TuneResult.cs` and `TuneParser.cs`:
   ```csharp
   public record TuneResult(bool Success, uint PeakMilliVolts);
 
@@ -280,7 +280,7 @@ Pm3UsbApi/
   - Regex: `\[=\]\s*(\d+)\s*mV\b`
   - Use the last match if multiple exist.
 
-- [ ] **4.3** Create `Pm3UsbApi/Parsers/BlockReadResult.cs` and `BlockReadParser.cs`:
+- [x] **4.3** Create `Pm3UsbApi/Parsers/BlockReadResult.cs` and `BlockReadParser.cs`:
   ```csharp
   public record BlockReadResult(bool Success, string? HexData);
 
@@ -293,7 +293,7 @@ Pm3UsbApi/
   - Regex to extract 8-char hex value from table-formatted line.
   - Normalize to uppercase.
 
-- [ ] **4.4** Create `Pm3UsbApi/Parsers/DumpResult.cs` and `DumpParser.cs`:
+- [x] **4.4** Create `Pm3UsbApi/Parsers/DumpResult.cs` and `DumpParser.cs`:
   ```csharp
   public record DumpResult(bool Success, IReadOnlyList<T55Block> Blocks, string RawOutput);
 
@@ -305,14 +305,14 @@ Pm3UsbApi/
   - Parse table rows with format: `<block_num> | <hex_data> | <binary>` or similar.
   - Build `T55Block` from each hex value.
 
-- [ ] **4.5** Create test project `Pm3UsbApi.Tests`:
+- [x] **4.5** Create test project `Pm3UsbApi.Tests`:
   - Create `Pm3UsbApi.Tests/Pm3UsbApi.Tests.csproj`:
     - Target framework: `net9.0`
     - References: `Pm3UsbApi` project
     - Packages: `NUnit`, `NUnit3TestAdapter`, `Microsoft.NET.Test.Sdk`, `JetBrains.Annotations`
   - Add to `ElevatorTokens.sln`.
 
-- [ ] **4.6** Capture real pm3 output samples for test fixtures:
+- [x] **4.6** Capture real pm3 output samples for test fixtures:
   - Connect Proxmark3 with T5577 tag.
   - Run via ProxSpace and capture exact output (including ANSI codes if present) for:
     - `lf t55 detect` (successful, with chip info)
@@ -324,7 +324,7 @@ Pm3UsbApi/
   - Store as string constants in a `TestFixtures` static class in the test project.
   - Include both raw (with ANSI) and stripped versions.
 
-- [ ] **4.7** Write parser unit tests:
+- [x] **4.7** Write parser unit tests:
   - `DetectParserTests`:
     - Successful detect with T55x7 chip
     - Failed detect (no tag)
@@ -340,12 +340,12 @@ Pm3UsbApi/
     - Full 8-block dump
     - Parse block values match expected T55Block values
 
-- [ ] **4.8** Write `OutputParser` (ANSI strip + error detection) unit tests:
+- [x] **4.8** Write `OutputParser` (ANSI strip + error detection) unit tests:
   - ANSI stripping correctly removes color codes
   - Error detection finds `[!]`, `[-]`, `failed` lines
   - Non-error lines (e.g., `[+]`, `[=]`) are not flagged
 
-- [ ] **4.9** Verify all tests pass: `dotnet test`
+- [x] **4.9** Verify all tests pass: `dotnet test`
 
 ---
 
