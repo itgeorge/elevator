@@ -1,8 +1,8 @@
 using System.Globalization;
 
-namespace TokenDumpsCli;
+namespace Tokens;
 
-readonly struct T55Block
+public readonly struct T55Block
 {
     public uint Value { get; }
 
@@ -40,7 +40,7 @@ readonly struct T55Block
     }
 }
 
-static class TokenBlockUtils
+public static class TokenBlockUtils
 {
     public record Family(uint High16, uint XorConst);
 

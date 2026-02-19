@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\Tokens\Tokens.csproj" />
       <None Remove="Data\default-500-rides.bin" />
       <EmbeddedResource Include="Data\default-500-rides.bin">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>

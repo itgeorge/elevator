@@ -3,6 +3,7 @@ using System.Text;
 using TokenDumpsCli.IO;
 using TokenDumpsCli.Models;
 using TokenDumpsCli.Printing;
+using Tokens;
 
 namespace TokenDumpsCli.Commands;
 

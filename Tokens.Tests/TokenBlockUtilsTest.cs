@@ -1,11 +1,11 @@
-using TokenDumpsCli;
 using JetBrains.Annotations;
+using Tokens;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace TokenDumpsCli.Tests;
+namespace Tokens.Tests;
 
 [TestFixture]
 [TestOf(typeof(TokenBlockUtils))]
