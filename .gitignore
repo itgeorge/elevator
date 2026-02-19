@@ -55,3 +55,11 @@ nunit-*.xml
 
 # Custom dev environment files
 *.devenv*
+
+# Data dumps
+dumps/*
+
+# User-specific and idea/vscode files
+.idea/*
+.vscode/*
+*.DotSettings.user
