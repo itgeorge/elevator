@@ -459,20 +459,21 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **7.1** Full manual smoke test via `Pm3Cli`:
-  - [ ] `connect` -- verify success message
-  - [ ] `status` -- shows connected
-  - [ ] `detect` -- shows T55x7 chip info
-  - [ ] `read 0` through `read 7` -- shows hex values
-  - [ ] `dump` -- shows full block table
-  - [ ] `tune` -- shows peak mV value
-  - [ ] `write 5 <hex>` -- write to block 5 (safe block), then `read 5` to verify
-  - [ ] `raw hw version` -- shows device info
-  - [ ] `disconnect` -- clean disconnect
-  - [ ] `exit` -- exits cleanly
+- [x] **7.1** Full manual smoke test via `Pm3Cli`:
+  - [x] `connect` -- verify success message
+  - [x] `status` -- shows connected
+  - [x] `detect` -- shows T55x7 chip info
+  - [x] `read 0` through `read 7` -- shows hex values
+  - [x] `dump` -- shows full block table
+  - [x] `tune` -- shows peak mV value
+  - [x] `write 5 <hex>` -- write to block 5 (safe block), then `read 5` to verify
+  - [x] `raw hw version` -- shows device info
+  - [x] `disconnect` -- clean disconnect
+  - [x] `exit` -- exits cleanly
 
-- [ ] **7.2** Create `Pm3UsbApi.Tests/Integration/Pm3IntegrationTests.cs`:
-  - Mark with `[Category("Integration")]` so CI can skip.
+- [x] **7.2** Create `Pm3UsbApi.Tests/Integration/Pm3IntegrationTests.cs`:
+  - Mark with `[Category("Integration")]` and `[Explicit]` so CI skips by default.
+  - Run: `dotnet test --filter "Category=Integration"` (set `PM3_DEVICE_PORT` for port or use auto).
   - Test: connect/disconnect lifecycle
   - Test: detect -> read all blocks -> verify non-null
   - Test: write block 5 -> read back -> verify match
@@ -480,12 +481,12 @@ Pm3UsbApi/
   - Test: timeout behavior (execute with very short timeout)
   - Test: error handling (disconnect, then try to read -- should get meaningful error)
 
-- [ ] **7.3** Document output format differences:
+- [x] **7.3** Document output format differences:
   - During testing, if any pm3 output doesn't match expected patterns, update parsers.
   - Add new test fixtures for any format variations discovered.
   - Update regex patterns in notes if needed.
 
-- [ ] **7.4** Review and clean up:
+- [x] **7.4** Review and clean up:
   - Ensure all public APIs have XML doc comments.
   - Remove any TODO comments left in code.
   - Verify no compiler warnings.

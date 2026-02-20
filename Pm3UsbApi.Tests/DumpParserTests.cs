@@ -63,4 +63,16 @@ public class DumpParserTests
     {
         Assert.Throws<ArgumentNullException>(() => DumpParser.Parse(null!));
     }
+
+    [Test]
+    public void Parse_IcemanFormatWithPlusPrefix_Returns8Blocks()
+    {
+        var result = ToResult(TestFixtures.DumpSuccessIceman);
+        var parsed = DumpParser.Parse(result);
+
+        Assert.That(parsed.Success, Is.True);
+        Assert.That(parsed.Blocks, Has.Count.EqualTo(8));
+        Assert.That(parsed.Blocks[0].ToHex(), Is.EqualTo("00148040"));
+        Assert.That(parsed.Blocks[5].ToHex(), Is.EqualTo("CCC61159"));
+    }
 }

@@ -29,6 +29,8 @@ public static class PortDiscovery
     /// <summary>
     /// Returns the first discovered port, or null if none found.
     /// </summary>
+    /// <param name="pm3ClientPath">Path to proxmark3.exe; used to locate pm3 script on Unix.</param>
+    /// <param name="ct">Cancellation token.</param>
     public static async Task<string?> DiscoverFirstPortAsync(string? pm3ClientPath, CancellationToken ct = default)
     {
         var ports = await ListPortsAsync(pm3ClientPath, ct).ConfigureAwait(false);

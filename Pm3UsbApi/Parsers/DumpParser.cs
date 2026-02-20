@@ -9,9 +9,9 @@ namespace Pm3UsbApi.Parsers;
 /// </summary>
 public static class DumpParser
 {
-    // Matches table rows: "0   | 00107060 | 0000..." or "00 | 00148040 | ..."
+    // Matches table rows: "0   | 00107060 | ..." or "[+]  00 | 00148040 | ..." (Iceman format)
     private static readonly Regex BlockRowRegex = new(
-        @"^\s*(\d+)\s+\|\s+([0-9A-Fa-f]{8})\b",
+        @"^\s*(?:\[\+\]\s*)?(\d+)\s+\|\s+([0-9A-Fa-f]{8})\b",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>
