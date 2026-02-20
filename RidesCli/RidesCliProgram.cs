@@ -1,45 +1,105 @@
-﻿namespace RidesCli;
+using Pm3UsbApi;
+
+namespace RidesCli;
 
 class RidesCliProgram
 {
-    static void Main(string[] args)
+    static async Task<int> Main(string[] args)
     {
-        // TODO: implement the commands below in the following way:
-        //  - keep the cli just an input/output handler, abstract all code away in a testable RidesCommandHandler
-        //  - ctor accepts dependencies
-        //  - make fakes of dependencies and test with those
-        //  - approach with TDD/test-first, add several examples of each input-output sequence
-        // # Commands
-        // [ ] read - detects and reads token using Pm3Api, saves <rides> data in memory, displays:
-        //      - signal strength (mV value)
-        //      - data dump (optionally if -d argument passed set)
-        //      - rides remaining (uses TokenUtils), if this fails, prints error info and unloads loaded data
-        // [ ] set <number> - sets rides to the token using Pm3Api
-        //      - (see `set-rides` in TokenDumpsCli for how this is currently implemented)
-        //      - if no <rides> saved in memory (no previous `read`), prints error (early return)
-        //      - saves local var <previousRides> = <rides>
-        //      - validate <number> is in the [0, 500] range, prints error otherwise (early return)
-        //      - sets <rides> = <number>
-        //      - computes the updated block 5 and block 6 values based on <number> (uses TokenUtils)
-        //      - sets blocks 5 and 6 with the new value:
-        //          - write block 5 (if `block5Confirmed` not set)
-        //          - write block 6 (if `block6Confirmed` not set)
-        //          - read block 5
-        //          - read block 6
-        //          - confirm they match (set `block5Confirmed` and `block6Confirmed` accordingly)
-        //          - retry up to 2 times
-        //      - prints success/failure state
-        //      - prints final token state (full dump)
-        //      - calculates <rideDiff> = <rides> - <previousRides>
-        //      - if <pricePer100> available, then calculates and prints price *rounded up* to nearest cent
-        // [ ] add <addnum> - adds rides to the currently loaded token through Pm3Api write
-        //      - (see `add-rides` in TokenDumpsCli for how this is currently implemented)
-        //      - if no rides saved in memory (no previous `read`), prints error (early return)
-        //      - calculates new ride <number> based on current <rides> in memory, "calls" `set <number>`
-        // [ ] price set <number> - requires loaded <rides>, behaves like `set <number>` but doesn't actually write anything, just prints the price with "will cost: " prefix
-        // [ ] price add <addnum> - requires loaded <rides>, behaves like `add <addnum>` but doesn't actually write anything, just prints the price with "will cost: " prefix
-        // [ ] money <amount> - requires loaded <rides>, accepts an amount (e.g. 4.00, 12.34) and prints the amount of resulting rides that would be added for that amount
-        // [ ] config [key value ...] - allows configuring options for the app
-        //      - <pricePer100> accepts value of the form 4.00 or 24.50 of integer euros and integer cents
+        var config = new RidesConfig();
+        var options = ParsePm3Options(args);
+        var pm3 = new Pm3(options);
+        var pm3Api = new Pm3RidesApiAdapter(pm3);
+        var output = new ConsoleRidesOutput();
+        var handler = new RidesCommandHandler(pm3Api, output, config);
+
+        Console.WriteLine("RidesCli - Elevator token ride management");
+        Console.WriteLine("Type 'help' for commands. 'read' to load token from device.");
+        Console.WriteLine();
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        try
+        {
+            await pm3.ConnectAsync(cts.Token);
+        }
+        catch (Pm3Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            Console.WriteLine("Connect failed. Commands needing the device will fail. Continuing...");
+        }
+
+        try
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    Console.Write("rides> ");
+                    var line = Console.ReadLine();
+                    if (line is null) break;
+
+                    var cmdArgs = SplitArgs(line.Trim());
+                    if (cmdArgs.Length == 0) continue;
+
+                    var shouldContinue = handler.Execute(cmdArgs);
+                    if (!shouldContinue) break;
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine();
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            await pm3.DisposeAsync();
+        }
+
+        return 0;
+    }
+
+    static Pm3Options ParsePm3Options(string[] args)
+    {
+        var options = new Pm3Options();
+        for (var i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+            switch (arg)
+            {
+                case "--pm3-path" when i + 1 < args.Length:
+                    options = options with { Pm3ClientPath = args[++i] };
+                    break;
+                case "--port" when i + 1 < args.Length:
+                    options = options with { DevicePort = args[++i] };
+                    break;
+                case "--timeout" when i + 1 < args.Length:
+                    if (int.TryParse(args[++i], out var sec) && sec > 0)
+                        options = options with { DefaultCommandTimeout = TimeSpan.FromSeconds(sec) };
+                    break;
+            }
+        }
+        return options;
+    }
+
+    static string[] SplitArgs(string input)
+    {
+        var result = new List<string>();
+        var sb = new System.Text.StringBuilder();
+        var inQuotes = false;
+        for (var i = 0; i < input.Length; i++)
+        {
+            var c = input[i];
+            if (c == '"') { inQuotes = !inQuotes; continue; }
+            if (char.IsWhiteSpace(c) && !inQuotes)
+            {
+                if (sb.Length > 0) { result.Add(sb.ToString()); sb.Clear(); }
+            }
+            else sb.Append(c);
+        }
+        if (sb.Length > 0) result.Add(sb.ToString());
+        return result.ToArray();
     }
 }
