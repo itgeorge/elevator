@@ -26,9 +26,16 @@ public record Pm3Options
 
     /// <summary>
     /// COM port or device path (e.g., "COM3", "/dev/ttyACM0").
-    /// null = let pm3 client auto-detect.
+    /// null = when AutoConnect is true, attempt port discovery; when false, connection will fail.
     /// </summary>
     public string? DevicePort { get; init; }
+
+    /// <summary>
+    /// When true, discover port via pm3 --list when DevicePort is null.
+    /// When false, DevicePort must be set; ConnectAsync will throw if it is null.
+    /// Set by config port auto (true) or config port none (false).
+    /// </summary>
+    public bool AutoConnect { get; init; } = true;
 
     /// <summary>
     /// Timeout for a single command execution (including process startup for per-invocation).

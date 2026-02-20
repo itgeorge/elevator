@@ -13,6 +13,7 @@ public sealed class Pm3Session : IAsyncDisposable
     private readonly Pm3Options _options;
     private StreamWriter? _transcriptWriter;
     private bool _connected;
+    private string? _discoveredPort;
     private DateTime _lastDetectTime;
     private TimeSpan _detectCacheTtl = TimeSpan.FromSeconds(5);
     private bool _disposed;
@@ -29,6 +30,7 @@ public sealed class Pm3Session : IAsyncDisposable
 
     /// <summary>
     /// Connect to the Proxmark3 device by verifying it responds to hw version.
+    /// Uses Pm3Options.AutoConnect and DevicePort; see options for port/auto discovery behavior.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <exception cref="Pm3ConnectionException">When the device cannot be reached.</exception>
@@ -36,10 +38,32 @@ public sealed class Pm3Session : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        string? portOverride = null;
+
+        if (string.IsNullOrWhiteSpace(_options.DevicePort))
+        {
+            if (!_options.AutoConnect)
+            {
+                throw new Pm3ConnectionException(
+                    "DevicePort must be set when autoConnect is false. Use Pm3Options.DevicePort or config to set the port. " +
+                    "Run 'pm3 --list' (or use PortDiscovery.ListPortsAsync) to discover available ports.");
+            }
+
+            portOverride = await PortDiscovery.DiscoverFirstPortAsync(_options.Pm3ClientPath, ct).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(portOverride))
+            {
+                throw new Pm3ConnectionException(
+                    "No Proxmark3 device found. Connect the device via USB and ensure no other process is using it. " +
+                    "Run 'pm3 --list' to verify detection.");
+            }
+            _discoveredPort = portOverride;
+        }
+
         var result = await _executor.ExecuteAsync(
             ["hw version"],
             _options.ConnectTimeout,
-            ct).ConfigureAwait(false);
+            ct,
+            portOverride).ConfigureAwait(false);
 
         if (OutputParser.DetectOfflineMode(result.OutputLines))
         {
@@ -80,6 +104,7 @@ public sealed class Pm3Session : IAsyncDisposable
         lock (_lock)
         {
             _connected = false;
+            _discoveredPort = null;
         }
 
         CloseTranscript();
@@ -109,10 +134,12 @@ public sealed class Pm3Session : IAsyncDisposable
         // Quick hw version ping to verify device still responds
         try
         {
+            var port = _options.DevicePort ?? _discoveredPort;
             var result = await _executor.ExecuteAsync(
                 ["hw version"],
                 TimeSpan.FromSeconds(5),
-                ct).ConfigureAwait(false);
+                ct,
+                port).ConfigureAwait(false);
 
             if (OutputParser.DetectOfflineMode(result.OutputLines))
                 return false;
@@ -142,10 +169,12 @@ public sealed class Pm3Session : IAsyncDisposable
         var commands = new[] { "lf t55 detect", command };
         LogTranscript($">>> {string.Join("; ", commands)}");
 
+        var port = _options.DevicePort ?? _discoveredPort;
         var result = await _executor.ExecuteAsync(
             commands,
             timeout ?? _options.DefaultCommandTimeout,
-            ct).ConfigureAwait(false);
+            ct,
+            port).ConfigureAwait(false);
 
         LogTranscript("<<< " + result.RawOutput);
 
@@ -166,10 +195,12 @@ public sealed class Pm3Session : IAsyncDisposable
 
         LogTranscript($">>> {command}");
 
+        var port = _options.DevicePort ?? _discoveredPort;
         var result = await _executor.ExecuteAsync(
             [command],
             timeout ?? _options.DefaultCommandTimeout,
-            ct).ConfigureAwait(false);
+            ct,
+            port).ConfigureAwait(false);
 
         LogTranscript("<<< " + result.RawOutput);
 

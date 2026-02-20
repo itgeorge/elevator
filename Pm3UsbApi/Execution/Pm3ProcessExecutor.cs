@@ -39,7 +39,8 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
     public async Task<CommandResult> ExecuteAsync(
         string[] commands,
         TimeSpan? timeout = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? portOverride = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -53,7 +54,7 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
         var effectiveTimeout = isLfTuneOnly ? LfTuneCaptureInterval : (timeout ?? _options.DefaultCommandTimeout);
         var commandString = string.Join("; ", commands);
         var path = ResolvePm3ClientPath();
-        var args = BuildArguments(commandString);
+        var args = BuildArguments(commandString, portOverride);
 
         string? workingDir = null;
         if (!string.IsNullOrWhiteSpace(_options.WorkingDirectory))
@@ -245,11 +246,12 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
         }
     }
 
-    private string BuildArguments(string commandString)
+    private string BuildArguments(string commandString, string? portOverride = null)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(_options.DevicePort))
-            parts.Add(_options.DevicePort.Trim());
+        var port = portOverride ?? _options.DevicePort;
+        if (!string.IsNullOrWhiteSpace(port))
+            parts.Add(port.Trim());
         parts.Add("-c");
         parts.Add($"\"{commandString.Replace("\"", "\\\"")}\"");
         return string.Join(" ", parts);

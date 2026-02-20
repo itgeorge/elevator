@@ -26,7 +26,7 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
-    /// Connect to the Proxmark3 device.
+    /// Connect to the Proxmark3 device. Uses Pm3Options for port/auto-discovery.
     /// </summary>
     /// <returns>True on success.</returns>
     /// <exception cref="Pm3ConnectionException">When the device cannot be reached.</exception>

@@ -51,7 +51,7 @@ class Pm3CliProgram
                     _options = _options with { Pm3ClientPath = args[++i] };
                     break;
                 case "--port" when i + 1 < args.Length:
-                    _options = _options with { DevicePort = args[++i] };
+                    ApplyPortOption(args[++i]);
                     break;
                 case "--timeout" when i + 1 < args.Length:
                     if (int.TryParse(args[++i], out var sec) && sec > 0)
@@ -60,6 +60,23 @@ class Pm3CliProgram
                     }
                     break;
             }
+        }
+    }
+
+    private static void ApplyPortOption(string value)
+    {
+        var v = value.Trim().ToLowerInvariant();
+        if (v == "auto")
+        {
+            _options = _options with { DevicePort = null, AutoConnect = true };
+        }
+        else if (string.IsNullOrEmpty(v) || v == "none" || v == "off")
+        {
+            _options = _options with { DevicePort = null, AutoConnect = false };
+        }
+        else
+        {
+            _options = _options with { DevicePort = value.Trim(), AutoConnect = true };
         }
     }
 
@@ -115,6 +132,9 @@ class Pm3CliProgram
                         break;
                     case "config":
                         RunConfig(cmdArgs);
+                        break;
+                    case "list":
+                        await RunListAsync(ct);
                         break;
                     case "help":
                         ShowHelp();
@@ -352,16 +372,16 @@ class Pm3CliProgram
         if (cmdArgs.Count < 2)
         {
             Console.WriteLine("Usage: config <key> <value>");
-            Console.WriteLine("Keys: pm3-path, port, timeout, working-dir, transcript");
+            Console.WriteLine("Keys: pm3-path, port (COM3|auto|none), timeout, working-dir, transcript");
             return;
         }
         var key = cmdArgs[0].ToLowerInvariant();
         var value = string.Join(" ", cmdArgs.Skip(1));
 
-        var updated = key switch
+        Pm3Options? updated = key switch
         {
             "pm3-path" or "pm3path" => _options with { Pm3ClientPath = string.IsNullOrWhiteSpace(value) ? null : value },
-            "port" => _options with { DevicePort = string.IsNullOrWhiteSpace(value) ? null : value },
+            "port" => ApplyPortConfig(value),
             "timeout" => int.TryParse(value, out var sec) && sec > 0
                 ? _options with { DefaultCommandTimeout = TimeSpan.FromSeconds(sec) }
                 : null,
@@ -384,13 +404,50 @@ class Pm3CliProgram
         _options = updated;
         _pm3 = new Pm3(_options);
         _connected = false;
-        Console.WriteLine($"Config updated. {key} = {(string.IsNullOrEmpty(value) ? "(auto)" : value)}");
+        var displayValue = key == "port" ? FormatPortDisplay() : (string.IsNullOrEmpty(value) ? "(auto)" : value);
+        Console.WriteLine($"Config updated. {key} = {displayValue}");
+    }
+
+    private static Pm3Options? ApplyPortConfig(string value)
+    {
+        var v = value.Trim().ToLowerInvariant();
+        if (v == "auto")
+            return _options with { DevicePort = null, AutoConnect = true };
+        if (string.IsNullOrEmpty(v) || v == "none" || v == "off")
+            return _options with { DevicePort = null, AutoConnect = false };
+        return _options with { DevicePort = value.Trim(), AutoConnect = true };
+    }
+
+    private static string FormatPortDisplay()
+    {
+        if (!string.IsNullOrEmpty(_options.DevicePort))
+            return _options.DevicePort;
+        return _options.AutoConnect ? "auto" : "none";
+    }
+
+    private static async Task RunListAsync(CancellationToken ct)
+    {
+        try
+        {
+            var ports = await PortDiscovery.ListPortsAsync(_options.Pm3ClientPath, ct);
+            if (ports.Count == 0)
+            {
+                Console.WriteLine("No Proxmark3 devices found.");
+                return;
+            }
+            for (var i = 0; i < ports.Count; i++)
+                Console.WriteLine($"{i + 1}: {ports[i]}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
     }
 
     private static void ShowConfig()
     {
         Console.WriteLine($"  pm3-path:     {_options.Pm3ClientPath ?? "(auto-detect)"}");
-        Console.WriteLine($"  port:         {_options.DevicePort ?? "(auto-detect)"}");
+        Console.WriteLine($"  port:         {FormatPortDisplay()}");
         Console.WriteLine($"  timeout:      {(int)_options.DefaultCommandTimeout.TotalSeconds}s");
         Console.WriteLine($"  working-dir:  {_options.WorkingDirectory ?? "(current)"}");
         Console.WriteLine($"  transcript:   {(_options.EnableTranscriptLogging ? "on" : "off")}");
@@ -408,6 +465,7 @@ class Pm3CliProgram
         Console.WriteLine("  write <block> <hex>  Write page 0 block (1-6)");
         Console.WriteLine("  dump                 Dump all blocks");
         Console.WriteLine("  raw <command>        Send raw pm3 command");
+        Console.WriteLine("  list                 List detected Proxmark3 ports (like pm3 --list)");
         Console.WriteLine("  config [key value]   Show or set options (pm3-path, port, timeout, etc.)");
         Console.WriteLine("  help                 Show this help");
         Console.WriteLine("  exit                 Quit");

@@ -12,11 +12,13 @@ public interface IPm3CommandExecutor : IAsyncDisposable
     /// <param name="commands">Commands to execute (e.g., ["lf t55 detect", "lf t55 read -b 0"]).</param>
     /// <param name="timeout">Override for execution timeout. null = use options default.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="portOverride">Optional port to use for this invocation (e.g. from auto-discovery).</param>
     /// <returns>The command result with output lines and exit code.</returns>
     Task<CommandResult> ExecuteAsync(
         string[] commands,
         TimeSpan? timeout = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? portOverride = null);
 
     /// <summary>
     /// Send a break/cancel signal to abort a running operation.
