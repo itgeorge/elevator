@@ -286,6 +286,34 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Set_prints_rides_remaining_after_success()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+        output.Clear();
+
+        handler.Execute(["set", "100"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 100"));
+    }
+
+    [Test]
+    public void Add_prints_rides_remaining_after_success()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+        output.Clear();
+
+        handler.Execute(["add", "27"]); // 73 + 27 = 100
+
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 100"));
+    }
+
+    [Test]
     public void Price_add_preview_prints_exact_cost()
     {
         // 100 rides, add 42 → rideDiff = 42, price = 42/100 * 4.00 = 1.68

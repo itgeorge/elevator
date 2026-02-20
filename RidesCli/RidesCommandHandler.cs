@@ -186,12 +186,14 @@ public sealed class RidesCommandHandler
         }
 
         var success = block5Confirmed && block6Confirmed;
-        _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
 
         var finalDump = await _pm3.DumpAsync();
         _lastDumpRaw = finalDump;
         _output.WriteLine(finalDump);
 
+        _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
+        if (success)
+            _output.WriteLine($"rides remaining: {_rides.Value}");
         var rideDiff2 = (int)_rides.Value - (int)previousRides;
         if (_config.PricePer100.HasValue && rideDiff2 > 0)
         {
