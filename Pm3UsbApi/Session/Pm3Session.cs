@@ -1,4 +1,5 @@
 using Pm3UsbApi.Execution;
+using Pm3UsbApi.Parsers;
 
 namespace Pm3UsbApi.Session;
 
@@ -39,6 +40,13 @@ public sealed class Pm3Session : IAsyncDisposable
             ["hw version"],
             _options.ConnectTimeout,
             ct).ConfigureAwait(false);
+
+        if (OutputParser.DetectOfflineMode(result.OutputLines))
+        {
+            throw new Pm3ConnectionException(
+                "Proxmark3 is in offline mode. Connect the device via USB and ensure no other process is using it.",
+                result);
+        }
 
         // Consider connected if we got a device response, even with firmware-mismatch warnings ([!])
         var hasDeviceResponse = result.RawOutput.Contains("Proxmark3", StringComparison.OrdinalIgnoreCase)
@@ -105,6 +113,9 @@ public sealed class Pm3Session : IAsyncDisposable
                 ["hw version"],
                 TimeSpan.FromSeconds(5),
                 ct).ConfigureAwait(false);
+
+            if (OutputParser.DetectOfflineMode(result.OutputLines))
+                return false;
 
             // Use same lenient check as ConnectAsync: device responded even with firmware warnings
             var hasDeviceResponse = result.RawOutput.Contains("Proxmark3", StringComparison.OrdinalIgnoreCase)

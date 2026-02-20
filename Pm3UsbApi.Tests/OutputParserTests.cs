@@ -59,4 +59,31 @@ public class OutputParserTests
         Assert.That(hasErrors, Is.False);
         Assert.That(summary, Is.Null);
     }
+
+    [Test]
+    public void DetectOfflineMode_DetectsOfflineModeMessage()
+    {
+        var lines = TestFixtures.HwVersionOffline.Split('\n');
+        Assert.That(OutputParser.DetectOfflineMode(lines), Is.True);
+    }
+
+    [Test]
+    public void DetectOfflineMode_DetectsOfflinePrompt()
+    {
+        var lines = new[] { "[offline|script] pm3 --> hw version" };
+        Assert.That(OutputParser.DetectOfflineMode(lines), Is.True);
+    }
+
+    [Test]
+    public void DetectOfflineMode_ConnectedOutput_ReturnsFalse()
+    {
+        var lines = TestFixtures.HwVersion.Split('\n');
+        Assert.That(OutputParser.DetectOfflineMode(lines), Is.False);
+    }
+
+    [Test]
+    public void DetectOfflineMode_EmptyList_ReturnsFalse()
+    {
+        Assert.That(OutputParser.DetectOfflineMode(Array.Empty<string>()), Is.False);
+    }
 }

@@ -143,6 +143,18 @@ public sealed class Pm3 : IAsyncDisposable
     /// </summary>
     public Task<bool> StopLfTuneAsync(CancellationToken ct = default) => Task.FromResult(true);
 
+    /// <summary>
+    /// Execute a raw Proxmark3 command and return the output.
+    /// Use for commands that are not wrapped by the high-level API (e.g., hw version, lf search).
+    /// </summary>
+    /// <param name="command">The full pm3 command string.</param>
+    /// <returns>The raw output from the command.</returns>
+    public async Task<string> ExecuteRawCommandAsync(string command, CancellationToken ct = default)
+    {
+        var result = await _session.ExecuteCommandAsync(command, null, ct).ConfigureAwait(false);
+        return result.RawOutput;
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {

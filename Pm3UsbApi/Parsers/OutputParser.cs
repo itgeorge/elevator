@@ -50,4 +50,23 @@ public static class OutputParser
             : string.Join("; ", errorLines.Take(2)) + $" ... (+{errorLines.Count - 2} more)";
         return (true, summary);
     }
+
+    /// <summary>
+    /// Detects if the Proxmark3 client is running in offline mode (no device connected).
+    /// </summary>
+    /// <returns>True if offline mode is indicated in the output.</returns>
+    public static bool DetectOfflineMode(IReadOnlyList<string> lines)
+    {
+        if (lines.Count == 0) return false;
+
+        foreach (var line in lines)
+        {
+            var stripped = StripAnsi(line);
+            if (stripped.Contains("OFFLINE mode", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (stripped.Contains("[offline|", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
 }

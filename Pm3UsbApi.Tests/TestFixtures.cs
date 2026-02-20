@@ -120,6 +120,22 @@ public static class TestFixtures
         [usb|script] pm3 -->
         """;
 
+    // --- hw version offline mode (no device connected) ---
+    public const string HwVersionOffline = """
+        [+] execute command from commandline: hw version
+
+        [=] OFFLINE mode. Check "proxmark3.exe -h" if it's not what you want.
+
+        [offline|script] pm3 --> hw version
+
+         [ Proxmark3 ]
+
+         [ Client ]
+          Iceman/master/v4.20728 2025-09-14
+          Compiler.................. MinGW-w64 13.2.0
+          Platform.................. Windows (64b) / x86_64
+        """;
+
     // --- hw version (for OutputParser tests) ---
     public const string HwVersion = """
         [ Proxmark3 ]

@@ -420,15 +420,15 @@ Pm3UsbApi/
 
 ### TODOs
 
-- [ ] **6.1** Add project reference: `Pm3Cli.csproj` --> `Pm3UsbApi`.
+- [x] **6.1** Add project reference: `Pm3Cli.csproj` --> `Pm3UsbApi`.
 
-- [ ] **6.2** Implement `Pm3CliProgram.cs` with argument parsing:
+- [x] **6.2** Implement `Pm3CliProgram.cs` with argument parsing:
   - Optional args: `--pm3-path <path>`, `--port <COM3>`, `--timeout <seconds>`.
   - Create `Pm3Options` from args.
   - Create `Pm3` instance.
   - Enter interactive prompt loop with prompt `pm3api>`.
 
-- [ ] **6.3** Implement CLI commands:
+- [x] **6.3** Implement CLI commands:
   | Command               | Description                          | Maps to                          |
   |-----------------------|--------------------------------------|----------------------------------|
   | `connect`             | Connect to device                    | `Pm3.ConnectAsync()`             |
@@ -443,11 +443,11 @@ Pm3UsbApi/
   | `help`                | Show available commands              |                                  |
   | `exit`                | Quit                                 |                                  |
 
-- [ ] **6.4** Add user-friendly error handling:
+- [x] **6.4** Add user-friendly error handling:
   - Catch `Pm3Exception` subtypes and display helpful messages.
   - Show raw pm3 output on error for debugging.
 
-- [ ] **6.5** Test all CLI commands with real hardware.
+- [ ] **6.5** Test all CLI commands with real hardware. (manual)
 
 ---
 
