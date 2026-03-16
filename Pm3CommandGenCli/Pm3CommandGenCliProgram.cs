@@ -179,7 +179,12 @@ class Pm3CommandGenCliProgram
 
         var currentBlock = _current.GetBlock(0, 5);
         uint currentRides = TokenBlockUtils.Decode(currentBlock);
-        uint newRides = (uint)(currentRides + (int)count);
+        var signedRides = (currentRides + (int)count);
+        if (signedRides < 0 || signedRides > 500)
+        {
+            throw new InvalidOperationException($"ride total must be [{0}, {500}], but was {signedRides}");
+        }
+        uint newRides = (uint)signedRides;
 
         var encoded = TokenBlockUtils.Encode(newRides);
         _current.SetBlock(0, 5, encoded);
