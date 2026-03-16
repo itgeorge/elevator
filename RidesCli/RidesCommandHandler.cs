@@ -69,7 +69,7 @@ public sealed class RidesCommandHandler
                 return true;
             }
             _config.PricePer100 = price;
-            _output.WriteLine($"pricePer100 = {price:F2}");
+            _output.WriteLine($"pricePer100 = {FormatInvariant2(price)}");
         }
         else
         {
@@ -89,6 +89,9 @@ public sealed class RidesCommandHandler
         result = v;
         return true;
     }
+
+    private static string FormatInvariant2(decimal value) =>
+        value.ToString("F2", CultureInfo.InvariantCulture);
 
     private bool ExecuteRead(string[] args)
     {
@@ -160,7 +163,7 @@ public sealed class RidesCommandHandler
             if (_config.PricePer100.HasValue && rideDiff > 0)
             {
                 var price = Math.Ceiling((rideDiff / 100m) * _config.PricePer100.Value * 100) / 100;
-                _output.WriteLine($"will cost: {price:F2} EUR");
+                _output.WriteLine($"will cost: {FormatInvariant2(price)} EUR");
             }
             return true;
         }
@@ -198,7 +201,7 @@ public sealed class RidesCommandHandler
         if (_config.PricePer100.HasValue && rideDiff2 > 0)
         {
             var price = Math.Ceiling((rideDiff2 / 100m) * _config.PricePer100.Value * 100) / 100;
-            _output.WriteLine($"cost: {price:F2} EUR");
+            _output.WriteLine($"cost: {FormatInvariant2(price)} EUR");
         }
         return true;
     }
