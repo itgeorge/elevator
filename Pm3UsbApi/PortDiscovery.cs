@@ -119,24 +119,19 @@ public static class PortDiscovery
 
         if (!string.IsNullOrWhiteSpace(pm3ClientPath))
         {
-            var clientDir = Path.GetDirectoryName(Path.GetFullPath(pm3ClientPath.Trim()));
-            if (!string.IsNullOrEmpty(clientDir))
+            var trimmed = pm3ClientPath.Trim();
+            scriptPath = ResolvePm3ScriptFromClientPath(trimmed);
+
+            if (scriptPath is null)
             {
-                var parentDir = Path.GetDirectoryName(clientDir);
-                if (!string.IsNullOrEmpty(parentDir))
-                {
-                    var candidate = Path.Combine(parentDir, "pm3");
-                    if (File.Exists(candidate))
-                        scriptPath = Path.GetFullPath(candidate);
-                }
-                if (scriptPath is null)
-                {
-                    var candidate = Path.Combine(clientDir, "pm3");
-                    if (File.Exists(candidate))
-                        scriptPath = Path.GetFullPath(candidate);
-                }
+                var resolvedClientPath = FindInPath(trimmed);
+                if (resolvedClientPath is not null)
+                    scriptPath = ResolvePm3ScriptFromClientPath(resolvedClientPath);
             }
         }
+
+        if (scriptPath is null)
+            scriptPath = FindInPath("pm3");
 
         if (scriptPath is null)
         {
@@ -152,6 +147,33 @@ public static class PortDiscovery
         }
 
         return (scriptPath, scriptPath is not null ? "/bin/bash" : null);
+    }
+
+    private static string? ResolvePm3ScriptFromClientPath(string clientPath)
+    {
+        if (string.IsNullOrWhiteSpace(clientPath))
+            return null;
+
+        if (File.Exists(clientPath) && Path.GetFileName(clientPath).Equals("pm3", StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(clientPath);
+
+        var clientDir = Path.GetDirectoryName(Path.GetFullPath(clientPath.Trim()));
+        if (string.IsNullOrEmpty(clientDir))
+            return null;
+
+        var parentDir = Path.GetDirectoryName(clientDir);
+        if (!string.IsNullOrEmpty(parentDir))
+        {
+            var candidate = Path.Combine(parentDir, "pm3");
+            if (File.Exists(candidate))
+                return Path.GetFullPath(candidate);
+        }
+
+        var siblingCandidate = Path.Combine(clientDir, "pm3");
+        if (File.Exists(siblingCandidate))
+            return Path.GetFullPath(siblingCandidate);
+
+        return null;
     }
 
     private static IEnumerable<string> GetCommonPm3Locations()
