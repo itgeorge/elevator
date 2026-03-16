@@ -7,4 +7,7 @@ public class RidesConfig
 {
     /// <summary>Price per 100 rides in euros (e.g. 4.00, 24.50). Null if not configured.</summary>
     public decimal? PricePer100 { get; set; }
+
+    /// <summary>Directory where unknown-family token dumps are written.</summary>
+    public string DumpDirectory { get; set; } = Directory.GetCurrentDirectory();
 }

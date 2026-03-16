@@ -30,7 +30,17 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
     public static FakeRidesPm3Api WithInvalidBlock5()
     {
         var blocks = CreatePage0Blocks(0);
-        var block = new T55Block(0x00000000); // invalid for TokenBlockUtils.Decode
+        var block = new T55Block(0xCCC70000); // known family header, invalid payload for TokenBlockUtils.Decode
+        var image = new T55xxImage(blocks);
+        image.SetBlock(0, 5, block);
+        image.SetBlock(0, 6, block);
+        return new FakeRidesPm3Api(image);
+    }
+
+    public static FakeRidesPm3Api WithUnknownFamilyBlock5()
+    {
+        var blocks = CreatePage0Blocks(0);
+        var block = new T55Block(0xDEAD1234); // unknown high16, but still dumpable
         var image = new T55xxImage(blocks);
         image.SetBlock(0, 5, block);
         image.SetBlock(0, 6, block);

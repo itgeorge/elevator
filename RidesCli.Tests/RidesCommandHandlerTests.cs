@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using NUnit.Framework;
 using RidesCli;
 
@@ -71,6 +72,150 @@ public class RidesCommandHandlerTests
         // Subsequent set should fail with "no rides in memory"
         handler.Execute(["set", "50"]);
         Assert.That(output.Lines, Has.Some.Contains("no rides in memory"));
+    }
+
+    [Test]
+    public void Read_with_unknown_encoding_family_saves_dump_with_unknown_suffix_and_unloads()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput(string.Empty);
+            var handler = new RidesCommandHandler(pm3, output, config, input);
+
+            handler.Execute(["read"]);
+
+            var files = Directory.GetFiles(tempDir, "*.bin");
+            Assert.That(files, Has.Length.EqualTo(1));
+            Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-UNKNOWN.bin"));
+            Assert.That(new FileInfo(files[0]).Length, Is.EqualTo(32));
+            Assert.That(output.Lines, Has.Some.Contains("Unknown encoding family"));
+            Assert.That(output.Lines, Has.Some.Contains("Saved token dump to"));
+
+            handler.Execute(["set", "50"]);
+            Assert.That(output.Lines, Has.Some.Contains("no rides in memory"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Read_with_unknown_encoding_family_saves_dump_with_known_ride_suffix()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput("137");
+            var handler = new RidesCommandHandler(pm3, output, config, input);
+
+            handler.Execute(["read"]);
+
+            var files = Directory.GetFiles(tempDir, "*.bin");
+            Assert.That(files, Has.Length.EqualTo(1));
+            Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-137.bin"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Read_with_unknown_encoding_family_reprompts_until_valid_ride_count()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput("oops", "137");
+            var handler = new RidesCommandHandler(pm3, output, config, input);
+
+            handler.Execute(["read"]);
+
+            var files = Directory.GetFiles(tempDir, "*.bin");
+            Assert.That(files, Has.Length.EqualTo(1));
+            Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-137.bin"));
+            Assert.That(output.Lines, Has.Some.Contains("invalid ride count"));
+            Assert.That(output.Lines.Count(line => line.Contains("Enter known ride count")), Is.EqualTo(2));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Read_with_unknown_encoding_family_dump_contains_current_page0_blocks()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput(string.Empty);
+            var handler = new RidesCommandHandler(pm3, output, config, input);
+
+            handler.Execute(["read"]);
+
+            var files = Directory.GetFiles(tempDir, "*.bin");
+            Assert.That(files, Has.Length.EqualTo(1));
+
+            var bytes = File.ReadAllBytes(files[0]);
+            Assert.That(bytes.Length, Is.EqualTo(32));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(0, 4)), Is.EqualTo(0u));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4)), Is.EqualTo(0xDEAD1234u));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(24, 4)), Is.EqualTo(0xDEAD1234u));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(28, 4)), Is.EqualTo(0u));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Read_with_d_flag_and_unknown_encoding_family_shows_dump_before_prompting()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+            pm3.DumpResult = "raw dump output";
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput(string.Empty);
+            var handler = new RidesCommandHandler(pm3, output, config, input);
+
+            handler.Execute(["read", "-d"]);
+
+            Assert.That(output.Lines, Has.Some.EqualTo("raw dump output"));
+            Assert.That(output.Lines, Has.Some.Contains("Unknown encoding family"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
     }
 
     [Test]

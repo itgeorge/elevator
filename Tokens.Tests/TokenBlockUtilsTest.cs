@@ -567,6 +567,15 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void TryGetFamilyFromBlock_ReturnsFalse_ForUnknownHigh16()
+    {
+        var ok = TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0xDEAD1234), out var family);
+
+        Assert.That(ok, Is.False);
+        Assert.That(family, Is.Null);
+    }
+
+    [Test]
     public void EncodeDecode_RoundTrip_AllValues()
     {
         for (uint value = 0; value <= 500; value++)

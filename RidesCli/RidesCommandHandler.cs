@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Globalization;
+using System.Text;
 using Tokens;
 
 namespace RidesCli;
@@ -11,15 +13,17 @@ public sealed class RidesCommandHandler
     private readonly IRidesPm3Api _pm3;
     private readonly IRidesOutput _output;
     private readonly RidesConfig _config;
+    private readonly IRidesInput _input;
 
     private uint? _rides;
     private string? _lastDumpRaw;
 
-    public RidesCommandHandler(IRidesPm3Api pm3, IRidesOutput output, RidesConfig config)
+    public RidesCommandHandler(IRidesPm3Api pm3, IRidesOutput output, RidesConfig config, IRidesInput? input = null)
     {
         _pm3 = pm3 ?? throw new ArgumentNullException(nameof(pm3));
         _output = output ?? throw new ArgumentNullException(nameof(output));
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        _input = input ?? new ConsoleRidesInput();
     }
 
     /// <summary>Execute a command. Returns false to signal exit.</summary>
@@ -113,6 +117,13 @@ public sealed class RidesCommandHandler
 
             var block5Hex = await _pm3.ReadPage0BlockAsync(5);
             var block5 = T55Block.FromHex(block5Hex);
+            if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _))
+            {
+                _rides = null;
+                await HandleUnknownEncodingFamilyAsync(block5);
+                return true;
+            }
+
             var rides = TokenBlockUtils.Decode(block5);
             _rides = rides;
             _output.WriteLine($"rides remaining: {rides}");
@@ -125,6 +136,90 @@ public sealed class RidesCommandHandler
             _output.WriteLine($"Error: {ex.Message}");
             return true;
         }
+    }
+
+    private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
+    {
+        _output.WriteLine($"Unknown encoding family detected in page 0 block 5: {block5.ToHex()}");
+        var ridesLabel = PromptForKnownRideCountLabel();
+        var dumpPath = await SaveCurrentTokenDumpAsync(ridesLabel);
+        _output.WriteLine($"Saved token dump to '{Path.GetFullPath(dumpPath)}'.");
+        _output.WriteLine("Error: could not decode rides because the token uses an unknown encoding family.");
+    }
+
+    private string PromptForKnownRideCountLabel()
+    {
+        while (true)
+        {
+            _output.WriteLine("Enter known ride count for dump filename suffix, or press Enter to use UNKNOWN:");
+            var input = _input.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(input))
+                return "UNKNOWN";
+
+            if (uint.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rides))
+                return rides.ToString(CultureInfo.InvariantCulture);
+
+            _output.WriteLine("Error: invalid ride count. Enter a non-negative integer, or press Enter to use UNKNOWN.");
+        }
+    }
+
+    private async Task<string> SaveCurrentTokenDumpAsync(string ridesLabel)
+    {
+        var blocks = await ReadPage0BlocksAsync();
+        if (string.IsNullOrWhiteSpace(_config.DumpDirectory))
+            throw new InvalidOperationException("Dump directory is not configured.");
+
+        Directory.CreateDirectory(_config.DumpDirectory);
+
+        var baseFileName = BuildDumpFileName(blocks);
+        var fileName = AddSuffixBeforeExtension(baseFileName, $"--rides-{ridesLabel}");
+        var path = Path.Combine(_config.DumpDirectory, fileName);
+        WriteBinDump(path, blocks);
+        return path;
+    }
+
+    private async Task<IReadOnlyList<T55Block>> ReadPage0BlocksAsync()
+    {
+        var blocks = new List<T55Block>(8);
+        for (uint block = 0; block < 8; block++)
+        {
+            var hex = await _pm3.ReadPage0BlockAsync(block);
+            blocks.Add(T55Block.FromHex(hex));
+        }
+        return blocks;
+    }
+
+    private static string BuildDumpFileName(IReadOnlyList<T55Block> blocks)
+    {
+        var sb = new StringBuilder();
+        sb.Append("elevator-t55xx-");
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            if (i > 0)
+                sb.Append('-');
+            sb.Append(blocks[i].ToHex());
+        }
+        sb.Append(".bin");
+        return sb.ToString();
+    }
+
+    private static string AddSuffixBeforeExtension(string fileName, string suffix)
+    {
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(ext))
+            return fileName + suffix;
+
+        return fileName[..^ext.Length] + suffix + ext;
+    }
+
+    private static void WriteBinDump(string path, IReadOnlyList<T55Block> blocks)
+    {
+        var bytes = new byte[checked(blocks.Count * 4)];
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(i * 4, 4), blocks[i].Value);
+        }
+        File.WriteAllBytes(path, bytes);
     }
 
     private bool ExecuteSet(string[] args)

@@ -16,30 +16,46 @@ public static class TokenBlockUtils
             return block >> 16;
         }
 
-        public static Family GetFamilyFromBlock(T55Block block)
+        public static bool TryGetFamilyFromBlock(T55Block block, out Family? family)
         {
             uint high16 = GetHigh16FromBlock(block.Value);
             if (high16 == Family0To127.High16)
             {
-                return Family0To127;
+                family = Family0To127;
+                return true;
             }
 
             if (high16 == Family128To255.High16)
             {
-                return Family128To255;
+                family = Family128To255;
+                return true;
             }
 
             if (high16 == Family256To383.High16)
             {
-                return Family256To383;
+                family = Family256To383;
+                return true;
             }
 
             if (high16 == Family384To500.High16)
             {
-                return Family384To500;
+                family = Family384To500;
+                return true;
             }
 
-            throw new ArgumentException($"Block {block.Value:X8} is out of range (unknown high 16 {high16})");
+            family = null;
+            return false;
+        }
+
+        public static Family GetFamilyFromBlock(T55Block block)
+        {
+            if (TryGetFamilyFromBlock(block, out var family) && family is not null)
+            {
+                return family;
+            }
+
+            uint high16 = GetHigh16FromBlock(block.Value);
+            throw new ArgumentException($"Block {block.Value:X8} uses an unknown encoding family (high 16 {high16:X4})");
         }
 
         public static Family GetFamilyFromRides(uint ridesRemaining)

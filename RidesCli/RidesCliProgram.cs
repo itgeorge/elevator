@@ -11,7 +11,8 @@ class RidesCliProgram
         var pm3 = new Pm3(options);
         var pm3Api = new Pm3RidesApiAdapter(pm3);
         var output = new ConsoleRidesOutput();
-        var handler = new RidesCommandHandler(pm3Api, output, config);
+        var input = new ConsoleRidesInput();
+        var handler = new RidesCommandHandler(pm3Api, output, config, input);
 
         Console.WriteLine("RidesCli - Elevator token ride management");
         Console.WriteLine("Type 'help' for commands. 'read' to load token from device.");
