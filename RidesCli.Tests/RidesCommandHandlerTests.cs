@@ -158,6 +158,39 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Read_with_unknown_encoding_family_preserves_dump_when_token_changes_during_prompt()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput("137")
+            {
+                BeforeReadLine = () => pm3.SimulateNewToken(42)
+            };
+            var handler = new RidesCommandHandler(pm3, output, config, input);
+
+            handler.Execute(["read"]);
+
+            var files = Directory.GetFiles(tempDir, "*.bin");
+            Assert.That(files, Has.Length.EqualTo(1));
+            Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-137.bin"));
+
+            var bytes = File.ReadAllBytes(files[0]);
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4)), Is.EqualTo(0xDEAD1234u));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(24, 4)), Is.EqualTo(0xDEAD1234u));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
     public void Read_with_unknown_encoding_family_reprompts_until_valid_ride_count()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

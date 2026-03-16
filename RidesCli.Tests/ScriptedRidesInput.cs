@@ -11,5 +11,11 @@ public sealed class ScriptedRidesInput : IRidesInput
         _responses = new Queue<string?>(responses);
     }
 
-    public string? ReadLine() => _responses.Count > 0 ? _responses.Dequeue() : string.Empty;
+    public Action? BeforeReadLine { get; set; }
+
+    public string? ReadLine()
+    {
+        BeforeReadLine?.Invoke();
+        return _responses.Count > 0 ? _responses.Dequeue() : string.Empty;
+    }
 }

@@ -160,8 +160,13 @@ public sealed class RidesCommandHandler
     private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
     {
         _output.WriteLine($"Unknown encoding family detected in page 0 block 5: {block5.ToHex()}");
+
+        var blocks = await ReadPage0BlocksAsync();
+        var dumpPath = SaveTokenDump(blocks, "UNKNOWN");
+
         var ridesLabel = PromptForKnownRideCountLabel();
-        var dumpPath = await SaveCurrentTokenDumpAsync(ridesLabel);
+        dumpPath = UpdateSavedTokenDumpPath(dumpPath, blocks, ridesLabel);
+
         _output.WriteLine($"Saved token dump to '{Path.GetFullPath(dumpPath)}'.");
         _output.WriteLine("Error: could not decode rides because the token uses an unknown encoding family.");
     }
@@ -182,9 +187,25 @@ public sealed class RidesCommandHandler
         }
     }
 
-    private async Task<string> SaveCurrentTokenDumpAsync(string ridesLabel)
+    private string SaveTokenDump(IReadOnlyList<T55Block> blocks, string ridesLabel)
     {
-        var blocks = await ReadPage0BlocksAsync();
+        var path = BuildDumpPath(blocks, ridesLabel);
+        WriteBinDump(path, blocks);
+        return path;
+    }
+
+    private string UpdateSavedTokenDumpPath(string currentPath, IReadOnlyList<T55Block> blocks, string ridesLabel)
+    {
+        var desiredPath = BuildDumpPath(blocks, ridesLabel);
+        if (Path.GetFullPath(currentPath) == Path.GetFullPath(desiredPath))
+            return currentPath;
+
+        File.Move(currentPath, desiredPath, overwrite: true);
+        return desiredPath;
+    }
+
+    private string BuildDumpPath(IReadOnlyList<T55Block> blocks, string ridesLabel)
+    {
         if (string.IsNullOrWhiteSpace(_config.DumpDirectory))
             throw new InvalidOperationException("Dump directory is not configured.");
 
@@ -192,9 +213,7 @@ public sealed class RidesCommandHandler
 
         var baseFileName = BuildDumpFileName(blocks);
         var fileName = AddSuffixBeforeExtension(baseFileName, $"--rides-{ridesLabel}");
-        var path = Path.Combine(_config.DumpDirectory, fileName);
-        WriteBinDump(path, blocks);
-        return path;
+        return Path.Combine(_config.DumpDirectory, fileName);
     }
 
     private async Task<IReadOnlyList<T55Block>> ReadPage0BlocksAsync()
