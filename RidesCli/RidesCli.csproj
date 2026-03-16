@@ -12,4 +12,8 @@
     <ProjectReference Include="..\Tokens\Tokens.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\TokenDumpsCli\Data\default-500-rides.bin" Link="Data\default-500-rides.bin" />
+  </ItemGroup>
+
 </Project>

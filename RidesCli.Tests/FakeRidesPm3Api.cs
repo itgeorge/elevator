@@ -11,6 +11,7 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     public string DumpResult { get; set; } = "raw dump output";
     public uint SignalStrengthMv { get; set; } = 420;
+    public bool TokenPresent { get; set; } = true;
 
     private FakeRidesPm3Api(T55xxImage image)
     {
@@ -63,14 +64,23 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         return TokenBlockUtils.Decode(block5);
     }
 
+    public string GetBlockHex(int block) => _image.GetBlock(0, block).ToHex();
+
+    public void RemoveToken() => TokenPresent = false;
+
+    public Task<bool> TryDetectTokenAsync(CancellationToken ct = default) =>
+        Task.FromResult(TokenPresent);
+
     public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)
     {
+        EnsureTokenPresent();
         var b = _image.GetBlock(0, (int)block);
         return Task.FromResult(b.ToHex());
     }
 
     public Task WritePage0BlockAsync(uint block, T55Block data, CancellationToken ct = default)
     {
+        EnsureTokenPresent();
         _image.SetBlock(0, (int)block, data);
         return Task.CompletedTask;
     }
@@ -79,11 +89,21 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
     public void SimulateNewToken(uint rides)
     {
         _image = new T55xxImage(CreatePage0Blocks(rides));
+        TokenPresent = true;
     }
 
-    public Task<string> DumpAsync(CancellationToken ct = default) =>
-        Task.FromResult(DumpResult);
+    public Task<string> DumpAsync(CancellationToken ct = default)
+    {
+        EnsureTokenPresent();
+        return Task.FromResult(DumpResult);
+    }
 
     public Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default) =>
         Task.FromResult(SignalStrengthMv);
+
+    private void EnsureTokenPresent()
+    {
+        if (!TokenPresent)
+            throw new InvalidOperationException("No T55xx chip detected. Place a tag on the reader.");
+    }
 }

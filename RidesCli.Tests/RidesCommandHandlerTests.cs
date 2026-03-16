@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using NUnit.Framework;
 using RidesCli;
+using Tokens;
 
 namespace RidesCli.Tests;
 
@@ -68,6 +69,77 @@ public class RidesCommandHandlerTests
         handler.Execute(["tune", "extra"]);
 
         Assert.That(output.Lines, Has.Some.EqualTo("Usage: tune"));
+    }
+
+    [Test]
+    public void Reset_without_read_prompts_and_writes_default_image_with_zero_rides()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        pm3.SignalStrengthMv = 420;
+        var input = new ScriptedRidesInput("y");
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), input);
+
+        handler.Execute(["reset"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("signal strength: 420 mV"));
+        Assert.That(output.Lines, Has.Some.EqualTo("current token rides: 73"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 0"));
+
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("9BFE0062"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA4A3DE"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
+    }
+
+    [Test]
+    public void Reset_when_no_token_detected_prints_error_and_signal_strength()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = new FakeRidesPm3Api { SignalStrengthMv = 420 };
+        pm3.RemoveToken();
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("signal strength: 420 mV"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Error: no token detected. Place a token on the reader and try again."));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+    }
+
+    [Test]
+    public void Reset_with_unknown_family_prompts_and_overwrites_token()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("unknown encoding family"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
+    }
+
+    [Test]
+    public void Reset_cancelled_does_not_modify_token()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("n"));
+
+        handler.Execute(["reset"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Cancelled."));
+        Assert.That(pm3.GetRides(), Is.EqualTo(73u));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("00000000"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("00000000"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("00000000"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("00000000"));
     }
 
     [Test]

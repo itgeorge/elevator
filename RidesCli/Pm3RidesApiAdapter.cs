@@ -15,6 +15,19 @@ public sealed class Pm3RidesApiAdapter : IRidesPm3Api
         _pm3 = pm3 ?? throw new ArgumentNullException(nameof(pm3));
     }
 
+    public async Task<bool> TryDetectTokenAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await _pm3.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (Pm3CommandException)
+        {
+            return false;
+        }
+    }
+
     public async Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default) =>
         await _pm3.ReadPage0BlockAsync(block, ct).ConfigureAwait(false);
 

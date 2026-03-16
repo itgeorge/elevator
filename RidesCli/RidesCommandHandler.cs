@@ -39,6 +39,7 @@ public sealed class RidesCommandHandler
                 "config" => ExecuteConfig(args[1..]),
                 "tune" => ExecuteTune(args[1..]),
                 "read" => ExecuteRead(args[1..]),
+                "reset" => ExecuteReset(args[1..]),
                 "set" => ExecuteSet(args[1..]),
                 "add" => ExecuteAdd(args[1..]),
                 "price" => ExecutePrice(args[1..]),
@@ -115,6 +116,17 @@ public sealed class RidesCommandHandler
         return ExecuteReadCore(showDump).GetAwaiter().GetResult();
     }
 
+    private bool ExecuteReset(string[] args)
+    {
+        if (args.Length > 0)
+        {
+            _output.WriteLine("Usage: reset");
+            return true;
+        }
+
+        return ExecuteResetCore().GetAwaiter().GetResult();
+    }
+
     private async Task<bool> ExecuteTuneCore()
     {
         var mv = await _pm3.GetSignalStrengthMvAsync();
@@ -155,6 +167,139 @@ public sealed class RidesCommandHandler
             _output.WriteLine($"Error: {ex.Message}");
             return true;
         }
+    }
+
+    private async Task<bool> ExecuteResetCore()
+    {
+        _rides = null;
+
+        var mv = await _pm3.GetSignalStrengthMvAsync();
+        _output.WriteLine($"signal strength: {mv} mV");
+
+        if (!await _pm3.TryDetectTokenAsync().ConfigureAwait(false))
+        {
+            _output.WriteLine("Error: no token detected. Place a token on the reader and try again.");
+            return true;
+        }
+
+        await DescribeCurrentTokenForResetAsync().ConfigureAwait(false);
+
+        if (!PromptForYesNo("Overwrite token with reset image and set rides to 0? [y/N]"))
+        {
+            _output.WriteLine("Cancelled.");
+            return true;
+        }
+
+        var resetBlocks = LoadDefaultResetPage0Blocks();
+        var zeroBlock = TokenBlockUtils.Encode(0);
+        resetBlocks[5] = zeroBlock;
+        resetBlocks[6] = zeroBlock;
+
+        var success = await WriteAndVerifyPage0BlocksAsync(resetBlocks, 1, 6).ConfigureAwait(false);
+
+        var finalDump = await _pm3.DumpAsync().ConfigureAwait(false);
+        _lastDumpRaw = finalDump;
+        _output.WriteLine(finalDump);
+
+        _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
+        if (success)
+        {
+            _rides = 0;
+            _output.WriteLine("rides remaining: 0");
+        }
+
+        return true;
+    }
+
+    private async Task DescribeCurrentTokenForResetAsync()
+    {
+        try
+        {
+            var block5Hex = await _pm3.ReadPage0BlockAsync(5).ConfigureAwait(false);
+            var block5 = T55Block.FromHex(block5Hex);
+            if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _))
+            {
+                _output.WriteLine($"Current token cannot be decoded: unknown encoding family in block 5 ({block5.ToHex()}).");
+                return;
+            }
+
+            var rides = TokenBlockUtils.Decode(block5);
+            _output.WriteLine($"current token rides: {rides}");
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Current token could not be read: {ex.Message}");
+        }
+    }
+
+    private bool PromptForYesNo(string prompt)
+    {
+        while (true)
+        {
+            _output.WriteLine(prompt);
+            var input = _input.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(input) || input.Equals("n", StringComparison.OrdinalIgnoreCase) || input.Equals("no", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (input.Equals("y", StringComparison.OrdinalIgnoreCase) || input.Equals("yes", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            _output.WriteLine("Please answer 'y' or 'n'.");
+        }
+    }
+
+    private static List<T55Block> LoadDefaultResetPage0Blocks()
+    {
+        var assembly = typeof(RidesCommandHandler).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .FirstOrDefault(name => name.EndsWith("default-500-rides.bin", StringComparison.OrdinalIgnoreCase));
+        if (resourceName is null)
+            throw new InvalidOperationException("Embedded resource 'default-500-rides.bin' not found.");
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+            throw new InvalidOperationException("Failed to load embedded resource stream.");
+
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var bytes = ms.ToArray();
+        if (bytes.Length < 32 || bytes.Length % 4 != 0)
+            throw new InvalidDataException("default-500-rides.bin must contain at least 8 blocks and be a multiple of 4 bytes.");
+
+        var blocks = new List<T55Block>(8);
+        for (var i = 0; i < 8 * 4; i += 4)
+        {
+            var word = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(i, 4));
+            blocks.Add(new T55Block(word));
+        }
+
+        return blocks;
+    }
+
+    private async Task<bool> WriteAndVerifyPage0BlocksAsync(IReadOnlyList<T55Block> blocks, int firstBlock, int lastBlock)
+    {
+        var confirmed = new bool[lastBlock - firstBlock + 1];
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                if (!confirmed[index])
+                    await _pm3.WritePage0BlockAsync((uint)block, blocks[block]).ConfigureAwait(false);
+            }
+
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                var readBack = await _pm3.ReadPage0BlockAsync((uint)block).ConfigureAwait(false);
+                confirmed[index] = readBack == blocks[block].ToHex();
+            }
+
+            if (confirmed.All(x => x))
+                return true;
+        }
+
+        return false;
     }
 
     private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
@@ -415,6 +560,7 @@ public sealed class RidesCommandHandler
         _output.WriteLine("Commands:");
         _output.WriteLine("  tune          Run signal check and show antenna strength");
         _output.WriteLine("  read [-d]     Detect and read token, show signal and rides (use -d for dump)");
+        _output.WriteLine("  reset         Reset token using default image and set rides to 0");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token");
         _output.WriteLine("  price set <number>   Preview cost for set");

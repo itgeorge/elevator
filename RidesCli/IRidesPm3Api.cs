@@ -7,6 +7,9 @@ namespace RidesCli;
 /// </summary>
 public interface IRidesPm3Api
 {
+    /// <summary>Detect whether a T55xx token is present.</summary>
+    Task<bool> TryDetectTokenAsync(CancellationToken ct = default);
+
     /// <summary>Read a block from page 0.</summary>
     Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default);
 
