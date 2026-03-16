@@ -37,6 +37,7 @@ public sealed class RidesCommandHandler
             return cmd switch
             {
                 "config" => ExecuteConfig(args[1..]),
+                "tune" => ExecuteTune(args[1..]),
                 "read" => ExecuteRead(args[1..]),
                 "set" => ExecuteSet(args[1..]),
                 "add" => ExecuteAdd(args[1..]),
@@ -97,10 +98,28 @@ public sealed class RidesCommandHandler
     private static string FormatInvariant2(decimal value) =>
         value.ToString("F2", CultureInfo.InvariantCulture);
 
+    private bool ExecuteTune(string[] args)
+    {
+        if (args.Length > 0)
+        {
+            _output.WriteLine("Usage: tune");
+            return true;
+        }
+
+        return ExecuteTuneCore().GetAwaiter().GetResult();
+    }
+
     private bool ExecuteRead(string[] args)
     {
         var showDump = args.Length > 0 && args[0] == "-d";
         return ExecuteReadCore(showDump).GetAwaiter().GetResult();
+    }
+
+    private async Task<bool> ExecuteTuneCore()
+    {
+        var mv = await _pm3.GetSignalStrengthMvAsync();
+        _output.WriteLine($"signal strength: {mv} mV");
+        return true;
     }
 
     private async Task<bool> ExecuteReadCore(bool showDump)
@@ -375,6 +394,7 @@ public sealed class RidesCommandHandler
     private bool ExecuteHelp()
     {
         _output.WriteLine("Commands:");
+        _output.WriteLine("  tune          Run signal check and show antenna strength");
         _output.WriteLine("  read [-d]     Detect and read token, show signal and rides (use -d for dump)");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token");

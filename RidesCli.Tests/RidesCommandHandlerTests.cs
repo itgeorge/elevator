@@ -46,6 +46,31 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Tune_shows_signal_strength_only()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        pm3.SignalStrengthMv = 420;
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+
+        handler.Execute(["tune"]);
+
+        Assert.That(output.Lines, Has.Some.Matches(@"signal strength: 420 mV"));
+        Assert.That(output.Lines, Has.None.Matches(@"rides remaining:"));
+    }
+
+    [Test]
+    public void Tune_with_args_prints_usage()
+    {
+        var output = new StringBuilderRidesOutput();
+        var handler = new RidesCommandHandler(new FakeRidesPm3Api(), output, new RidesConfig());
+
+        handler.Execute(["tune", "extra"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Usage: tune"));
+    }
+
+    [Test]
     public void Read_shows_signal_strength_and_rides()
     {
         var output = new StringBuilderRidesOutput();
