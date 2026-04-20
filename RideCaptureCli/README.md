@@ -2,13 +2,31 @@
 
 Low-interaction CLI for collecting T55xx token state transitions while investigating unknown ride-encoding sequences.
 
-## Current behavior
+## Interactive behavior
 
 - Press **Enter** to scan the current token.
 - Type **`zero`** to scan and mark the current sequence state as real zero rides.
 - Type **`exact <n>`** to scan and mark the current sequence state as exact real ride count `n`.
+- Type **`exact <n> <sequenceId>`** to update the latest row in an existing sequence without scanning a token.
 - Type **`help`** for commands.
 - Type **`exit`** to quit.
+
+## Non-interactive behavior
+
+You can also run a single command directly from the command line.
+
+Examples:
+
+```bash
+dotnet run --project RideCaptureCli -- exact 238 EBFE002A-20260420-183831-s01
+dotnet run --project RideCaptureCli -- exact 116 43FE0062-20260420-183756-s01
+```
+
+If you omit the sequence id, the command requires a live scan:
+
+```bash
+dotnet run --project RideCaptureCli -- exact 137
+```
 
 Each successful scan:
 

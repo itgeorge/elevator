@@ -165,6 +165,22 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
+    public void Sequence_only_exact_updates_latest_entry_and_backfills_sequence()
+    {
+        var service = new CaptureSequenceService();
+        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"));
+        var second = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)));
+
+        var updated = service.ApplyExactToLatestSequenceRecord(second.Records, first.AddedRecord.SequenceId, 238);
+        var rows = updated.Records.Where(r => r.SequenceId == first.AddedRecord.SequenceId).ToList();
+
+        Assert.That(updated.SequenceOnlyUpdate, Is.True);
+        Assert.That(updated.ManualAnchorRideCount, Is.EqualTo(238));
+        Assert.That(rows[0].RealRideCount, Is.EqualTo(239));
+        Assert.That(rows[1].RealRideCount, Is.EqualTo(238));
+    }
+
+    [Test]
     public void Token_stops_being_marked_unknown_once_real_count_is_known()
     {
         var service = new CaptureSequenceService();

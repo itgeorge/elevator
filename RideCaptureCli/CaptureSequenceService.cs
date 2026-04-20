@@ -66,16 +66,35 @@ public sealed class CaptureSequenceService
         }
 
         if (exactRideCount.HasValue)
-        {
             NormalizeSequence(records, added.SequenceId, added.TrackedCount, exactRideCount.Value, zeroAnchor: exactRideCount.Value == 0);
-        }
 
         return new CaptureApplyResult
         {
             Records = records,
             AddedRecord = records[^1],
             AutoNormalized = autoNormalized,
-            ManualAnchorRideCount = exactRideCount
+            ManualAnchorRideCount = exactRideCount,
+            SequenceOnlyUpdate = false
+        };
+    }
+
+    public CaptureApplyResult ApplyExactToLatestSequenceRecord(IReadOnlyList<CaptureRecord> history, string sequenceId, int exactRideCount)
+    {
+        var records = history.Select(Clone).ToList();
+        var latest = records.LastOrDefault(r => string.Equals(r.SequenceId, sequenceId, StringComparison.OrdinalIgnoreCase));
+        if (latest is null)
+            throw new InvalidOperationException($"Sequence '{sequenceId}' was not found in the CSV.");
+
+        NormalizeSequence(records, latest.SequenceId, latest.TrackedCount, exactRideCount, zeroAnchor: exactRideCount == 0);
+
+        var updatedLatest = records.Last(r => string.Equals(r.SequenceId, sequenceId, StringComparison.OrdinalIgnoreCase));
+        return new CaptureApplyResult
+        {
+            Records = records,
+            AddedRecord = updatedLatest,
+            AutoNormalized = false,
+            ManualAnchorRideCount = exactRideCount,
+            SequenceOnlyUpdate = true
         };
     }
 
@@ -146,10 +165,10 @@ public sealed class CaptureSequenceService
     private static void NormalizeSequence(List<CaptureRecord> records, string sequenceId, int anchorTrackedCount, int anchorRealRideCount, bool zeroAnchor)
     {
         var offset = anchorTrackedCount - anchorRealRideCount;
-        foreach (var row in records.Where(r => r.SequenceId == sequenceId))
+        foreach (var row in records.Where(r => string.Equals(r.SequenceId, sequenceId, StringComparison.OrdinalIgnoreCase)))
         {
             row.RealRideCount = row.TrackedCount - offset;
-            if (row == records[^1])
+            if (row == records.Last(r => string.Equals(r.SequenceId, sequenceId, StringComparison.OrdinalIgnoreCase)))
                 row.ZeroAnchor = zeroAnchor;
         }
     }

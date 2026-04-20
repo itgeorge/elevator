@@ -2,7 +2,7 @@ namespace RideCaptureCli;
 
 public static class ConsoleStatusWriter
 {
-    public static void WriteCaptureResult(CaptureRecord record, bool autoNormalized, int? manualAnchorRideCount = null)
+    public static void WriteCaptureResult(CaptureRecord record, bool autoNormalized, int? manualAnchorRideCount = null, bool sequenceOnlyUpdate = false)
     {
         if (record.WeakSignal)
             WriteBanner("----- WEAK SIGNAL -----", ConsoleColor.Yellow);
@@ -13,7 +13,9 @@ public static class ConsoleStatusWriter
         if (record.Warnings.Contains("MIRROR_MISMATCH", StringComparison.Ordinal))
             WriteBanner("!!!!!! MIRROR MISMATCH !!!!!!", ConsoleColor.Red);
 
-        if (record.Status == CaptureStatus.NoChange)
+        if (sequenceOnlyUpdate)
+            WriteBanner("######## EXACT UPDATE ########", ConsoleColor.Blue);
+        else if (record.Status == CaptureStatus.NoChange)
             WriteBanner("===== NO CHANGE =====", ConsoleColor.Cyan);
         else
             WriteBanner("******** OK ********", ConsoleColor.Green);

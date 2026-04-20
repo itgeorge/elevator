@@ -6,4 +6,5 @@ public sealed class CaptureApplyResult
     public required CaptureRecord AddedRecord { get; init; }
     public bool AutoNormalized { get; init; }
     public int? ManualAnchorRideCount { get; init; }
+    public bool SequenceOnlyUpdate { get; init; }
 }
