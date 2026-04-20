@@ -134,6 +134,56 @@ public static class TestFixtures
         [usb|script] pm3 -->
         """;
 
+    // --- lf t55 dump (real multi-page output captured from current token) ---
+    public const string DumpRealMultiPage = """
+        [=] Session log /Users/itgeorge/.proxmark3/logs/log_20260420220514.txt
+        [+] loaded `/Users/itgeorge/.proxmark3/preferences.json`
+        [+] execute command from commandline: lf t55 detect; lf t55 dump
+
+        [+] Using UART port /dev/tty.usbmodem11401
+        [+] Communicating with PM3 over USB-CDC
+        [usb|script] pm3 --> lf t55 detect
+        [=]  Chip type......... T55x7
+        [=]  Modulation........ ASK
+        [=]  Bit rate.......... 5 - RF/64
+        [=]  Inverted.......... No
+        [=]  Offset............ 32
+        [=]  Seq. terminator... Yes
+        [=]  Block0............ 00148040 (auto detect)
+        [=]  Downlink mode..... default/fixed bit length
+        [=]  Password set...... No
+
+        [usb|script] pm3 --> lf t55 dump
+
+        [=] ------------------------- T55xx tag memory -----------------------------
+
+        [+] Page 0
+        [+] blk | hex data | binary                           | ascii
+        [+] ----+----------+----------------------------------+-------
+        [+]  00 | 00148040 | 00000000000101001000000001000000 | ...@
+        [+]  01 | D3FE005D | 11010011111111100000000001011101 | ...]
+        [+]  02 | 522BC69D | 01010010001010111100011010011101 | R+..
+        [+]  03 | 650432F5 | 01100101000001000011001011110101 | e.2.
+        [+]  04 | 650432F5 | 01100101000001000011001011110101 | e.2.
+        [+]  05 | 18121218 | 00011000000100100001001000011000 | ....
+        [+]  06 | 18121218 | 00011000000100100001001000011000 | ....
+        [+]  07 | FFFFFFFF | 11111111111111111111111111111111 | ....
+
+        [+] Page 1
+        [+] blk | hex data | binary                           | ascii
+        [+] ----+----------+----------------------------------+-------
+        [+]  00 | 00148040 | 00000000000101001000000001000000 | ...@
+        [+]  01 | E01500D0 | 11100000000101010000000011010000 | ....
+        [+]  02 | D7B5C64C | 11010111101101011100011001001100 | ...L
+        [+]  03 | 00A00003 | 00000000101000000000000000000011 | ....
+        [+] Saved 48 bytes to binary file `/Users/itgeorge/lf-t55xx-D3FE005D-522BC69D-650432F5-650432F5-18121218-18121218-dump-003.bin`
+        [+] Saved to json file /Users/itgeorge/lf-t55xx-D3FE005D-522BC69D-650432F5-650432F5-18121218-18121218-dump-003.json
+        """;
+
+    public static readonly string DumpRealMultiPageModified = DumpRealMultiPage
+        .Replace("18121218", "18121568")
+        .Replace("FFFFFFFF", "00000000");
+
     // --- hw version offline mode (no device connected) ---
     public const string HwVersionOffline = """
         [+] execute command from commandline: hw version

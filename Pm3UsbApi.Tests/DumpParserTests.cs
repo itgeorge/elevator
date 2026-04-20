@@ -76,4 +76,31 @@ public class DumpParserTests
         Assert.That(parsed.Blocks[0].ToHex(), Is.EqualTo("00148040"));
         Assert.That(parsed.Blocks[5].ToHex(), Is.EqualTo("CCC61159"));
     }
+
+    [Test]
+    public void Parse_RealMultiPageDump_ReturnsOnlyPage0Blocks()
+    {
+        var result = ToResult(TestFixtures.DumpRealMultiPage);
+        var parsed = DumpParser.Parse(result);
+
+        Assert.That(parsed.Success, Is.True);
+        Assert.That(parsed.Blocks, Has.Count.EqualTo(8));
+        Assert.That(parsed.Blocks[0].ToHex(), Is.EqualTo("00148040"));
+        Assert.That(parsed.Blocks[5].ToHex(), Is.EqualTo("18121218"));
+        Assert.That(parsed.Blocks[7].ToHex(), Is.EqualTo("FFFFFFFF"));
+        Assert.That(parsed.Blocks.Any(b => b.ToHex() == "E01500D0"), Is.False, "Page 1 blocks must not be included.");
+    }
+
+    [Test]
+    public void Parse_ModifiedRealMultiPageDump_ReflectsModifiedPage0Values()
+    {
+        var result = ToResult(TestFixtures.DumpRealMultiPageModified);
+        var parsed = DumpParser.Parse(result);
+
+        Assert.That(parsed.Success, Is.True);
+        Assert.That(parsed.Blocks, Has.Count.EqualTo(8));
+        Assert.That(parsed.Blocks[5].ToHex(), Is.EqualTo("18121568"));
+        Assert.That(parsed.Blocks[6].ToHex(), Is.EqualTo("18121568"));
+        Assert.That(parsed.Blocks[7].ToHex(), Is.EqualTo("00000000"));
+    }
 }

@@ -14,8 +14,12 @@ public static class DumpParser
         @"^\s*(?:\[\+\]\s*)?(\d+)\s+\|\s+([0-9A-Fa-f]{8})\b",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
+    private static readonly Regex PageHeaderRegex = new(
+        @"^\s*(?:\[\+\]\s*)?Page\s+(\d+)\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     /// <summary>
-    /// Parse dump command output into T55Block list.
+    /// Parse dump command output into page 0 blocks.
     /// </summary>
     public static DumpResult Parse(CommandResult result)
     {
@@ -23,24 +27,37 @@ public static class DumpParser
 
         var blocks = new List<T55Block>();
         var rawOutput = result.RawOutput;
+        var currentPage = 0;
+        var sawAnyPageHeader = false;
 
         foreach (var line in result.OutputLines)
         {
             var stripped = OutputParser.StripAnsi(line).Trim();
             if (string.IsNullOrEmpty(stripped)) continue;
 
-            var match = BlockRowRegex.Match(stripped);
-            if (match.Success)
+            var pageMatch = PageHeaderRegex.Match(stripped);
+            if (pageMatch.Success)
             {
-                var hex = match.Groups[2].Value.ToUpperInvariant();
-                try
-                {
-                    blocks.Add(T55Block.FromHex(hex));
-                }
-                catch
-                {
-                    // Skip invalid hex
-                }
+                currentPage = int.Parse(pageMatch.Groups[1].Value);
+                sawAnyPageHeader = true;
+                continue;
+            }
+
+            var match = BlockRowRegex.Match(stripped);
+            if (!match.Success)
+                continue;
+
+            if (sawAnyPageHeader && currentPage != 0)
+                continue;
+
+            var hex = match.Groups[2].Value.ToUpperInvariant();
+            try
+            {
+                blocks.Add(T55Block.FromHex(hex));
+            }
+            catch
+            {
+                // Skip invalid hex
             }
         }
 

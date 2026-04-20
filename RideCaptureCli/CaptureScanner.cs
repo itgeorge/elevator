@@ -24,11 +24,11 @@ public sealed class CaptureScanner
         var weakSignal = signalMv > _config.MaxAcceptableSignalMv;
 
         var dumpStartedAt = DateTimeOffset.Now;
-        var rawDump = await _pm3.DumpAsync(ct).ConfigureAwait(false);
+        var parsedDump = await _pm3.DumpParsedAsync(ct).ConfigureAwait(false);
+        if (!parsedDump.Success || parsedDump.Blocks.Count < 8)
+            throw new InvalidOperationException("Failed to parse at least 8 page 0 blocks from dump output.");
 
-        var blocks = new List<string>(8);
-        for (uint block = 0; block < 8; block++)
-            blocks.Add(await _pm3.ReadPage0BlockAsync(block, ct).ConfigureAwait(false));
+        var blocks = parsedDump.Blocks.Take(8).Select(b => b.ToHex()).ToList();
 
         var scan = new CaptureScanData
         {
@@ -36,7 +36,7 @@ public sealed class CaptureScanner
             SignalMv = signalMv,
             WeakSignal = weakSignal,
             Blocks = blocks,
-            RawDumpOutput = rawDump,
+            RawDumpOutput = parsedDump.RawOutput,
             CopiedDumpRelativePath = string.Empty
         };
 

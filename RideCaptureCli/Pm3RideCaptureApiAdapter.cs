@@ -1,4 +1,5 @@
 using Pm3UsbApi;
+using Pm3UsbApi.Parsers;
 
 namespace RideCaptureCli;
 
@@ -27,8 +28,8 @@ public sealed class Pm3RideCaptureApiAdapter : IRideCapturePm3Api
     public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default) =>
         _pm3.ReadPage0BlockAsync(block, ct);
 
-    public Task<string> DumpAsync(CancellationToken ct = default) =>
-        _pm3.DumpAsync(ct);
+    public Task<DumpResult> DumpParsedAsync(CancellationToken ct = default) =>
+        _pm3.DumpParsedAsync(ct);
 
     public async Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default)
     {

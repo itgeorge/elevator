@@ -227,6 +227,15 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
+    /// Dump the tag once and parse page 0 blocks from the raw output.
+    /// </summary>
+    public async Task<DumpResult> DumpParsedAsync(CancellationToken ct = default)
+    {
+        var result = await _session.ExecuteT55Async(new T55DumpCommand(), null, ct).ConfigureAwait(false);
+        return DumpParser.Parse(result);
+    }
+
+    /// <summary>
     /// TEMPORARY: run LF tune while recording every sample, then write probe files (JSON + CSV).
     /// </summary>
     public async Task<string> RunLfTuneProbeAsync(
