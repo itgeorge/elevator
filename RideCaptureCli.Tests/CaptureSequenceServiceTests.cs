@@ -30,7 +30,7 @@ public class CaptureSequenceServiceTests
         var service = new CaptureSequenceService();
         var scan = CreateScan("D3FE005D", "522BC69D", "650432F5", "650432F5", "18120A99", "18120A99");
 
-        var result = service.ApplyScan([], scan, markZero: false);
+        var result = service.ApplyScan([], scan);
 
         Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(24));
         Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(24));
@@ -43,7 +43,7 @@ public class CaptureSequenceServiceTests
         var service = new CaptureSequenceService();
         var scan = CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111");
 
-        var result = service.ApplyScan([], scan, markZero: false);
+        var result = service.ApplyScan([], scan);
 
         Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(10000));
         Assert.That(result.AddedRecord.RealRideCount, Is.Null);
@@ -54,9 +54,9 @@ public class CaptureSequenceServiceTests
     public void Duplicate_scan_is_recorded_as_no_change()
     {
         var service = new CaptureSequenceService();
-        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"), markZero: false);
+        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"));
 
-        var duplicate = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), markZero: false);
+        var duplicate = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)));
 
         Assert.That(duplicate.AddedRecord.Status, Is.EqualTo(CaptureStatus.NoChange));
         Assert.That(duplicate.AddedRecord.TrackedCount, Is.EqualTo(10000));
@@ -67,9 +67,9 @@ public class CaptureSequenceServiceTests
     public void New_changed_unknown_scan_continues_current_sequence()
     {
         var service = new CaptureSequenceService();
-        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"), markZero: false);
+        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"));
 
-        var second = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), markZero: false);
+        var second = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)));
 
         Assert.That(second.AddedRecord.SequenceId, Is.EqualTo(first.AddedRecord.SequenceId));
         Assert.That(second.AddedRecord.TrackedCount, Is.EqualTo(9999));
@@ -127,8 +127,8 @@ public class CaptureSequenceServiceTests
             }
         };
 
-        var newSequenceStart = service.ApplyScan(history, CreateScan("D3FE005D", "522BC69D", "650432F5", "650432F5", "99990000", "99990000", timestamp: new DateTimeOffset(2026, 4, 21, 16, 36, 21, TimeSpan.FromHours(3))), markZero: false);
-        var newSequenceNext = service.ApplyScan(newSequenceStart.Records, CreateScan("D3FE005D", "522BC69D", "650432F5", "650432F5", "18120A99", "18120A99", timestamp: newSequenceStart.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), markZero: false);
+        var newSequenceStart = service.ApplyScan(history, CreateScan("D3FE005D", "522BC69D", "650432F5", "650432F5", "99990000", "99990000", timestamp: new DateTimeOffset(2026, 4, 21, 16, 36, 21, TimeSpan.FromHours(3))));
+        var newSequenceNext = service.ApplyScan(newSequenceStart.Records, CreateScan("D3FE005D", "522BC69D", "650432F5", "650432F5", "18120A99", "18120A99", timestamp: newSequenceStart.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)));
 
         var currentSequenceRows = newSequenceNext.Records.Where(r => r.SequenceId == newSequenceStart.AddedRecord.SequenceId).ToList();
         Assert.That(newSequenceNext.AutoNormalized, Is.True);
@@ -140,22 +140,37 @@ public class CaptureSequenceServiceTests
     public void Zero_command_backfills_sequence_to_real_zero()
     {
         var service = new CaptureSequenceService();
-        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"), markZero: false);
-        var second = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), markZero: true);
+        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"));
+        var second = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), exactRideCount: 0);
 
         var rows = second.Records.Where(r => r.SequenceId == first.AddedRecord.SequenceId).ToList();
         Assert.That(rows[0].RealRideCount, Is.EqualTo(1));
         Assert.That(rows[1].RealRideCount, Is.EqualTo(0));
         Assert.That(rows[1].ZeroAnchor, Is.True);
+        Assert.That(second.ManualAnchorRideCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Exact_command_backfills_sequence_to_given_real_count()
+    {
+        var service = new CaptureSequenceService();
+        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"));
+        var second = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), exactRideCount: 137);
+
+        var rows = second.Records.Where(r => r.SequenceId == first.AddedRecord.SequenceId).ToList();
+        Assert.That(rows[0].RealRideCount, Is.EqualTo(138));
+        Assert.That(rows[1].RealRideCount, Is.EqualTo(137));
+        Assert.That(rows[1].ZeroAnchor, Is.False);
+        Assert.That(second.ManualAnchorRideCount, Is.EqualTo(137));
     }
 
     [Test]
     public void Token_stops_being_marked_unknown_once_real_count_is_known()
     {
         var service = new CaptureSequenceService();
-        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"), markZero: false);
-        var anchored = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), markZero: true);
-        var nextSequence = service.ApplyScan(anchored.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "33333333", "33333333", timestamp: anchored.AddedRecord.TimestampAsDateTimeOffset().AddDays(1)), markZero: false);
+        var first = service.ApplyScan([], CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "11111111", "11111111"));
+        var anchored = service.ApplyScan(first.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "22222222", "22222222", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)), exactRideCount: 0);
+        var nextSequence = service.ApplyScan(anchored.Records, CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "33333333", "33333333", timestamp: anchored.AddedRecord.TimestampAsDateTimeOffset().AddDays(1)));
 
         Assert.That(nextSequence.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
     }

@@ -10,7 +10,7 @@ public sealed class CaptureSequenceService
         _sequenceIdGenerator = sequenceIdGenerator ?? new SequenceIdGenerator();
     }
 
-    public CaptureApplyResult ApplyScan(IReadOnlyList<CaptureRecord> history, CaptureScanData scan, bool markZero)
+    public CaptureApplyResult ApplyScan(IReadOnlyList<CaptureRecord> history, CaptureScanData scan, int? exactRideCount = null)
     {
         var records = history.Select(Clone).ToList();
         var tokenHistory = records.Where(r => string.Equals(r.TokenId, scan.TokenId, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -65,16 +65,17 @@ public sealed class CaptureSequenceService
             autoNormalized = true;
         }
 
-        if (markZero)
+        if (exactRideCount.HasValue)
         {
-            NormalizeSequence(records, added.SequenceId, added.TrackedCount, 0, zeroAnchor: true);
+            NormalizeSequence(records, added.SequenceId, added.TrackedCount, exactRideCount.Value, zeroAnchor: exactRideCount.Value == 0);
         }
 
         return new CaptureApplyResult
         {
             Records = records,
             AddedRecord = records[^1],
-            AutoNormalized = autoNormalized
+            AutoNormalized = autoNormalized,
+            ManualAnchorRideCount = exactRideCount
         };
     }
 
@@ -148,8 +149,8 @@ public sealed class CaptureSequenceService
         foreach (var row in records.Where(r => r.SequenceId == sequenceId))
         {
             row.RealRideCount = row.TrackedCount - offset;
-            if (zeroAnchor && row == records[^1])
-                row.ZeroAnchor = true;
+            if (row == records[^1])
+                row.ZeroAnchor = zeroAnchor;
         }
     }
 }

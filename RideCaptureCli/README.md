@@ -6,6 +6,7 @@ Low-interaction CLI for collecting T55xx token state transitions while investiga
 
 - Press **Enter** to scan the current token.
 - Type **`zero`** to scan and mark the current sequence state as real zero rides.
+- Type **`exact <n>`** to scan and mark the current sequence state as exact real ride count `n`.
 - Type **`help`** for commands.
 - Type **`exit`** to quit.
 

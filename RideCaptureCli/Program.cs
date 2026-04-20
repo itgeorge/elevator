@@ -38,7 +38,7 @@ public static class Program
         Console.WriteLine("RideCaptureCli - token sequence capture");
         Console.WriteLine($"Config: {Path.GetFullPath(options.ConfigPath)}");
         Console.WriteLine($"CSV:    {paths.CsvPath}");
-        Console.WriteLine("Commands: Enter=scan, zero=scan and anchor zero, help, exit");
+        Console.WriteLine("Commands: Enter=scan, zero=scan and anchor zero, exact <n>=scan and anchor exact count, help, exit");
         Console.WriteLine();
 
         while (true)
@@ -58,20 +58,38 @@ public static class Program
                 continue;
             }
 
-            var markZero = command.Equals("zero", StringComparison.OrdinalIgnoreCase);
-            if (!string.IsNullOrEmpty(command) && !markZero)
+            int? exactRideCount = null;
+            if (!string.IsNullOrEmpty(command))
             {
-                ConsoleStatusWriter.WriteInfo("Unknown command. Use Enter, zero, help, or exit.");
-                continue;
+                if (command.Equals("zero", StringComparison.OrdinalIgnoreCase))
+                {
+                    exactRideCount = 0;
+                }
+                else if (command.StartsWith("exact ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var valueText = command[6..].Trim();
+                    if (!int.TryParse(valueText, out var parsed) || parsed < 0)
+                    {
+                        ConsoleStatusWriter.WriteInfo("Invalid exact value. Use: exact <non-negative-integer>");
+                        continue;
+                    }
+
+                    exactRideCount = parsed;
+                }
+                else
+                {
+                    ConsoleStatusWriter.WriteInfo("Unknown command. Use Enter, zero, exact <n>, help, or exit.");
+                    continue;
+                }
             }
 
             try
             {
                 var scan = await scanner.ScanAsync();
                 var existing = store.Load(paths.CsvPath);
-                var result = sequenceService.ApplyScan(existing, scan, markZero);
+                var result = sequenceService.ApplyScan(existing, scan, exactRideCount);
                 store.Save(paths.CsvPath, result.Records);
-                ConsoleStatusWriter.WriteCaptureResult(result.AddedRecord, result.AutoNormalized);
+                ConsoleStatusWriter.WriteCaptureResult(result.AddedRecord, result.AutoNormalized, result.ManualAnchorRideCount);
             }
             catch (Exception ex)
             {
@@ -85,10 +103,11 @@ public static class Program
     private static void PrintHelp()
     {
         Console.WriteLine("Commands:");
-        Console.WriteLine("  <Enter>   Scan current token and append to CSV");
-        Console.WriteLine("  zero      Scan current token and anchor the current sequence at zero rides");
-        Console.WriteLine("  help      Show help");
-        Console.WriteLine("  exit      Quit");
+        Console.WriteLine("  <Enter>     Scan current token and append to CSV");
+        Console.WriteLine("  zero        Scan current token and anchor the current sequence at zero rides");
+        Console.WriteLine("  exact <n>   Scan current token and anchor the current sequence at exact ride count n");
+        Console.WriteLine("  help        Show help");
+        Console.WriteLine("  exit        Quit");
         Console.WriteLine();
     }
 

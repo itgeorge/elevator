@@ -2,7 +2,7 @@ namespace RideCaptureCli;
 
 public static class ConsoleStatusWriter
 {
-    public static void WriteCaptureResult(CaptureRecord record, bool autoNormalized)
+    public static void WriteCaptureResult(CaptureRecord record, bool autoNormalized, int? manualAnchorRideCount = null)
     {
         if (record.WeakSignal)
             WriteBanner("----- WEAK SIGNAL -----", ConsoleColor.Yellow);
@@ -28,7 +28,9 @@ public static class ConsoleStatusWriter
         Console.WriteLine($"dump:      {(string.IsNullOrWhiteSpace(record.CopiedDumpRelativePath) ? "<not found>" : record.CopiedDumpRelativePath)}");
         if (!string.IsNullOrWhiteSpace(record.Warnings))
             Console.WriteLine($"warnings:  {record.Warnings}");
-        if (record.ZeroAnchor)
+        if (manualAnchorRideCount.HasValue)
+            Console.WriteLine($"anchor:    EXACT={manualAnchorRideCount.Value}");
+        else if (record.ZeroAnchor)
             Console.WriteLine("anchor:    ZERO");
         if (autoNormalized)
             Console.WriteLine("anchor:    AUTO_NORMALIZED_FROM_KNOWN_STATE");
