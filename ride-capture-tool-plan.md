@@ -84,7 +84,9 @@ Use one persistent root folder for the capture dataset, with:
 
 Use a simple, easy-to-edit text-based config file (JSON is fine) with at least:
 
-- weak signal threshold, default **61 mV**
+- maximum acceptable signal threshold, default **29000 mV**
+  - for this reader/setup, **higher is worse**; a larger reported value means the reader is "trying harder"
+  - values above this threshold should be treated as weak/bad positioning and highlighted clearly to the operator
 - output root directory
 - directory to search for proxmark-created `lf-t55xx-*.bin` files
 
@@ -115,7 +117,7 @@ This keeps the operator capture workflow separate from the normal ride managemen
 
 - [ ] Add a config model for capture settings.
 - [ ] Implement loading config from an easy-to-edit file.
-- [ ] Create defaults including weak signal threshold `61 mV`.
+- [ ] Create defaults including maximum acceptable signal threshold `29000 mV`.
 - [ ] Define dataset root layout:
   - [ ] cumulative CSV path
   - [ ] copied dump root
