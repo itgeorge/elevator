@@ -9,7 +9,7 @@ public sealed class ProxmarkDumpLocator
             return null;
 
         var requiredParts = scan.Blocks.Skip(1).Take(6).ToArray();
-        return Directory.EnumerateFiles(fullSearchDirectory, "lf-t55xx-*.bin", SearchOption.AllDirectories)
+        return Directory.EnumerateFiles(fullSearchDirectory, "lf-t55xx-*.bin", SearchOption.TopDirectoryOnly)
             .Select(path => new FileInfo(path))
             .Where(info => info.Exists)
             .Where(info => info.LastWriteTimeUtc >= dumpStartedAt.UtcDateTime.AddSeconds(-5))
