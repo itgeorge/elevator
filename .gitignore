@@ -66,3 +66,7 @@ dumps/*
 
 # Proxmark3 run output (dump files, etc.) - process runs with WorkingDirectory here
 proxmark-runs/
+
+# Ride capture tool generated config/data
+ride-capture-config.json
+ride-capture-data/
