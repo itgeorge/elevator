@@ -6,6 +6,16 @@ namespace Pm3UsbApi;
 public record Pm3Options
 {
     /// <summary>
+    /// How commands are executed. <see cref="Pm3ExecutorKind.Process"/> is the default.
+    /// </summary>
+    public Pm3ExecutorKind ExecutorKind { get; init; } = Pm3ExecutorKind.Process;
+
+    /// <summary>
+    /// Baud rate for native USB CDC serial communication.
+    /// </summary>
+    public int SerialBaudRate { get; init; } = 115200;
+
+    /// <summary>
     /// Folder name for dev/test runs. Use with <see cref="WorkingDirectory"/> to isolate
     /// proxmark3 output files (e.g. lf-t55xx-*.bin) from the repo. Ignore via .gitignore.
     /// </summary>
@@ -66,4 +76,12 @@ public record Pm3Options
     /// Path for transcript log file. null = auto-generate in temp.
     /// </summary>
     public string? TranscriptPath { get; init; }
+
+    /// <summary>
+    /// Reads <c>PM3_EXECUTOR</c> (process|native). Defaults to <see cref="Pm3ExecutorKind.Process"/>.
+    /// </summary>
+    public static Pm3ExecutorKind ReadExecutorKindFromEnvironment() =>
+        string.Equals(Environment.GetEnvironmentVariable("PM3_EXECUTOR"), "native", StringComparison.OrdinalIgnoreCase)
+            ? Pm3ExecutorKind.Native
+            : Pm3ExecutorKind.Process;
 }

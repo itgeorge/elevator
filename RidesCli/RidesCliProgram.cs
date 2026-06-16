@@ -64,7 +64,7 @@ class RidesCliProgram
 
     static Pm3Options ParsePm3Options(string[] args)
     {
-        var options = new Pm3Options();
+        var options = new Pm3Options { ExecutorKind = Pm3Options.ReadExecutorKindFromEnvironment() };
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];

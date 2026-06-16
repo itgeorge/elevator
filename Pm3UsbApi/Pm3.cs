@@ -12,7 +12,6 @@ namespace Pm3UsbApi;
 public sealed class Pm3 : IAsyncDisposable
 {
     private readonly Pm3Session _session;
-    private readonly Pm3ProcessExecutor _executor;
     private CommandResult? _lastTuneResult;
 
     /// <summary>
@@ -22,8 +21,12 @@ public sealed class Pm3 : IAsyncDisposable
     public Pm3(Pm3Options? options = null)
     {
         var opts = options ?? new Pm3Options();
-        _executor = new Pm3ProcessExecutor(opts);
-        _session = new Pm3Session(_executor, opts);
+        IPm3CommandExecutor executor = opts.ExecutorKind switch
+        {
+            Pm3ExecutorKind.Native => new Native.Pm3NativeExecutor(opts),
+            _ => new Pm3ProcessExecutor(opts),
+        };
+        _session = new Pm3Session(executor, opts);
     }
 
     /// <summary>
@@ -163,4 +166,4 @@ public sealed class Pm3 : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 }
-
+
