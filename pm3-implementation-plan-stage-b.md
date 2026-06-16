@@ -1,6 +1,17 @@
 ... This document continues from `pm3-implementation-plan.md`
 
-## Stage B: Native Binary Protocol (Future)
+## Stage B: Native Binary Protocol
+
+**Branch:** `pm3-integration` (not merged to main yet)
+
+### Slice progress
+
+| Slice | Scope | Status |
+|-------|--------|--------|
+| **Slice 1** | Native connect, ping, hw version, LF tune | ✅ Complete (`00a9ac8`) |
+| **Slice 2** | Native T55 detect + read (blocks 0–7), demod, integration tests | ✅ Complete (`828ae8d`, `8f2ef38`) |
+| **Slice 3** | Native T55 write + dump | 🔲 Next — see `pm3-slice-3-handoff.md` |
+| **Slice 4** | Production enablement, macOS/Linux validation | 🔲 Planned — tasks in handoff doc |
 
 ### Phase 8: Native USB Communication
 
@@ -14,72 +25,82 @@
 
 #### 8a: Protocol Layer
 
-- [ ] **8a.1** Add `System.IO.Ports` NuGet package to `Pm3UsbApi.csproj`.
+- [x] **8a.1** Add `System.IO.Ports` NuGet package to `Pm3UsbApi.csproj`.
 
-- [ ] **8a.2** Implement packet structures in C#:
+- [x] **8a.2** Implement packet structures in C#:
   - `PacketCommandNG`: preamble magic `0x61334d50` ("PM3a"), 15-bit length, NG flag, 16-bit cmd, variable data, postamble CRC or magic `0x3361`.
   - `PacketResponseNG`: preamble magic `0x62334d50` ("PM3b"), 15-bit length, NG flag, status, reason, 16-bit cmd, variable data, postamble CRC or magic `0x3362`.
   - CRC-14a computation (or use magic postamble placeholder for USB where CRC is optional).
+  - Implemented in `Pm3UsbApi/Native/Protocol/Pm3NgPacketCodec.cs` (NG + OLD 544-byte MIX frames).
 
-- [ ] **8a.3** Implement serial port transport:
+- [x] **8a.3** Implement serial port transport:
   - Open USB CDC serial port (`SerialPort` class, cross-platform).
   - Device auto-detection: enumerate serial ports, try each one with `CMD_PING`.
   - Send packet: serialize `PacketCommandNG` to bytes, write to serial port.
   - Receive packet: read from serial, sync on magic bytes, parse `PacketResponseNG`.
   - Handle fragmented receives (USB splits large responses into 128-byte chunks).
+  - Implemented in `Pm3UsbApi/Native/Transport/Pm3SerialTransport.cs`.
 
-- [ ] **8a.4** Implement basic commands to validate the protocol layer:
+- [x] **8a.4** Implement basic commands to validate the protocol layer:
   - `CMD_PING` (0x0109) -- send ping, verify pong response.
   - `CMD_VERSION` (0x0107) -- get firmware version string.
-  - `CMD_CAPABILITIES` (0x0112) -- get device capabilities.
+  - [ ] `CMD_CAPABILITIES` (0x0112) -- get device capabilities. *(Optional; not needed for elevator token path yet.)*
 
-- [ ] **8a.5** Unit tests for packet serialization/deserialization using known reference frames from the protocol docs.
+- [x] **8a.5** Unit tests for packet serialization/deserialization using known reference frames from the protocol docs.
+  - `Pm3UsbApi.Tests/Native/Pm3NgPacketCodecTests.cs`
 
-#### 8b: T55xx Write (straightforward)
+#### 8b: T55xx Write + LF Tune
 
 - [ ] **8b.1** Implement `CMD_LF_T55XX_WRITEBL` (0x0215):
   - Payload: `t55xx_write_block_t` = 4 bytes data + 4 bytes password + 1 byte block number + 1 byte flags.
   - Response: `PM3_SUCCESS` with no data payload.
   - Map to `Pm3.WritePage0BlockAsync()`.
+  - **Slice 3**
 
-- [ ] **8b.2** Implement `CMD_MEASURE_ANTENNA_TUNING_LF` (0x0402):
+- [x] **8b.2** Implement `CMD_MEASURE_ANTENNA_TUNING_LF` (0x0402):
   - Parse tuning response data.
   - Map to `Pm3.StartLfTune()` / `Pm3.GetLfTuneLastMilliVolts()`.
+  - Slice 1
 
 #### 8c: T55xx Read (requires signal processing)
 
-- [ ] **8c.1** Implement `CMD_LF_T55XX_READBL` (0x0214):
+- [x] **8c.1** Implement `CMD_LF_T55XX_READBL` (0x0214):
   - Send read command (triggers firmware to capture raw ADC samples into BigBuf).
   - Response: `PM3_SUCCESS` with no data (samples are in device BigBuf).
 
-- [ ] **8c.2** Implement `CMD_DOWNLOAD_BIGBUF` (0x0207) / `CMD_DOWNLOADED_BIGBUF` (0x0208):
+- [x] **8c.2** Implement `CMD_DOWNLOAD_BIGBUF` (0x0207) / `CMD_DOWNLOADED_BIGBUF` (0x0208):
   - Download raw ADC samples from device memory.
   - Handle chunked transfer (device sends 128-byte USB packets).
+  - Firmware returns OLD 544-byte frames (not NG) for BigBuf download.
 
-- [ ] **8c.3** Implement demodulator for the specific token configuration:
-  - Determine exact modulation from Block 0 config (captured during Stage A).
-  - Implement the required demodulator (likely ASK/Manchester -- verify during Stage A testing).
-  - Extract 32-bit block value from demodulated bitstream.
+- [x] **8c.3** Implement demodulator for the specific token configuration:
+  - Token: RF/64, Block 0 `0x00148040` (elevator tags).
+  - ASK/Manchester demod in `Pm3LfDemod.cs` + `Pm3T55NativeService.cs`.
+  - Sample conversion: `raw[i] - 127` (matches proxmark3 `getSamplesFromBufEx`).
 
 - [ ] **8c.4** Implement `CMD_LF_T55XX_RESET_READ` (0x0216) as alternative read approach:
   - Sends reset to T55xx, chip transmits all page 0 data.
-  - Potentially simpler than per-block reads.
+  - Candidate implementation path for **Slice 3 dump** (see `cmdlft55xx.c` `CmdT55xxDump`).
 
 #### 8d: Integration
 
-- [ ] **8d.1** Create `Pm3NativeExecutor` implementing `IPm3CommandExecutor`:
-  - Map command strings to binary commands (or create a new native-specific interface).
-  - Alternative: create `IPm3DeviceApi` with typed methods that `Pm3Session` calls directly, bypassing string commands entirely.
+- [x] **8d.1** Create `Pm3NativeExecutor` implementing `IPm3CommandExecutor`:
+  - Typed `IPm3DeviceCommand` dispatch (detect, read, tune, hw version).
+  - Output via `Pm3NativeOutputBuilder` for existing parsers.
 
-- [ ] **8d.2** Update `Pm3.cs` to support selecting executor type via `Pm3Options`:
-  - `Pm3Options.ExecutorMode = ProcessWrapper | Native` (default to ProcessWrapper for backward compat).
+- [x] **8d.2** Update `Pm3.cs` to support selecting executor type via `Pm3Options`:
+  - `Pm3Options.ExecutorKind` + `PM3_EXECUTOR` env (`process`|`native`).
+  - Default remains `Process` for backward compatibility.
 
-- [ ] **8d.3** Run the full Stage A test suite against the native executor. All tests must pass.
+- [x] **8d.3** Run integration test suite against the native executor (read path):
+  - Parameterized `[TestFixture(Process)]` + `[TestFixture(Native)]` in `Pm3IntegrationTests.cs`.
+  - Native: 10 pass, 7 skipped (write/dump/CLI/sequential write tests).
+  - Write/dump parity unblocked in **Slice 3**.
 
 - [ ] **8d.4** Cross-platform validation:
-  - Test on Windows (USB CDC as COM port).
-  - Test on macOS (USB CDC as `/dev/cu.usbmodem*`).
-  - Test on Linux (USB CDC as `/dev/ttyACM0`).
+  - [x] Windows (USB CDC as COM port) — validated on COM4.
+  - [ ] macOS (USB CDC as `/dev/cu.usbmodem*`) — **Slice 4**
+  - [ ] Linux (USB CDC as `/dev/ttyACM0`) — **Slice 4**
 
 ### Key command codes reference (from pm3_cmd.h)
 
@@ -138,3 +159,6 @@
     - `[#]` = debug info -- usually ignore
 
 11. **Stage B note:** When implementing the native binary protocol (Phase 8), reference the Proxmark3 RRG source code freely. The firmware source at `armsrc/lfops.c` contains the T55xx command handlers. The protocol is defined in `include/pm3_cmd.h` and documented in `doc/new_frame_format.md`. The key insight is that T55xx reads return raw ADC samples (not decoded data), requiring client-side demodulation.
+
+12. **Slice handoff:** For Slice 3+ context, start with `pm3-slice-3-handoff.md`.
+

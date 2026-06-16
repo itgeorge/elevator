@@ -50,7 +50,7 @@ try
         var invertInt = invert;
         var st = true;
         sw.Restart();
-        var err = Pm3LfDemod.AskDemodExt(sample, ref bitLen, ref clk, ref invertInt, maxErr: 1, askType: 1, ref st, signal, Log);
+        var err = Pm3LfDemod.AskDemodExt(sample, ref bitLen, ref clk, ref invertInt, maxErr: 1, askType: 1, ref st, signal);
         Log($"demod inv={invert} err={err} clk={clk} bits={bitLen} ({sw.ElapsedMilliseconds}ms)");
         if (err >= 0 && bitLen >= 64)
         {

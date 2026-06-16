@@ -19,12 +19,8 @@ internal static class Pm3LfDemod
         int maxErr,
         byte askType,
         ref bool stCheck,
-        Pm3SignalProperties signal,
-        Action<string>? trace = null)
+        Pm3SignalProperties signal)
     {
-        void Step(string msg) => trace?.Invoke(msg);
-
-        Step("enter");
         if (bitLen < 255 || signal.IsNoise)
             return -1;
 
@@ -33,9 +29,7 @@ internal static class Pm3LfDemod
             return -1;
 
         size -= 60;
-        Step($"detect-clock size={size}");
         var start = DetectAskClock(bits, size, ref clk, maxErr, signal);
-        Step($"detect-clock done clk={clk} start={start}");
         if (clk <= 0 || start < 0)
             return -3;
 
@@ -47,23 +41,17 @@ internal static class Pm3LfDemod
 
         if (DetectCleanAskWave(bits, size, high, low))
         {
-            Step("clean-ask");
             errCnt = CleanAskRawDemod(bits, ref size, clk, invert, high, low, ref startIdx);
-            Step($"clean-ask done size={size} err={errCnt}");
             if (askType == 1 && errCnt >= 0)
             {
-                Step("man-decode");
                 byte alignPos = 0;
                 errCnt = ManRawDecode(bits, ref size, 0, ref alignPos);
-                Step($"man-decode done size={size} err={errCnt}");
                 startIdx += (clk / 2) * alignPos;
             }
         }
         else
         {
-            Step("weak-ask");
             errCnt = WeakAskDemod(bits, ref size, clk, invert, high, low, askType, start, ref startIdx);
-            Step($"weak-ask done size={size} err={errCnt}");
         }
 
         if (errCnt < 0 || size < 16 || errCnt > maxErr)
