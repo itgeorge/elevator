@@ -8,23 +8,48 @@ namespace Pm3UsbApi.Tests.Integration;
 
 /// <summary>
 /// Integration tests that require a connected Proxmark3 with T5577 tag.
+/// Parameterized by executor kind so both process and native paths are exercised.
 /// Skip in CI: dotnet test --filter "Category!=Integration"
-/// Run manually: dotnet test --filter "Category=Integration"
+/// Run manually:
+///   dotnet test --filter "Category=Integration" -- NUnit.RunExplicitTests=true
+///   dotnet test --filter "FullyQualifiedName~Pm3IntegrationTests(Process)" -- NUnit.RunExplicitTests=true
+///   dotnet test --filter "FullyQualifiedName~Pm3IntegrationTests(Native)" -- NUnit.RunExplicitTests=true
 /// </summary>
-[TestFixture]
+[TestFixture(Pm3ExecutorKind.Process)]
+[TestFixture(Pm3ExecutorKind.Native)]
 [Category("Integration")]
 [Explicit("Requires Proxmark3 connected with T5577 tag. Run: dotnet test --filter 'Category=Integration'")]
+[NonParallelizable]
 public class Pm3IntegrationTests
 {
     private const uint TestWriteBlock5Value = 0xDEADBEEF;
     private const uint TestWriteBlock6Value = 0xCAFEBABE;
 
-    private static string? _snapshotBlock5Hex;
-    private static string? _snapshotBlock6Hex;
+    private readonly Pm3ExecutorKind _executorKind;
+    private string? _snapshotBlock5Hex;
+    private string? _snapshotBlock6Hex;
+
+    public Pm3IntegrationTests(Pm3ExecutorKind executorKind) => _executorKind = executorKind;
+
+    private bool SupportsWrite => _executorKind == Pm3ExecutorKind.Process;
+
+    private bool SupportsDump => _executorKind == Pm3ExecutorKind.Process;
+
+    private bool SupportsCliPassthrough => _executorKind == Pm3ExecutorKind.Process;
+
+    private TimeSpan DefaultCommandTimeout => SupportsWrite
+        ? TimeSpan.FromSeconds(15)
+        : TimeSpan.FromSeconds(15);
+
+    private Pm3Options CreateOptions(TimeSpan? commandTimeout = null) =>
+        IntegrationTestOptions.Create(_executorKind, commandTimeout ?? DefaultCommandTimeout);
 
     [OneTimeSetUp]
     public async Task SnapshotRideBlocksAsync()
     {
+        if (!SupportsWrite)
+            return;
+
         await using var pm3 = await ConnectPm3Async();
         await pm3.EnsureT55SessionActiveAsync();
         _snapshotBlock5Hex = await pm3.ReadPage0BlockAsync(5);
@@ -34,7 +59,7 @@ public class Pm3IntegrationTests
     [OneTimeTearDown]
     public async Task RestoreRideBlocksAsync()
     {
-        if (IntegrationTestOptions.UsesNativeExecutor || _snapshotBlock5Hex is null || _snapshotBlock6Hex is null)
+        if (!SupportsWrite || _snapshotBlock5Hex is null || _snapshotBlock6Hex is null)
             return;
 
         try
@@ -55,19 +80,25 @@ public class Pm3IntegrationTests
         }
     }
 
-    private static Pm3Options CreateOptions() =>
-        IntegrationTestOptions.Create();
-
-    private static Pm3Options CreateOptions(TimeSpan commandTimeout) =>
-        IntegrationTestOptions.Create(commandTimeout);
-
-    private static void SkipIfNativeExecutorUnsupportedForWrite()
+    private void RequireWrite()
     {
-        if (IntegrationTestOptions.UsesNativeExecutor)
+        if (!SupportsWrite)
             Assert.Ignore("T55 write/dump is not supported by the native executor yet.");
     }
 
-    private static async Task<Pm3> ConnectPm3Async(Pm3Options? options = null)
+    private void RequireDump()
+    {
+        if (!SupportsDump)
+            Assert.Ignore("T55 dump is not supported by the native executor yet.");
+    }
+
+    private void RequireCliPassthrough()
+    {
+        if (!SupportsCliPassthrough)
+            Assert.Ignore("Raw CLI passthrough is not supported by the native executor.");
+    }
+
+    private async Task<Pm3> ConnectPm3Async(Pm3Options? options = null)
     {
         var pm3 = new Pm3(options ?? CreateOptions());
         await pm3.ConnectAsync();
@@ -98,7 +129,13 @@ public class Pm3IntegrationTests
         Assert.That(await pm3.IsConnectedAsync(), Is.True);
 
         await pm3.DisconnectAsync();
-        // After disconnect the session is disposed; no further API calls.
+    }
+
+    [Test]
+    public async Task Connect_IsConnected_ReturnsTrue()
+    {
+        await using var pm3 = await ConnectPm3Async();
+        Assert.That(await pm3.IsConnectedAsync(), Is.True);
     }
 
     [Test]
@@ -118,9 +155,20 @@ public class Pm3IntegrationTests
     }
 
     [Test]
+    public async Task DetectAndReadBlock5_ReturnsHex()
+    {
+        await using var pm3 = await ConnectPm3Async();
+        await pm3.EnsureT55SessionActiveAsync();
+
+        var hex = await pm3.ReadPage0BlockAsync(5);
+        Assert.That(hex, Has.Length.EqualTo(8));
+        Assert.That(hex, Does.Match("^[0-9A-F]+$"));
+    }
+
+    [Test]
     public async Task WriteBlock5_ThenRead_MatchesWrittenValue()
     {
-        SkipIfNativeExecutorUnsupportedForWrite();
+        RequireWrite();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -130,7 +178,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task WriteBlock6_ThenRead_MatchesWrittenValue()
     {
-        SkipIfNativeExecutorUnsupportedForWrite();
+        RequireWrite();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -147,6 +195,24 @@ public class Pm3IntegrationTests
 
         Assert.That(peakMv, Is.GreaterThan(1000u), "Expected a non-trivial LF antenna signal with tag on reader.");
         Assert.That(peakMv, Is.LessThan(100_000u), "Peak mV looks unreasonably high.");
+    }
+
+    [Test]
+    public async Task ConnectThenTune_SequentialOperationsSucceed()
+    {
+        await using var pm3 = await ConnectPm3Async();
+
+        Assert.That(await pm3.IsConnectedAsync(), Is.True);
+
+        await pm3.StartLfTuneAsync();
+        var first = await pm3.GetLfTuneLastMilliVoltsAsync();
+
+        await pm3.StartLfTuneAsync();
+        var second = await pm3.GetLfTuneLastMilliVoltsAsync();
+
+        Assert.That(first, Is.GreaterThan(1000u));
+        Assert.That(second, Is.GreaterThan(1000u));
+        Assert.That(Math.Abs((int)first - (int)second), Is.LessThan(5000));
     }
 
     [Test]
@@ -186,9 +252,21 @@ public class Pm3IntegrationTests
     }
 
     [Test]
+    public async Task TokenBaseline_ReadsFiftyRides()
+    {
+        await using var pm3 = await ConnectPm3Async();
+        await pm3.EnsureT55SessionActiveAsync();
+
+        var block5 = T55Block.FromHex(await pm3.ReadPage0BlockAsync(5));
+        var rides = TokenBlockUtils.Decode(block5);
+
+        Assert.That(rides, Is.EqualTo(50u), $"Expected 50 rides via {_executorKind} executor.");
+    }
+
+    [Test]
     public async Task Dump_ReturnsExpectedBlockCount()
     {
-        SkipIfNativeExecutorUnsupportedForWrite();
+        RequireDump();
         await using var pm3 = await ConnectPm3Async();
 
         var output = await pm3.DumpAsync();
@@ -199,13 +277,13 @@ public class Pm3IntegrationTests
         var dumpResult = DumpParser.Parse(
             new CommandResult { Commands = [new T55DumpCommand()], OutputLines = lines });
         Assert.That(dumpResult.Success, Is.True, () => $"Dump parse failed. Preview: {output[..Math.Min(400, output.Length)]}...");
-        Assert.That(dumpResult.Blocks.Count, Is.GreaterThanOrEqualTo(8)); // Page 0 (8 blocks); may include Page 1
+        Assert.That(dumpResult.Blocks.Count, Is.GreaterThanOrEqualTo(8));
     }
 
     [Test]
     public async Task Dump_Block5MatchesIndividualRead()
     {
-        SkipIfNativeExecutorUnsupportedForWrite();
+        RequireDump();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -224,8 +302,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task ExecuteRawCommand_HwVersion_ReturnsDeviceInfo()
     {
-        if (IntegrationTestOptions.UsesNativeExecutor)
-            Assert.Ignore("Raw CLI passthrough is not supported by the native executor.");
+        RequireCliPassthrough();
 
         await using var pm3 = await ConnectPm3Async();
 
@@ -238,11 +315,9 @@ public class Pm3IntegrationTests
     [Test]
     public async Task Execute_WithVeryShortTimeout_ThrowsPm3TimeoutException()
     {
-        if (IntegrationTestOptions.UsesNativeExecutor)
-            Assert.Ignore("Raw CLI timeout test applies to the process executor only.");
+        RequireCliPassthrough();
 
-        // Use a command that respects DefaultCommandTimeout (lf tune uses fixed LfTuneCaptureInterval)
-        var options = CreateOptions() with { DefaultCommandTimeout = TimeSpan.FromMilliseconds(1) };
+        var options = CreateOptions(TimeSpan.FromMilliseconds(1));
         await using var pm3 = new Pm3(options);
         await pm3.ConnectAsync();
 
@@ -265,8 +340,8 @@ public class Pm3IntegrationTests
     [Test]
     public async Task SequentialSession_ExecutesTenOperationsWithoutFailure()
     {
-        SkipIfNativeExecutorUnsupportedForWrite();
-        // Longer timeout: each operation launches a proxmark3 process.
+        RequireWrite();
+
         await using var pm3 = await ConnectPm3Async(CreateOptions(TimeSpan.FromSeconds(20)));
 
         Assert.That(await pm3.IsConnectedAsync(), Is.True);

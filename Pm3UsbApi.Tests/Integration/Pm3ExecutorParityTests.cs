@@ -12,7 +12,7 @@ public class Pm3ExecutorParityTests
 {
     private static async Task<uint> MeasureTunePeakAsync(Pm3ExecutorKind executorKind)
     {
-        var options = IntegrationTestOptions.Create(TimeSpan.FromSeconds(20)) with { ExecutorKind = executorKind };
+        var options = IntegrationTestOptions.Create(executorKind, TimeSpan.FromSeconds(20));
         await using var pm3 = new Pm3(options);
         await pm3.ConnectAsync();
         await pm3.StartLfTuneAsync();
@@ -30,33 +30,5 @@ public class Pm3ExecutorParityTests
 
         Assert.That(Math.Abs((int)processMv - (int)nativeMv), Is.LessThan(3000),
             "Native and process executors should report similar LF tune peaks.");
-    }
-
-    [Test]
-    public async Task TokenBaseline_NativeExecutor_ReadsFiftyRides()
-    {
-        var options = IntegrationTestOptions.Create() with { ExecutorKind = Pm3ExecutorKind.Native };
-        await using var pm3 = new Pm3(options);
-        await pm3.ConnectAsync();
-        await pm3.EnsureT55SessionActiveAsync();
-
-        var block5 = T55Block.FromHex(await pm3.ReadPage0BlockAsync(5));
-        var rides = TokenBlockUtils.Decode(block5);
-
-        Assert.That(rides, Is.EqualTo(50u), "Native executor should match the prepared testing baseline of 50 rides.");
-    }
-
-    [Test]
-    public async Task TokenBaseline_ProcessExecutor_ReadsFiftyRides()
-    {
-        var options = IntegrationTestOptions.Create() with { ExecutorKind = Pm3ExecutorKind.Process };
-        await using var pm3 = new Pm3(options);
-        await pm3.ConnectAsync();
-        await pm3.EnsureT55SessionActiveAsync();
-
-        var block5 = T55Block.FromHex(await pm3.ReadPage0BlockAsync(5));
-        var rides = TokenBlockUtils.Decode(block5);
-
-        Assert.That(rides, Is.EqualTo(50u), "Expected the prepared testing baseline of 50 rides.");
     }
 }
