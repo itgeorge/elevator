@@ -15,18 +15,19 @@ internal sealed class Pm3GraphState
     public Pm3SignalProperties Signal { get; } = new();
 
     /// <summary>
-    /// Load BigBuf bytes from firmware (unsigned, 128 = zero) into signed graph buffer.
-    /// Matches proxmark3 client setGraphBuffer: g_GraphBuffer[i] = src[i] - 128.
+    /// Load BigBuf bytes from firmware into signed graph buffer.
+    /// Matches proxmark3 getSamplesFromBufEx (cmdlft55xx AcquireData path):
+    /// g_GraphBuffer[j] = data[j] - 127.
     /// </summary>
     public void LoadSamples(ReadOnlySpan<byte> raw)
     {
         GraphLength = Math.Min(raw.Length, MaxGraphSamples);
         for (var i = 0; i < GraphLength; i++)
-            GraphBuffer[i] = raw[i] - 128;
+            GraphBuffer[i] = raw[i] - 127;
     }
 
     /// <summary>
-    /// Export graph samples for demod (getFromGraphBuffer: dest[i] = graph[i] + 128).
+    /// Export samples for demod (getFromGraphBuffer: dest[i] = graph[i] + 128).
     /// </summary>
     public int CopyToByteSamples(Span<byte> dest)
     {

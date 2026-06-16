@@ -19,8 +19,12 @@ internal static class Pm3LfDemod
         int maxErr,
         byte askType,
         ref bool stCheck,
-        Pm3SignalProperties signal)
+        Pm3SignalProperties signal,
+        Action<string>? trace = null)
     {
+        void Step(string msg) => trace?.Invoke(msg);
+
+        Step("enter");
         if (bitLen < 255 || signal.IsNoise)
             return -1;
 
@@ -28,10 +32,10 @@ internal static class Pm3LfDemod
         if (size < 320)
             return -1;
 
-        // Trim trailing junk like proxmark3 DetectASKClock.
         size -= 60;
-
+        Step($"detect-clock size={size}");
         var start = DetectAskClock(bits, size, ref clk, maxErr, signal);
+        Step($"detect-clock done clk={clk} start={start}");
         if (clk <= 0 || start < 0)
             return -3;
 
@@ -43,17 +47,23 @@ internal static class Pm3LfDemod
 
         if (DetectCleanAskWave(bits, size, high, low))
         {
+            Step("clean-ask");
             errCnt = CleanAskRawDemod(bits, ref size, clk, invert, high, low, ref startIdx);
+            Step($"clean-ask done size={size} err={errCnt}");
             if (askType == 1 && errCnt >= 0)
             {
+                Step("man-decode");
                 byte alignPos = 0;
                 errCnt = ManRawDecode(bits, ref size, 0, ref alignPos);
+                Step($"man-decode done size={size} err={errCnt}");
                 startIdx += (clk / 2) * alignPos;
             }
         }
         else
         {
+            Step("weak-ask");
             errCnt = WeakAskDemod(bits, ref size, clk, invert, high, low, askType, start, ref startIdx);
+            Step($"weak-ask done size={size} err={errCnt}");
         }
 
         if (errCnt < 0 || size < 16 || errCnt > maxErr)
@@ -84,7 +94,7 @@ internal static class Pm3LfDemod
                     return idx;
             }
 
-            return FindWeakAskStart(dest, size, clock, maxErr, peakHi, peakLow);
+            return FindWeakAskStart(dest, size, clock, maxErr, peakHi, peakLow, loopCap: 256);
         }
 
         if (DetectCleanAskWave(dest, size, peakHi, peakLow))
@@ -100,13 +110,15 @@ internal static class Pm3LfDemod
             }
         }
 
+        // Fallback: limited weak search (full PM3 scan is very slow on 12k samples).
         var bestErr = int.MaxValue;
         var bestStart = -1;
         var bestClock = TokenClock;
+        var weakLoopCap = Math.Min(256, size / 16);
 
         foreach (var candidate in AskClocks)
         {
-            var start = FindWeakAskStart(dest, size, candidate, maxErr, peakHi, peakLow);
+            var start = FindWeakAskStart(dest, size, candidate, maxErr, peakHi, peakLow, weakLoopCap);
             if (start < 0)
                 continue;
 
@@ -126,9 +138,9 @@ internal static class Pm3LfDemod
         return bestStart;
     }
 
-    private static int FindWeakAskStart(byte[] dest, int size, int clock, int maxErr, int peakHi, int peakLow)
+    private static int FindWeakAskStart(byte[] dest, int size, int clock, int maxErr, int peakHi, int peakLow, int loopCap)
     {
-        var loopCnt = Math.Min(1000, size - clock * 2);
+        var loopCnt = Math.Min(loopCap, Math.Min(1000, size - clock * 2));
         var tol = clock <= 32 ? 1 : 0;
         if (maxErr == 0 && size > clock * 2 + tol && clock < 128)
             loopCnt = clock * 2;
@@ -360,16 +372,16 @@ internal static class Pm3LfDemod
         return errCnt;
     }
 
-    private static int ManRawDecode(byte[] bits, ref int size, byte invert, ref byte alignPos)
+    internal static int ManRawDecode(byte[] bits, ref int size, byte invert, ref byte alignPos)
     {
         if (size < 16)
             return 0xFFFF;
 
         alignPos = 0;
         var bestErr = 1000;
-        var bestRun = (byte)0;
+        var bestRun = 0;
 
-        for (byte k = 0; k < 2; k++)
+        for (var k = 0; k < 2; k++)
         {
             var err = 0;
             for (var i = k; i < size - 1; i += 2)
@@ -387,7 +399,7 @@ internal static class Pm3LfDemod
             }
         }
 
-        alignPos = bestRun;
+        alignPos = (byte)bestRun;
         var bitnum = 0;
         for (var i = bestRun; i < size && bitnum < MaxDemodBits; i += 2)
         {

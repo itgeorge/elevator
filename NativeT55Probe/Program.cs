@@ -21,12 +21,27 @@ try
     var raw = transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, TimeSpan.FromSeconds(4), CancellationToken.None);
     Log($"samples={raw.Length} ({sw.ElapsedMilliseconds}ms)");
 
-    var signal = new Pm3SignalProperties();
-    signal.Compute(raw);
+    var graph = new Pm3GraphState();
+    graph.LoadSamples(raw);
+    var demodBytes = new byte[raw.Length];
+    var demodLen = graph.CopyToByteSamples(demodBytes);
+    var signal = graph.Signal;
+    signal.Compute(demodBytes.AsSpan(0, demodLen));
     Log($"signal noise={signal.IsNoise} amp={signal.Amplitude}");
 
-    var work = new byte[raw.Length];
-    raw.CopyTo(work, 0);
+    var work = demodBytes;
+    Log("synth man test");
+    {
+        var synth = new byte[12000];
+        for (var i = 0; i < 400; i++)
+            synth[i] = (byte)(i % 2);
+        var synthSize = 400;
+        var align = (byte)0;
+        sw.Restart();
+        var synthErr = Pm3LfDemod.ManRawDecode(synth, ref synthSize, 0, ref align);
+        Log($"synth man err={synthErr} bits={synthSize} ({sw.ElapsedMilliseconds}ms)");
+    }
+
     foreach (var invert in new[] { 0, 1 })
     {
         var sample = (byte[])work.Clone();
@@ -35,7 +50,7 @@ try
         var invertInt = invert;
         var st = true;
         sw.Restart();
-        var err = Pm3LfDemod.AskDemodExt(sample, ref bitLen, ref clk, ref invertInt, maxErr: 1, askType: 1, ref st, signal);
+        var err = Pm3LfDemod.AskDemodExt(sample, ref bitLen, ref clk, ref invertInt, maxErr: 1, askType: 1, ref st, signal, Log);
         Log($"demod inv={invert} err={err} clk={clk} bits={bitLen} ({sw.ElapsedMilliseconds}ms)");
         if (err >= 0 && bitLen >= 64)
         {
@@ -50,7 +65,7 @@ try
     var config = new Pm3T55Config();
     if (!service.Detect(config, CancellationToken.None))
         throw new InvalidOperationException("Detect failed");
-    Log($"detect {sw.ElapsedMilliseconds}ms block0=0x{config.Block0:X8}");
+    Log($"detect {sw.ElapsedMilliseconds}ms block0=0x{config.Block0:X8} clk={config.Clock} offset={config.Offset}");
 
     sw.Restart();
     if (!service.ReadBlock(config, 5, out var block5, CancellationToken.None))

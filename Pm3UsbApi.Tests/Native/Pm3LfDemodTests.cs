@@ -7,6 +7,20 @@ namespace Pm3UsbApi.Tests.Native;
 public class Pm3LfDemodTests
 {
     [Test]
+    public void ManRawDecode_AlternatingHalves_CompletesQuickly()
+    {
+        var bits = new byte[12000];
+        for (var i = 0; i < 400; i++)
+            bits[i] = (byte)(i % 2);
+        var size = 400;
+        var align = (byte)0;
+        var err = Pm3LfDemod.ManRawDecode(bits, ref size, 0, ref align);
+        Assert.That(err, Is.EqualTo(0));
+        Assert.That(size, Is.EqualTo(200));
+        Assert.That(align, Is.EqualTo(0));
+    }
+
+    [Test]
     public void AskDemodExt_SyntheticCleanAskWave_RecoversConfigBlock()
     {
         var dataBits = BuildConfigBlockBits(0x00148040u, offset: 32);

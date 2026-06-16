@@ -99,11 +99,12 @@ internal sealed class Pm3T55NativeService
         {
             return false;
         }
-        _graph.Signal.Compute(raw);
+        _graph.LoadSamples(raw);
+        var sampleLen = _graph.CopyToByteSamples(_sampleScratch);
+        _graph.Signal.Compute(_sampleScratch.AsSpan(0, sampleLen));
         if (_graph.Signal.IsNoise)
             return false;
 
-        _graph.LoadSamples(raw);
         return true;
     }
 
