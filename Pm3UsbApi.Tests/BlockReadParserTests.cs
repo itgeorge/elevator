@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Pm3UsbApi;
+using Pm3UsbApi.Commands;
 using Pm3UsbApi.Parsers;
 
 namespace Pm3UsbApi.Tests;
@@ -10,7 +11,7 @@ public class BlockReadParserTests
     private static CommandResult ToResult(string output) =>
         new()
         {
-            Commands = ["lf t55 read -b 0"],
+            Commands = [new T55ReadBlockCommand(0)],
             OutputLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s.TrimEnd()).ToList(),
             ExitCode = 0,
             HasErrors = false

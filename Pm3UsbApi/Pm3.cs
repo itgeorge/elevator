@@ -1,3 +1,4 @@
+using Pm3UsbApi.Commands;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Parsers;
 using Pm3UsbApi.Session;
@@ -59,7 +60,7 @@ public sealed class Pm3 : IAsyncDisposable
     /// <exception cref="Pm3CommandException">When no T55xx chip is detected.</exception>
     public async Task EnsureT55SessionActiveAsync(CancellationToken ct = default)
     {
-        var result = await _session.ExecuteT55CommandAsync("lf t55 detect", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteAsync([new T55DetectCommand()], null, ct).ConfigureAwait(false);
         var detect = DetectParser.Parse(result);
         if (!detect.ChipFound)
             throw new Pm3CommandException("No T55xx chip detected. Place a tag on the reader.", result);
@@ -76,7 +77,7 @@ public sealed class Pm3 : IAsyncDisposable
         if (block > 7)
             throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 0 and 7.");
 
-        var result = await _session.ExecuteT55CommandAsync($"lf t55 read -b {block}", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteT55Async(new T55ReadBlockCommand(block), null, ct).ConfigureAwait(false);
         var parsed = BlockReadParser.Parse(result, (int)block);
         if (!parsed.Success || parsed.HexData is null)
             throw new Pm3CommandException($"Failed to read block {block}.", result);
@@ -98,8 +99,7 @@ public sealed class Pm3 : IAsyncDisposable
         if (block > 7)
             throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 1 and 6.");
 
-        var hex = data.ToHex();
-        var result = await _session.ExecuteT55CommandAsync($"lf t55 write -b {block} -d {hex}", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteT55Async(new T55WriteBlockCommand(block, data), null, ct).ConfigureAwait(false);
         if (result.HasErrors)
             throw new Pm3CommandException($"Failed to write block {block}. {result.ErrorSummary}", result);
         return true;
@@ -111,7 +111,7 @@ public sealed class Pm3 : IAsyncDisposable
     /// <returns>Raw dump output string.</returns>
     public async Task<string> DumpAsync(CancellationToken ct = default)
     {
-        var result = await _session.ExecuteT55CommandAsync("lf t55 dump", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteT55Async(new T55DumpCommand(), null, ct).ConfigureAwait(false);
         return result.RawOutput;
     }
 
@@ -120,7 +120,7 @@ public sealed class Pm3 : IAsyncDisposable
     /// </summary>
     public async Task<bool> StartLfTuneAsync(CancellationToken ct = default)
     {
-        _lastTuneResult = await _session.ExecuteCommandAsync("lf tune", null, ct).ConfigureAwait(false);
+        _lastTuneResult = await _session.ExecuteAsync([new LfTuneCommand()], null, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -144,14 +144,15 @@ public sealed class Pm3 : IAsyncDisposable
     public Task<bool> StopLfTuneAsync(CancellationToken ct = default) => Task.FromResult(true);
 
     /// <summary>
-    /// Execute a raw Proxmark3 command and return the output.
+    /// Execute a raw Proxmark3 CLI command and return the output.
     /// Use for commands that are not wrapped by the high-level API (e.g., hw version, lf search).
+    /// Only supported by the process-wrapper executor.
     /// </summary>
     /// <param name="command">The full pm3 command string.</param>
     /// <returns>The raw output from the command.</returns>
     public async Task<string> ExecuteRawCommandAsync(string command, CancellationToken ct = default)
     {
-        var result = await _session.ExecuteCommandAsync(command, null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteAsync([new CliPassthroughCommand(command)], null, ct).ConfigureAwait(false);
         return result.RawOutput;
     }
 
@@ -162,3 +163,4 @@ public sealed class Pm3 : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 }
+

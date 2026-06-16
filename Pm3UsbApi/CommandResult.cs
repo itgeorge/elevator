@@ -1,3 +1,5 @@
+using Pm3UsbApi.Commands;
+
 namespace Pm3UsbApi;
 
 /// <summary>
@@ -8,7 +10,7 @@ public class CommandResult
     /// <summary>
     /// The commands that were executed.
     /// </summary>
-    public required string[] Commands { get; init; }
+    public required IReadOnlyList<IPm3DeviceCommand> Commands { get; init; }
 
     /// <summary>
     /// Output lines from the command (typically stdout, optionally stderr merged).

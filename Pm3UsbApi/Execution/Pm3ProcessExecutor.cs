@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Pm3UsbApi.Commands;
 using Pm3UsbApi.Parsers;
 
 namespace Pm3UsbApi.Execution;
@@ -37,22 +38,19 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
 
     /// <inheritdoc />
     public async Task<CommandResult> ExecuteAsync(
-        string[] commands,
+        IReadOnlyList<IPm3DeviceCommand> commands,
         TimeSpan? timeout = null,
         CancellationToken ct = default,
         string? portOverride = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (commands is null || commands.Length == 0)
+        if (commands is null || commands.Count == 0)
             throw new ArgumentException("At least one command is required.", nameof(commands));
-
-        if (ContainsLfTuneWithOthers(commands))
-            throw new InvalidOperationException("lf tune cannot be combined with other commands. Execute it alone.");
 
         var isLfTuneOnly = IsLfTuneOnly(commands);
         var effectiveTimeout = isLfTuneOnly ? LfTuneCaptureInterval : (timeout ?? _options.DefaultCommandTimeout);
-        var commandString = string.Join("; ", commands);
+        var commandString = Pm3CliFormatter.FormatBatch(commands);
         var path = ResolvePm3ClientPath();
         var args = BuildArguments(commandString, portOverride);
 
@@ -292,14 +290,8 @@ public sealed class Pm3ProcessExecutor : IPm3CommandExecutor
         return null;
     }
 
-    private static bool IsLfTuneCommand(string command) =>
-        command.AsSpan().TrimStart().StartsWith("lf tune", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsLfTuneOnly(string[] commands) =>
-        commands.Length == 1 && IsLfTuneCommand(commands[0]);
-
-    private static bool ContainsLfTuneWithOthers(string[] commands) =>
-        commands.Length > 1 && commands.Any(IsLfTuneCommand);
+    private static bool IsLfTuneOnly(IReadOnlyList<IPm3DeviceCommand> commands) =>
+        commands.Count == 1 && commands[0] is LfTuneCommand;
 
     private static async Task ReadStreamAsync(StreamReader reader, List<string> outputLines, CancellationToken ct)
     {

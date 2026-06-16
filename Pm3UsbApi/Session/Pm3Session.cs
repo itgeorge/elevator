@@ -1,3 +1,4 @@
+using Pm3UsbApi.Commands;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Parsers;
 
@@ -59,8 +60,8 @@ public sealed class Pm3Session : IAsyncDisposable
             _discoveredPort = portOverride;
         }
 
-        var result = await _executor.ExecuteAsync(
-            ["hw version"],
+        var result = await ExecuteAsync(
+            [new HwVersionCommand()],
             _options.ConnectTimeout,
             ct,
             portOverride).ConfigureAwait(false);
@@ -87,11 +88,6 @@ public sealed class Pm3Session : IAsyncDisposable
         {
             _connected = true;
         }
-
-        LogTranscript(">>> hw version");
-        LogTranscript("<<< " + result.RawOutput);
-
-        // Version info is useful for diagnostics; caller can inspect CommandResult if needed
     }
 
     /// <summary>
@@ -135,8 +131,8 @@ public sealed class Pm3Session : IAsyncDisposable
         try
         {
             var port = _options.DevicePort ?? _discoveredPort;
-            var result = await _executor.ExecuteAsync(
-                ["hw version"],
+            var result = await ExecuteAsync(
+                [new HwVersionCommand()],
                 TimeSpan.FromSeconds(5),
                 ct,
                 port).ConfigureAwait(false);
@@ -156,20 +152,30 @@ public sealed class Pm3Session : IAsyncDisposable
     }
 
     /// <summary>
-    /// Execute a T55 command, chaining lf t55 detect before it.
-    /// Use for commands like lf t55 read, lf t55 write, lf t55 dump.
+    /// Execute a T55 command, chaining detect before it.
+    /// Use for commands like T55 read, T55 write, T55 dump.
     /// </summary>
-    public async Task<CommandResult> ExecuteT55CommandAsync(
-        string command,
+    public Task<CommandResult> ExecuteT55Async(
+        IPm3DeviceCommand command,
         TimeSpan? timeout = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        ExecuteAsync([new T55DetectCommand(), command], timeout, ct);
+
+    /// <summary>
+    /// Execute one or more device commands without T55 detect chaining.
+    /// </summary>
+    public async Task<CommandResult> ExecuteAsync(
+        IReadOnlyList<IPm3DeviceCommand> commands,
+        TimeSpan? timeout = null,
+        CancellationToken ct = default,
+        string? portOverride = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var commands = new[] { "lf t55 detect", command };
-        LogTranscript($">>> {string.Join("; ", commands)}");
+        CommandBatchValidator.Validate(commands);
+        LogTranscript($">>> {Pm3CliFormatter.FormatBatch(commands)}");
 
-        var port = _options.DevicePort ?? _discoveredPort;
+        var port = portOverride ?? _options.DevicePort ?? _discoveredPort;
         var result = await _executor.ExecuteAsync(
             commands,
             timeout ?? _options.DefaultCommandTimeout,
@@ -178,31 +184,8 @@ public sealed class Pm3Session : IAsyncDisposable
 
         LogTranscript("<<< " + result.RawOutput);
 
-        _lastDetectTime = DateTime.UtcNow; // For future interactive-mode cache optimization
-
-        return result;
-    }
-
-    /// <summary>
-    /// Execute a non-T55 command (e.g., hw version, lf tune) without chaining detect.
-    /// </summary>
-    public async Task<CommandResult> ExecuteCommandAsync(
-        string command,
-        TimeSpan? timeout = null,
-        CancellationToken ct = default)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        LogTranscript($">>> {command}");
-
-        var port = _options.DevicePort ?? _discoveredPort;
-        var result = await _executor.ExecuteAsync(
-            [command],
-            timeout ?? _options.DefaultCommandTimeout,
-            ct,
-            port).ConfigureAwait(false);
-
-        LogTranscript("<<< " + result.RawOutput);
+        if (commands.Any(c => c is T55DetectCommand))
+            _lastDetectTime = DateTime.UtcNow; // For future interactive-mode cache optimization
 
         return result;
     }
@@ -257,3 +240,4 @@ public sealed class Pm3Session : IAsyncDisposable
         }
     }
 }
+
