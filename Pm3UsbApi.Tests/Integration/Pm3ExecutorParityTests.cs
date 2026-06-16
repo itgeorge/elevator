@@ -33,6 +33,20 @@ public class Pm3ExecutorParityTests
     }
 
     [Test]
+    public async Task TokenBaseline_NativeExecutor_ReadsFiftyRides()
+    {
+        var options = IntegrationTestOptions.Create() with { ExecutorKind = Pm3ExecutorKind.Native };
+        await using var pm3 = new Pm3(options);
+        await pm3.ConnectAsync();
+        await pm3.EnsureT55SessionActiveAsync();
+
+        var block5 = T55Block.FromHex(await pm3.ReadPage0BlockAsync(5));
+        var rides = TokenBlockUtils.Decode(block5);
+
+        Assert.That(rides, Is.EqualTo(50u), "Native executor should match the prepared testing baseline of 50 rides.");
+    }
+
+    [Test]
     public async Task TokenBaseline_ProcessExecutor_ReadsFiftyRides()
     {
         var options = IntegrationTestOptions.Create() with { ExecutorKind = Pm3ExecutorKind.Process };

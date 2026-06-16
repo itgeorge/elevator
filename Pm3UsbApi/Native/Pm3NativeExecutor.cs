@@ -1,6 +1,8 @@
 using Pm3UsbApi.Commands;
 using Pm3UsbApi.Execution;
+using Pm3UsbApi.Native.Demod;
 using Pm3UsbApi.Native.Protocol;
+using Pm3UsbApi.Native.T55;
 using Pm3UsbApi.Native.Transport;
 
 namespace Pm3UsbApi.Native;
@@ -11,6 +13,7 @@ namespace Pm3UsbApi.Native;
 public sealed class Pm3NativeExecutor : IPm3CommandExecutor
 {
     private readonly Pm3Options _options;
+    private readonly Pm3T55Config _t55Config = new();
     private Pm3SerialTransport? _transport;
     private string? _connectedPort;
     private bool _disposed;
@@ -31,21 +34,25 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         if (commands is null || commands.Count == 0)
             throw new ArgumentException("At least one command is required.", nameof(commands));
 
-        if (commands.Count != 1)
-            throw new Pm3CommandException("Native executor supports one device command per invocation.");
-
         var effectiveTimeout = timeout ?? _options.DefaultCommandTimeout;
         await EnsureTransportAsync(portOverride, effectiveTimeout, ct).ConfigureAwait(false);
 
-        return commands[0] switch
+        if (commands.Count == 1)
         {
-            HwVersionCommand => ExecuteHwVersion(commands, effectiveTimeout, ct),
-            LfTuneCommand => await ExecuteLfTuneAsync(commands, ct).ConfigureAwait(false),
-            CliPassthroughCommand => throw new Pm3CommandException("Raw CLI commands are not supported by the native executor."),
-            T55DetectCommand or T55ReadBlockCommand or T55WriteBlockCommand or T55DumpCommand =>
-                throw new Pm3CommandException($"{commands[0].GetType().Name} is not supported by the native executor yet."),
-            _ => throw new Pm3CommandException($"Unsupported command type: {commands[0].GetType().Name}"),
-        };
+            return commands[0] switch
+            {
+                HwVersionCommand => ExecuteHwVersion(commands, effectiveTimeout, ct),
+                LfTuneCommand => await ExecuteLfTuneAsync(commands, ct).ConfigureAwait(false),
+                T55DetectCommand => ExecuteT55Detect(commands, ct),
+                T55ReadBlockCommand read => ExecuteT55ReadBlock(commands, read.Block, ct),
+                CliPassthroughCommand => throw new Pm3CommandException("Raw CLI commands are not supported by the native executor."),
+                T55WriteBlockCommand or T55DumpCommand =>
+                    throw new Pm3CommandException($"{commands[0].GetType().Name} is not supported by the native executor yet."),
+                _ => throw new Pm3CommandException($"Unsupported command type: {commands[0].GetType().Name}"),
+            };
+        }
+
+        return await ExecuteBatchAsync(commands, ct).ConfigureAwait(false);
     }
 
     public Task CancelCurrentAsync(CancellationToken ct = default) => Task.CompletedTask;
@@ -59,6 +66,107 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
             await _transport.DisposeAsync().ConfigureAwait(false);
         _transport = null;
         _connectedPort = null;
+    }
+
+    private async Task<CommandResult> ExecuteBatchAsync(IReadOnlyList<IPm3DeviceCommand> commands, CancellationToken ct)
+    {
+        var lines = new List<string>();
+        var hasErrors = false;
+
+        foreach (var command in commands)
+        {
+            switch (command)
+            {
+                case T55DetectCommand:
+                {
+                    var result = ExecuteT55Detect([command], ct);
+                    lines.AddRange(result.OutputLines);
+                    hasErrors |= result.HasErrors;
+                    break;
+                }
+                case T55ReadBlockCommand read:
+                {
+                    var result = ExecuteT55ReadBlock([command], read.Block, ct);
+                    lines.AddRange(result.OutputLines);
+                    hasErrors |= result.HasErrors;
+                    break;
+                }
+                default:
+                    throw new Pm3CommandException(
+                        $"Native executor batch supports T55 detect/read only. Unsupported: {command.GetType().Name}");
+            }
+
+            await Task.Yield();
+        }
+
+        return new CommandResult
+        {
+            Commands = commands,
+            OutputLines = lines,
+            ExitCode = hasErrors ? 1 : 0,
+            HasErrors = hasErrors,
+            ErrorSummary = hasErrors ? "One or more native T55 commands failed." : null,
+        };
+    }
+
+    private CommandResult ExecuteT55Detect(IReadOnlyList<IPm3DeviceCommand> commands, CancellationToken ct)
+    {
+        var service = CreateT55Service();
+        if (!service.Detect(_t55Config, ct))
+        {
+            var failed = new CommandResult
+            {
+                Commands = commands,
+                OutputLines = Pm3NativeOutputBuilder.BuildDetectFailedLines(),
+                ExitCode = 1,
+                HasErrors = true,
+                ErrorSummary = "T55 detect failed",
+            };
+            throw new Pm3CommandException("No T55xx chip detected.", failed);
+        }
+
+        return new CommandResult
+        {
+            Commands = commands,
+            OutputLines = Pm3NativeOutputBuilder.BuildDetectLines(_t55Config),
+            ExitCode = 0,
+            HasErrors = false,
+        };
+    }
+
+    private CommandResult ExecuteT55ReadBlock(IReadOnlyList<IPm3DeviceCommand> commands, uint block, CancellationToken ct)
+    {
+        if (!_t55Config.Detected)
+            throw new Pm3CommandException("T55 session is not active. Run detect before read.");
+
+        var service = CreateT55Service();
+        if (!service.ReadBlock(_t55Config, (byte)block, out var value, ct))
+        {
+            var failed = new CommandResult
+            {
+                Commands = commands,
+                OutputLines = Pm3NativeOutputBuilder.BuildReadFailedLines(block),
+                ExitCode = 1,
+                HasErrors = true,
+                ErrorSummary = $"Failed to read block {block}",
+            };
+            throw new Pm3CommandException($"Failed to read block {block}.", failed);
+        }
+
+        return new CommandResult
+        {
+            Commands = commands,
+            OutputLines = Pm3NativeOutputBuilder.BuildReadBlockLines(block, value),
+            ExitCode = 0,
+            HasErrors = false,
+        };
+    }
+
+    private Pm3T55NativeService CreateT55Service()
+    {
+        if (_transport is null)
+            throw new Pm3ConnectionException("Native transport is not connected.");
+        return new Pm3T55NativeService(_transport);
     }
 
     private CommandResult ExecuteHwVersion(IReadOnlyList<IPm3DeviceCommand> commands, TimeSpan timeout, CancellationToken ct)

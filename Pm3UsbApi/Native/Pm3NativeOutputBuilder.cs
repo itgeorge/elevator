@@ -1,4 +1,5 @@
 using System.Text;
+using Pm3UsbApi.Native.Demod;
 using Pm3UsbApi.Native.Protocol;
 
 namespace Pm3UsbApi.Native;
@@ -40,6 +41,29 @@ internal static class Pm3NativeOutputBuilder
 
     public static IReadOnlyList<string> BuildLfTuneLines(uint peakMilliVolts) =>
         [$"[=] {peakMilliVolts} mV"];
+
+    public static IReadOnlyList<string> BuildDetectLines(Pm3T55Config config) =>
+    [
+        "[=] Chip Type: T55x7",
+        $"[=] Modulation: {Pm3T55Config.ModulationName(config.Modulation)}",
+        $"[=] Block0: 0x{config.Block0:X8}",
+        $"[=] Block 0 .......... 0x{config.Block0:X8}",
+    ];
+
+    public static IReadOnlyList<string> BuildReadBlockLines(uint block, uint blockValue) =>
+    [
+        $"[+] Block {block}: {blockValue:X8}",
+    ];
+
+    public static IReadOnlyList<string> BuildDetectFailedLines() =>
+    [
+        "[!] Could not detect modulation automatically. Try setting it manually with 'lf t55xx config'",
+    ];
+
+    public static IReadOnlyList<string> BuildReadFailedLines(uint block) =>
+    [
+        $"[!] Could not read block {block}",
+    ];
 
     public static IReadOnlyList<string> BuildErrorLines(string message) =>
         [$"[-] {message}"];

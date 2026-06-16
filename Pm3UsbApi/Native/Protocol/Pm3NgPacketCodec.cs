@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 namespace Pm3UsbApi.Native.Protocol;
 
 /// <summary>
-/// Parsed PacketResponseNG frame from the device.
+/// Parsed Proxmark3 response frame from the device.
 /// </summary>
 internal sealed class Pm3ResponseFrame
 {
@@ -12,10 +12,11 @@ internal sealed class Pm3ResponseFrame
     public required sbyte Reason { get; init; }
     public required bool IsNg { get; init; }
     public required byte[] Data { get; init; }
+    public ulong[] OldArg { get; init; } = [0, 0, 0];
 }
 
 /// <summary>
-/// Serializes and parses Proxmark3 NG packets (doc/new_frame_format.md).
+/// Serializes and parses Proxmark3 NG/MIX/OLD packets (doc/new_frame_format.md).
 /// USB uses magic postamble placeholders instead of CRC.
 /// </summary>
 internal static class Pm3NgPacketCodec
@@ -36,6 +37,51 @@ internal static class Pm3NgPacketCodec
         return buffer;
     }
 
+    public static byte[] EncodeMixCommand(ushort command, ulong arg0, ulong arg1, ulong arg2, ReadOnlySpan<byte> extra = default)
+    {
+        var payload = new byte[Pm3CommandCodes.MixArgBytes + extra.Length];
+        BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(0), arg0);
+        BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(8), arg1);
+        BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(16), arg2);
+        if (!extra.IsEmpty)
+            extra.CopyTo(payload.AsSpan(Pm3CommandCodes.MixArgBytes));
+        return EncodeCommand(command, payload, ng: false);
+    }
+
+    public static Pm3ResponseFrame DecodeAnyResponse(ReadOnlySpan<byte> frame)
+    {
+        if (frame.Length >= 10 &&
+            BinaryPrimitives.ReadUInt32LittleEndian(frame) == Pm3CommandCodes.ResponsePreambleMagic)
+            return DecodeResponse(frame);
+
+        if (frame.Length >= Pm3CommandCodes.OldFrameSize)
+            return DecodeOldResponse(frame);
+
+        throw new InvalidOperationException($"Unrecognized response frame ({frame.Length} bytes).");
+    }
+
+    public static Pm3ResponseFrame DecodeOldResponse(ReadOnlySpan<byte> frame)
+    {
+        if (frame.Length < Pm3CommandCodes.OldFrameSize)
+            throw new InvalidOperationException($"OLD response frame too short ({frame.Length} bytes).");
+
+        var cmd = BinaryPrimitives.ReadUInt64LittleEndian(frame);
+        return new Pm3ResponseFrame
+        {
+            Command = (ushort)(cmd & 0xFFFF),
+            Status = Pm3CommandCodes.Pm3Success,
+            Reason = 0,
+            IsNg = false,
+            OldArg =
+            [
+                BinaryPrimitives.ReadUInt64LittleEndian(frame[8..]),
+                BinaryPrimitives.ReadUInt64LittleEndian(frame[16..]),
+                BinaryPrimitives.ReadUInt64LittleEndian(frame[24..]),
+            ],
+            Data = frame.Slice(32, Pm3CommandCodes.MaxDataSize).ToArray(),
+        };
+    }
+
     public static Pm3ResponseFrame DecodeResponse(ReadOnlySpan<byte> frame)
     {
         if (frame.Length < 12)
@@ -54,10 +100,29 @@ internal static class Pm3NgPacketCodec
         if (frame.Length < expectedLength)
             throw new InvalidOperationException($"Incomplete response frame: expected {expectedLength}, got {frame.Length}.");
 
-        var data = frame.Slice(10, length).ToArray();
+        var rawData = frame.Slice(10, length).ToArray();
         var crc = BinaryPrimitives.ReadUInt16LittleEndian(frame[(10 + length)..]);
         if (crc != Pm3CommandCodes.ResponsePostambleMagic)
             throw new InvalidOperationException($"Unexpected response postamble 0x{crc:X4}.");
+
+        byte[] data;
+        ulong[] oldArg = [0, 0, 0];
+        if (ng)
+        {
+            data = rawData;
+        }
+        else
+        {
+            if (rawData.Length < Pm3CommandCodes.MixArgBytes)
+                throw new InvalidOperationException("MIX response payload too short for oldarg.");
+
+            oldArg[0] = BinaryPrimitives.ReadUInt64LittleEndian(rawData.AsSpan(0));
+            oldArg[1] = BinaryPrimitives.ReadUInt64LittleEndian(rawData.AsSpan(8));
+            oldArg[2] = BinaryPrimitives.ReadUInt64LittleEndian(rawData.AsSpan(16));
+            data = rawData.Length > Pm3CommandCodes.MixArgBytes
+                ? rawData[Pm3CommandCodes.MixArgBytes..]
+                : [];
+        }
 
         return new Pm3ResponseFrame
         {
@@ -66,6 +131,7 @@ internal static class Pm3NgPacketCodec
             Reason = reason,
             IsNg = ng,
             Data = data,
+            OldArg = oldArg,
         };
     }
 

@@ -16,6 +16,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Pm3UsbApi.Tests" />
+        <InternalsVisibleTo Include="NativeT55Probe" />
     </ItemGroup>
 
 </Project>

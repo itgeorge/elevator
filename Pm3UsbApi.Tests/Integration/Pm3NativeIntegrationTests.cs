@@ -13,6 +13,18 @@ public class Pm3NativeIntegrationTests
         IntegrationTestOptions.Create() with { ExecutorKind = Pm3ExecutorKind.Native };
 
     [Test]
+    public async Task DetectAndReadBlock5_ReturnsHex()
+    {
+        await using var pm3 = new Pm3(CreateNativeOptions());
+        await pm3.ConnectAsync();
+        await pm3.EnsureT55SessionActiveAsync();
+
+        var hex = await pm3.ReadPage0BlockAsync(5);
+        Assert.That(hex, Has.Length.EqualTo(8));
+        Assert.That(hex, Does.Match("^[0-9A-F]+$"));
+    }
+
+    [Test]
     public async Task Connect_IsConnected_ReturnsTrue()
     {
         await using var pm3 = new Pm3(CreateNativeOptions());

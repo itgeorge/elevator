@@ -25,9 +25,6 @@ public class Pm3IntegrationTests
     [OneTimeSetUp]
     public async Task SnapshotRideBlocksAsync()
     {
-        if (IntegrationTestOptions.UsesNativeExecutor)
-            return;
-
         await using var pm3 = await ConnectPm3Async();
         await pm3.EnsureT55SessionActiveAsync();
         _snapshotBlock5Hex = await pm3.ReadPage0BlockAsync(5);
@@ -64,10 +61,10 @@ public class Pm3IntegrationTests
     private static Pm3Options CreateOptions(TimeSpan commandTimeout) =>
         IntegrationTestOptions.Create(commandTimeout);
 
-    private static void SkipIfNativeExecutorUnsupported()
+    private static void SkipIfNativeExecutorUnsupportedForWrite()
     {
         if (IntegrationTestOptions.UsesNativeExecutor)
-            Assert.Ignore("T55 operations are not supported by the native executor yet (Slice 2).");
+            Assert.Ignore("T55 write/dump is not supported by the native executor yet.");
     }
 
     private static async Task<Pm3> ConnectPm3Async(Pm3Options? options = null)
@@ -107,7 +104,6 @@ public class Pm3IntegrationTests
     [Test]
     public async Task Detect_ThenReadAllBlocks_ReturnsNonNullHex()
     {
-        SkipIfNativeExecutorUnsupported();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -124,7 +120,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task WriteBlock5_ThenRead_MatchesWrittenValue()
     {
-        SkipIfNativeExecutorUnsupported();
+        SkipIfNativeExecutorUnsupportedForWrite();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -134,7 +130,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task WriteBlock6_ThenRead_MatchesWrittenValue()
     {
-        SkipIfNativeExecutorUnsupported();
+        SkipIfNativeExecutorUnsupportedForWrite();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -156,7 +152,6 @@ public class Pm3IntegrationTests
     [Test]
     public async Task ReadBlock5Twice_ReturnsSameValue()
     {
-        SkipIfNativeExecutorUnsupported();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -170,7 +165,6 @@ public class Pm3IntegrationTests
     [Test]
     public async Task ReadBlocks5And6_DecodeRidesInValidRange()
     {
-        SkipIfNativeExecutorUnsupported();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -194,7 +188,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task Dump_ReturnsExpectedBlockCount()
     {
-        SkipIfNativeExecutorUnsupported();
+        SkipIfNativeExecutorUnsupportedForWrite();
         await using var pm3 = await ConnectPm3Async();
 
         var output = await pm3.DumpAsync();
@@ -211,7 +205,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task Dump_Block5MatchesIndividualRead()
     {
-        SkipIfNativeExecutorUnsupported();
+        SkipIfNativeExecutorUnsupportedForWrite();
         await using var pm3 = await ConnectPm3Async();
 
         await pm3.EnsureT55SessionActiveAsync();
@@ -259,7 +253,6 @@ public class Pm3IntegrationTests
     [Test]
     public async Task ReadAfterDisconnect_ThrowsMeaningfulError()
     {
-        SkipIfNativeExecutorUnsupported();
         await using var pm3 = await ConnectPm3Async();
         await pm3.DisconnectAsync();
 
@@ -272,7 +265,7 @@ public class Pm3IntegrationTests
     [Test]
     public async Task SequentialSession_ExecutesTenOperationsWithoutFailure()
     {
-        SkipIfNativeExecutorUnsupported();
+        SkipIfNativeExecutorUnsupportedForWrite();
         // Longer timeout: each operation launches a proxmark3 process.
         await using var pm3 = await ConnectPm3Async(CreateOptions(TimeSpan.FromSeconds(20)));
 
