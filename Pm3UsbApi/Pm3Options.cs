@@ -6,9 +6,9 @@ namespace Pm3UsbApi;
 public record Pm3Options
 {
     /// <summary>
-    /// How commands are executed. <see cref="Pm3ExecutorKind.Process"/> is the default.
+    /// How commands are executed. <see cref="Pm3ExecutorKind.Native"/> is the default.
     /// </summary>
-    public Pm3ExecutorKind ExecutorKind { get; init; } = Pm3ExecutorKind.Process;
+    public Pm3ExecutorKind ExecutorKind { get; init; } = Pm3ExecutorKind.Native;
 
     /// <summary>
     /// Baud rate for native USB CDC serial communication.
@@ -78,10 +78,16 @@ public record Pm3Options
     public string? TranscriptPath { get; init; }
 
     /// <summary>
-    /// Reads <c>PM3_EXECUTOR</c> (process|native). Defaults to <see cref="Pm3ExecutorKind.Process"/>.
+    /// Reads <c>PM3_EXECUTOR</c> (process|native). Defaults to <see cref="Pm3ExecutorKind.Native"/>.
     /// </summary>
-    public static Pm3ExecutorKind ReadExecutorKindFromEnvironment() =>
-        string.Equals(Environment.GetEnvironmentVariable("PM3_EXECUTOR"), "native", StringComparison.OrdinalIgnoreCase)
-            ? Pm3ExecutorKind.Native
-            : Pm3ExecutorKind.Process;
+    public static Pm3ExecutorKind ReadExecutorKindFromEnvironment()
+    {
+        var value = Environment.GetEnvironmentVariable("PM3_EXECUTOR");
+        if (string.IsNullOrWhiteSpace(value))
+            return Pm3ExecutorKind.Native;
+
+        return value.Trim().Equals("process", StringComparison.OrdinalIgnoreCase)
+            ? Pm3ExecutorKind.Process
+            : Pm3ExecutorKind.Native;
+    }
 }

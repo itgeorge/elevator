@@ -1,7 +1,7 @@
 # PM3 Native Integration — Master Plan & Handoff
 
 **Branch:** `pm3-integration` (not merged to `master` yet)  
-**Last updated:** 2026-06-17  
+**Last updated:** 2026-06-18  
 **Purpose:** Single source of truth for the multi-stage effort to replace the `proxmark3` process wrapper with direct USB CDC binary protocol communication. Use this file to onboard the next agent.
 
 ---
@@ -14,17 +14,17 @@
 | **Slice 1** | Native connect, ping, hw version, LF tune | ✅ Complete (`00a9ac8`) |
 | **Slice 2** | Native T55 detect + read, demod, integration tests | ✅ Complete (`828ae8d`, `8f2ef38`) |
 | **Slice 3** | Native T55 write + dump | ✅ Complete (`52392ba`) |
-| **Slice 4** | Production enablement, cross-platform validation | 🔲 In progress (macOS native read/detect validated) |
+| **Slice 4** | Production enablement, cross-platform validation | 🔲 Mostly done (see below) |
+| **Slice 5** | Native default executor | ✅ Complete |
+| **Slices 6–11** | Capabilities, logging, cache, perf, debug layout | 🔲 Planned — see handoff docs |
 
 **Recent commits on `pm3-integration`:**
 
 ```
+c6d5607 Fix native PM3 BigBuf download hang and validate on macOS
 9c6436f Default RidesCli to native PM3 executor
 52392ba Implement native T55 write and dump
-70f2e56 Add Slice 3 handoff and clean up native demod trace scaffolding
-8f2ef38 Refactor integration tests to parameterized executor fixtures
 828ae8d Fix native T55 detect/read hang (Slice 2 complete)
-c5bf941 WIP: native T55 detect/read — transport OK, detect hung
 00a9ac8 Add native USB CDC executor for connect and LF tune (Slice 1)
 ```
 
@@ -48,8 +48,8 @@ Pm3 / RidesCli / tests
 
 | Context | Default | Override |
 |---------|---------|----------|
-| `Pm3Options` | `Process` | `PM3_EXECUTOR=native` |
-| `RidesCli` | `Native` (`9c6436f`) | `PM3_EXECUTOR=process` |
+| `Pm3Options` | `Native` (Slice 5) | `PM3_EXECUTOR=process` |
+| `RidesCli` / `Pm3Cli` | `Native` | `PM3_EXECUTOR=process` |
 
 ---
 
@@ -212,11 +212,11 @@ Stage A is complete. All items checked for historical reference.
 ### Slice 4: Production Enablement 🔲
 
 - [x] **S4.1** macOS validation — USB CDC as `/dev/cu.usbmodem*` (native detect/read/dump verified 2026-06-17)
-- [ ] **S4.2** Linux validation — USB CDC as `/dev/ttyACM0`
+- [~] **S4.2** Linux validation — **deferred** (no Linux hardware; revisit when `/dev/ttyACM0` available)
 - [x] **S4.3** Native port discovery on Unix without requiring pm3 install (ioreg + sysfs fallback)
-- [ ] **S4.4** Decide global default: keep `Pm3Options` default as `Process`, or switch library default to `Native`
-- [x] **S4.5** Run full native integration suite on macOS hardware (19 pass / 2 skip CLI passthrough)
-- [ ] **S4.6** Merge `pm3-integration` → `master` after validation sign-off
+- [x] **S4.4** Global default: `Pm3Options` and env helper default to `Native` (Slice 5)
+- [x] **S4.5** Run full native integration suite on macOS hardware (19 pass / 2 skip; load test 32 ops)
+- [ ] **S4.6** Merge `pm3-integration` → `master` after validation sign-off (deferred)
 
 #### Native hang fix (2026-06-17)
 
@@ -228,13 +228,26 @@ Stage A is complete. All items checked for historical reference.
 
 **Offline regression:** captured fixture `Pm3UsbApi.Tests/Fixtures/Native/t55-block0-samples.bin` + `Pm3T55NativeOfflineTests` (no device required). Re-capture via `dotnet run --project NativeT55Probe -- --capture`.
 
-#### Optional optimizations (not required for elevator token path)
+#### Optional optimizations — moved to Slices 6–11
 
-- [ ] **S4.7** `CMD_CAPABILITIES` (0x0112)
-- [ ] **S4.8** `CMD_LF_T55XX_RESET_READ` (0x0216) — faster dump alternative
-- [ ] **S4.9** Detect cache: skip 4×2 search when config/downlink/inversion already known
-- [ ] **S4.10** Broader demod support beyond elevator-token ASK/Manchester profile
-- [ ] **S4.11** Evaluate keeping vs. removing debug tooling (`NativeT55Probe/`, `scripts/check-com4.ps1`)
+| Item | Slice | Handoff doc |
+|------|-------|-------------|
+| S4.7 `CMD_CAPABILITIES` | 6 | [pm3-slice-6-capabilities.md](pm3-slice-6-capabilities.md) |
+| S4.8 Dump performance (not RESET_READ) | 10 | [pm3-slice-10-dump-performance.md](pm3-slice-10-dump-performance.md) |
+| S4.9 Detect cache (30s TTL, test-first) | 9 | [pm3-slice-9-detect-cache.md](pm3-slice-9-detect-cache.md) |
+| S4.10 Unsupported modulation detection | 8 | [pm3-slice-8-unsupported-modulation.md](pm3-slice-8-unsupported-modulation.md) |
+| S4.11 Debug tooling → `debug/` | 11 | [pm3-slice-11-debug-relocation.md](pm3-slice-11-debug-relocation.md) |
+| Diagnostic logging (temp files) | 7 | [pm3-slice-7-logging.md](pm3-slice-7-logging.md) |
+
+Broader demod beyond ASK/Manchester: **explicitly skipped**; use process executor fallback (Slice 8).
+
+### Slice 5: Native Default Executor ✅
+
+- [x] **S5.1** `Pm3Options.ExecutorKind` default → `Native`
+- [x] **S5.2** `ReadExecutorKindFromEnvironment()` default → `Native`; `PM3_EXECUTOR=process` overrides
+- [x] **S5.3** `RidesCli` uses shared `Pm3Options.ReadExecutorKindFromEnvironment()`
+- [x] **S5.4** Unit tests: `Pm3OptionsTests`
+- [x] **S5.5** Mark S4.2 deferred, S4.4 done in this plan
 
 ---
 
@@ -260,7 +273,7 @@ Integration tests use blocks **5** and **6** only, with snapshot/restore in fixt
 dotnet test --filter "Category!=Integration&Category!=IntegrationParity"
 ```
 
-**Current result:** 59 passed, 2 skipped (Unix port-discovery tests on Windows).
+**Current result:** 71+ passed (no hardware); integration tests explicit.
 
 ### Integration tests (hardware required)
 
@@ -280,11 +293,16 @@ Parameterized `[TestFixture(Process)]` + `[TestFixture(Native)]`. Native skips o
 
 ## Recommended Next Steps for Handoff Agent
 
-1. Run the full integration suite on connected hardware for **both** executors and confirm native write/dump/sequential tests pass.
-2. Validate on macOS and/or Linux (Slice 4.1–S4.2).
-3. Improve Unix port discovery if pm3 client is not installed (Slice 4.3).
-4. Decide merge timing and whether to change `Pm3Options` default executor (Slice 4.4–S4.6).
-5. Mark completed Slice 4 items `[x]` in this file as you go.
+**Suggested order:**
+
+1. [Slice 11](pm3-slice-11-debug-relocation.md) — debug folder (independent, quick)
+2. [Slice 7](pm3-slice-7-logging.md) — always-on temp logging + unhandled exceptions
+3. [Slice 9](pm3-slice-9-detect-cache.md) — detect cache (30s TTL, test-first)
+4. [Slice 8](pm3-slice-8-unsupported-modulation.md) — unsupported modulation error
+5. [Slice 6](pm3-slice-6-capabilities.md) — capabilities on connect
+6. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
+7. **S4.6** — merge to `master` when ready
+8. **S4.2** — Linux validation when hardware available
 
 ---
 
