@@ -91,21 +91,24 @@ public class Pm3NativeDetectCacheIntegrationTests
         Assert.That(CacheHitCount(), Is.EqualTo(3));
         Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 read -b 5"));
 
-        // 7) Write — invalidates cache
+        // 7) Write — keeps detect cache (writes do not change chip presence/modulation)
         var ridesBlock = TokenBlockUtils.Encode(TokenBlockUtils.Decode(T55Block.FromHex(_snapshotBlock5Hex)));
         await pm3.WritePage0BlockAsync(5, ridesBlock);
         await pm3.WritePage0BlockAsync(6, ridesBlock);
         LogStep("after write");
+        Assert.That(CacheHitCount(), Is.EqualTo(5));
 
-        // 8) Read after write — detect runs again
+        // 8) Read after write — cache hit, read only
         await pm3.ReadPage0BlockAsync(5);
         LogStep("after read post-write");
-        Assert.That(LastCommandBatch(), Does.Contain("lf t55 detect"));
+        Assert.That(CacheHitCount(), Is.EqualTo(6));
+        Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 read -b 5"));
 
         // 9) Explicit invalidate
         await pm3.ReadPage0BlockAsync(5);
         var hitsBeforeInvalidate = CacheHitCount();
         LogStep("after read establishing cache before invalidate");
+        Assert.That(hitsBeforeInvalidate, Is.EqualTo(7));
         Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 read -b 5"));
 
         pm3.InvalidateT55DetectCache();
