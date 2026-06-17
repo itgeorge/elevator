@@ -16,6 +16,7 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
     private readonly int _baudRate;
     private SerialPort? _port;
     private readonly object _lock = new();
+    private readonly List<byte> _receiveBuffer = new(8192);
 
     public Pm3SerialTransport(string portName, int baudRate = 115200)
     {
@@ -52,6 +53,10 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
             _port.Open();
             _port.DiscardInBuffer();
             _port.DiscardOutBuffer();
+            lock (_lock)
+            {
+                _receiveBuffer.Clear();
+            }
         }
     }
 
@@ -71,6 +76,24 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
                 _port.Dispose();
                 _port = null;
             }
+        }
+    }
+
+    public void DiscardPendingInput()
+    {
+        lock (_lock)
+        {
+            if (_port?.IsOpen == true)
+                _port.DiscardInBuffer();
+            _receiveBuffer.Clear();
+        }
+    }
+
+    public void ClearReceiveBuffer()
+    {
+        lock (_lock)
+        {
+            _receiveBuffer.Clear();
         }
     }
 
@@ -96,6 +119,7 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
     public byte[] DownloadBigBuf(uint startIndex, uint byteCount, TimeSpan timeout, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        ClearReceiveBuffer();
         Write(Pm3NgPacketCodec.EncodeMixCommand(Pm3CommandCodes.CmdDownloadBigBuf, startIndex, byteCount, 0));
 
         var dest = new byte[byteCount];
@@ -119,22 +143,32 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
                 continue;
             }
 
+            if (response.Command == Pm3CommandCodes.CmdWtx)
+            {
+                ignoredFrames = 0;
+                if (TryExtendDeadlineForWtx(response, ref deadline))
+                    continue;
+            }
+
             if (response.Command != Pm3CommandCodes.CmdDownloadedBigBuf)
             {
-                if (++ignoredFrames > 8)
+                if (++ignoredFrames > 32)
                     throw new InvalidOperationException($"Unexpected response 0x{response.Command:X4} during BigBuf download.");
                 continue;
             }
 
             ignoredFrames = 0;
             var offset = (uint)response.OldArg[0];
-            var copyBytes = (uint)Math.Min(response.OldArg[1], byteCount - offset);
+            var copyBytes = (uint)Math.Min(response.OldArg[1], byteCount - bytesCompleted);
             copyBytes = Math.Min(copyBytes, Pm3CommandCodes.MaxDataSize);
             if (copyBytes == 0)
                 throw new InvalidOperationException("BigBuf download chunk length was zero.");
 
+            if (offset + copyBytes > byteCount)
+                throw new InvalidOperationException($"BigBuf download chunk out of range at offset {offset}.");
+
             response.Data.AsSpan(0, (int)copyBytes).CopyTo(dest.AsSpan((int)offset));
-            bytesCompleted = Math.Max(bytesCompleted, offset + copyBytes);
+            bytesCompleted += copyBytes;
         }
 
         DrainDownloadAck(TimeSpan.FromMilliseconds(250), ct);
@@ -151,6 +185,11 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
             var response = Pm3NgPacketCodec.DecodeAnyResponse(ReadResponseFrame(TimeSpan.FromMilliseconds(remaining), ct));
             if (response.Command == expectedCommand)
                 return response;
+
+            if (response.Command == Pm3CommandCodes.CmdWtx)
+            {
+                TryExtendDeadlineForWtx(response, ref deadline);
+            }
         }
 
         throw new TimeoutException($"Timed out waiting for response command 0x{expectedCommand:X4}.");
@@ -214,13 +253,19 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
     private byte[] ReadResponseFrame(TimeSpan timeout, CancellationToken ct)
     {
         var deadline = Environment.TickCount64 + (long)timeout.TotalMilliseconds;
-        var buffer = new List<byte>(4096);
 
         while (Environment.TickCount64 < deadline)
         {
             ct.ThrowIfCancellationRequested();
-            if (buffer.Count > MaxReceiveBufferBytes)
-                throw new InvalidOperationException("Proxmark3 receive buffer grew too large while parsing frames.");
+
+            lock (_lock)
+            {
+                if (_receiveBuffer.Count > MaxReceiveBufferBytes)
+                    throw new InvalidOperationException("Proxmark3 receive buffer grew too large while parsing frames.");
+
+                if (TryExtractResponseFrame(_receiveBuffer, out var frame))
+                    return frame;
+            }
 
             var chunk = ReadAvailable(Math.Max(1, (int)(deadline - Environment.TickCount64)));
             if (chunk.Length == 0)
@@ -229,9 +274,10 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
                 continue;
             }
 
-            buffer.AddRange(chunk);
-            if (TryExtractResponseFrame(buffer, out var frame))
-                return frame;
+            lock (_lock)
+            {
+                _receiveBuffer.AddRange(chunk);
+            }
         }
 
         throw new TimeoutException("Timed out waiting for Proxmark3 response frame.");
@@ -265,7 +311,20 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
         }
     }
 
-    private static bool TryExtractResponseFrame(List<byte> buffer, out byte[] frame)
+    private static bool TryExtendDeadlineForWtx(Pm3ResponseFrame response, ref long deadline)
+    {
+        if (response.Data.Length < sizeof(ushort))
+            return false;
+
+        var wtxMs = BitConverter.ToUInt16(response.Data, 0) & 0xFFFF;
+        if (wtxMs == 0)
+            return false;
+
+        deadline += wtxMs;
+        return true;
+    }
+
+    internal static bool TryExtractResponseFrame(List<byte> buffer, out byte[] frame)
     {
         frame = [];
         if (buffer.Count < 10)

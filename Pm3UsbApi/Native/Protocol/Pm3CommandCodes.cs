@@ -7,6 +7,7 @@ internal static class Pm3CommandCodes
 {
     public const ushort CmdAck = 0x00FF;
     public const ushort CmdWtx = 0x0116;
+    public const ushort CmdNack = 0x00FE;
     public const ushort CmdVersion = 0x0107;
     public const ushort CmdPing = 0x0109;
     public const ushort CmdMeasureAntennaTuningLf = 0x0402;

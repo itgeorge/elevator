@@ -17,6 +17,7 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
     private Pm3SerialTransport? _transport;
     private string? _connectedPort;
     private bool _disposed;
+    private bool _lfTuneRecentlyActive;
 
     public Pm3NativeExecutor(Pm3Options options)
     {
@@ -36,6 +37,7 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
 
         var effectiveTimeout = timeout ?? _options.DefaultCommandTimeout;
         await EnsureTransportAsync(portOverride, effectiveTimeout, ct).ConfigureAwait(false);
+        PrepareForT55Operation();
 
         if (commands.Count == 1)
         {
@@ -121,6 +123,27 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
             HasErrors = hasErrors,
             ErrorSummary = hasErrors ? "One or more native T55 commands failed." : null,
         };
+    }
+
+    private void PrepareForT55Operation()
+    {
+        _transport?.DiscardPendingInput();
+        if (_lfTuneRecentlyActive)
+        {
+            WaitForRfSettle(CancellationToken.None);
+            _transport?.DiscardPendingInput();
+            _lfTuneRecentlyActive = false;
+        }
+    }
+
+    private static void WaitForRfSettle(CancellationToken ct)
+    {
+        var deadline = Environment.TickCount64 + 250;
+        while (Environment.TickCount64 < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            Thread.Sleep(10);
+        }
     }
 
     private CommandResult ExecuteT55Detect(IReadOnlyList<IPm3DeviceCommand> commands, CancellationToken ct)
@@ -294,6 +317,11 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         catch
         {
             // Best effort shutdown, same as client on abort.
+        }
+        finally
+        {
+            _lfTuneRecentlyActive = true;
+            _transport?.DiscardPendingInput();
         }
 
         if (peak == 0)

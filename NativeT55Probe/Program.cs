@@ -1,8 +1,24 @@
+using System.Buffers.Binary;
+using System.Diagnostics;
 using Pm3UsbApi;
 using Pm3UsbApi.Native.Demod;
 using Pm3UsbApi.Native.Protocol;
 using Pm3UsbApi.Native.T55;
 using Pm3UsbApi.Native.Transport;
+
+using NativeT55Probe;
+
+if (args.Contains("--capture"))
+{
+    await CaptureMain.RunAsync(args);
+    return;
+}
+
+if (args.Contains("--load-test"))
+{
+    await LoadTestMain.RunAsync(args);
+    return;
+}
 
 var options = new Pm3Options { DevicePort = null, AutoConnect = true };
 var port = await DiscoverPortAsync(options) ?? throw new InvalidOperationException("No port");
@@ -17,8 +33,8 @@ try
     Span<byte> payload = stackalloc byte[8];
     transport.SendCommandAndWait(
         Pm3CommandCodes.CmdLfT55XxReadBl, payload, Pm3CommandCodes.CmdLfT55XxReadBl,
-        TimeSpan.FromSeconds(2), CancellationToken.None);
-    var raw = transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, TimeSpan.FromSeconds(4), CancellationToken.None);
+        TimeSpan.FromSeconds(12), CancellationToken.None);
+    var raw = transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, TimeSpan.FromSeconds(12), CancellationToken.None);
     Log($"samples={raw.Length} ({sw.ElapsedMilliseconds}ms)");
 
     var graph = new Pm3GraphState();
@@ -30,18 +46,6 @@ try
     Log($"signal noise={signal.IsNoise} amp={signal.Amplitude}");
 
     var work = demodBytes;
-    Log("synth man test");
-    {
-        var synth = new byte[12000];
-        for (var i = 0; i < 400; i++)
-            synth[i] = (byte)(i % 2);
-        var synthSize = 400;
-        var align = (byte)0;
-        sw.Restart();
-        var synthErr = Pm3LfDemod.ManRawDecode(synth, ref synthSize, 0, ref align);
-        Log($"synth man err={synthErr} bits={synthSize} ({sw.ElapsedMilliseconds}ms)");
-    }
-
     foreach (var invert in new[] { 0, 1 })
     {
         var sample = (byte[])work.Clone();

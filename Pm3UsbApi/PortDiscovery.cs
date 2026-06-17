@@ -1,29 +1,42 @@
 using System.Diagnostics;
+using System.IO.Ports;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace Pm3UsbApi;
 
 /// <summary>
-/// Discovers Proxmark3 ports. On Windows uses the same WMI/PowerShell logic as the pm3 script
-/// (VID_9AC4&PID_4B8F, VID_2D2D&PID_504D). On Linux/macOS runs the pm3 --list script.
+/// Discovers Proxmark3 ports. On Windows uses WMI/PowerShell VID/PID matching.
+/// On Unix prefers the pm3 --list script when installed, otherwise uses native USB serial
+/// enumeration (ioreg on macOS, sysfs on Linux) with a SerialPort name fallback.
 /// </summary>
 public static class PortDiscovery
 {
     private static readonly Regex ListLineRegex = new(@"^\s*\d+\s*:\s*(.+)$", RegexOptions.Compiled);
+
+    private static readonly string[] ExcludedUnixPortNames =
+    [
+        "debug-console",
+        "Bluetooth-Incoming-Port",
+    ];
 
     /// <summary>
     /// Returns discovered Proxmark3 ports. Returns empty if none found.
     /// </summary>
     /// <param name="pm3ClientPath">Path to proxmark3.exe; used to locate pm3 script on Unix.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>List of port strings (e.g. COM3, /dev/ttyACM0).</returns>
+    /// <returns>List of port strings (e.g. COM3, /dev/cu.usbmodem1201).</returns>
     public static async Task<IReadOnlyList<string>> ListPortsAsync(string? pm3ClientPath, CancellationToken ct = default)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return await ListPortsWindowsAsync(ct).ConfigureAwait(false);
 
-        return await ListPortsViaPm3ScriptAsync(pm3ClientPath, ct).ConfigureAwait(false);
+        var scriptPorts = await ListPortsViaPm3ScriptAsync(pm3ClientPath, ct).ConfigureAwait(false);
+        if (scriptPorts.Count > 0)
+            return NormalizeUnixPorts(scriptPorts);
+
+        var nativePorts = await ListPortsUnixNativeAsync(ct).ConfigureAwait(false);
+        return NormalizeUnixPorts(nativePorts);
     }
 
     /// <summary>
@@ -84,6 +97,173 @@ public static class PortDiscovery
         {
             return [];
         }
+    }
+
+    private static async Task<IReadOnlyList<string>> ListPortsUnixNativeAsync(CancellationToken ct)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            var macPorts = await ListPortsMacOsNativeAsync(ct).ConfigureAwait(false);
+            if (macPorts.Count > 0)
+                return macPorts;
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            var linuxPorts = ListPortsLinuxNative();
+            if (linuxPorts.Count > 0)
+                return linuxPorts;
+        }
+
+        return ListPortsSerialPortFallback();
+    }
+
+    private static async Task<IReadOnlyList<string>> ListPortsMacOsNativeAsync(CancellationToken ct)
+    {
+        const string script = """
+            ioreg -r -c "IOUSBHostDevice" -l | awk -F '"' '
+            $2=="USB Vendor Name"{b=($4=="proxmark.org")}
+            b==1 && $2=="IODialinDevice"{print $4}'
+            """;
+
+        try
+        {
+            var output = await RunShellCommandAsync("/bin/bash", ["-c", script], TimeSpan.FromSeconds(10), ct)
+                .ConfigureAwait(false);
+            return ParseLineOutput(output);
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<string> ListPortsLinuxNative()
+    {
+        var ports = new List<string>();
+        if (!Directory.Exists("/dev"))
+            return ports;
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries("/dev"))
+        {
+            var name = Path.GetFileName(entry);
+            if (name is null || (!name.StartsWith("ttyACM", StringComparison.Ordinal) && !name.StartsWith("ttyUSB", StringComparison.Ordinal)))
+                continue;
+
+            var devicePath = entry.StartsWith("/dev/", StringComparison.Ordinal) ? entry : Path.Combine("/dev", name);
+            if (IsProxmarkLinuxDevice(devicePath))
+                ports.Add(devicePath);
+        }
+
+        return ports;
+    }
+
+    private static bool IsProxmarkLinuxDevice(string devicePath)
+    {
+        var ttyName = Path.GetFileName(devicePath);
+        if (string.IsNullOrEmpty(ttyName))
+            return false;
+
+        var manufacturerPath = Path.Combine("/sys/class/tty", ttyName, "device", "..", "..", "..", "manufacturer");
+        try
+        {
+            manufacturerPath = Path.GetFullPath(manufacturerPath);
+            if (!File.Exists(manufacturerPath))
+                return false;
+
+            var manufacturer = File.ReadAllText(manufacturerPath).Trim();
+            return manufacturer.Contains("proxmark.org", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static IReadOnlyList<string> ListPortsSerialPortFallback()
+    {
+        return SerialPort.GetPortNames()
+            .Select(NormalizePortPath)
+            .Where(IsLikelyProxmarkSerialName)
+            .Where(port => !IsExcludedUnixPort(port))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(port => port, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    internal static IReadOnlyList<string> NormalizeUnixPorts(IReadOnlyList<string> ports)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var port in ports)
+        {
+            if (string.IsNullOrWhiteSpace(port) || IsExcludedUnixPort(port))
+                continue;
+
+            var normalized = PreferCalloutDevice(NormalizePortPath(port.Trim()));
+            var dedupeKey = ToUnixPortDedupeKey(normalized);
+            if (seen.Add(dedupeKey))
+                result.Add(normalized);
+        }
+
+        return result;
+    }
+
+    internal static string PreferCalloutDevice(string port)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return port;
+
+        const string ttyPrefix = "/dev/tty.";
+        if (!port.StartsWith(ttyPrefix, StringComparison.Ordinal))
+            return port;
+
+        var cuPort = "/dev/cu." + port[ttyPrefix.Length..];
+        return File.Exists(cuPort) ? cuPort : port;
+    }
+
+    internal static bool IsLikelyProxmarkSerialName(string port)
+    {
+        var name = Path.GetFileName(port);
+        if (string.IsNullOrEmpty(name))
+            return false;
+
+        return name.Contains("usbmodem", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("ttyACM", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("cu.usbmodem", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("ttyUSB", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsExcludedUnixPort(string port)
+    {
+        var name = Path.GetFileName(port);
+        if (string.IsNullOrEmpty(name))
+            return false;
+
+        foreach (var excluded in ExcludedUnixPortNames)
+        {
+            if (name.Equals(excluded, StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("." + excluded, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizePortPath(string port)
+    {
+        if (!port.StartsWith('/'))
+            return port;
+
+        return port.StartsWith("/dev/", StringComparison.Ordinal) ? port : "/dev/" + port.TrimStart('/');
+    }
+
+    private static string ToUnixPortDedupeKey(string port)
+    {
+        var name = Path.GetFileName(port) ?? port;
+        if (name.StartsWith("cu.", StringComparison.Ordinal))
+            return "tty." + name["cu.".Length..];
+        return name;
     }
 
     private static string? FindPowerShell()
@@ -201,26 +381,38 @@ public static class PortDiscovery
 
     private static async Task<string> RunPm3ListAsync(string scriptPath, string shell, CancellationToken ct)
     {
+        return await RunShellCommandAsync(shell, [scriptPath, "--list"], TimeSpan.FromSeconds(10), ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<string> RunShellCommandAsync(
+        string shell,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
         var startInfo = new ProcessStartInfo
         {
             FileName = shell,
-            ArgumentList = { scriptPath, "--list" },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
-        var workDir = Path.GetDirectoryName(scriptPath);
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        var workDir = arguments.Count > 0 ? Path.GetDirectoryName(arguments[0]) : null;
         if (!string.IsNullOrEmpty(workDir) && Directory.Exists(workDir))
             startInfo.WorkingDirectory = workDir;
 
         using var process = Process.Start(startInfo);
         if (process is null)
-            throw new InvalidOperationException("Failed to start pm3 process.");
+            throw new InvalidOperationException($"Failed to start shell command: {shell}");
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(10));
+        cts.CancelAfter(timeout);
 
         var output = await process.StandardOutput.ReadToEndAsync(cts.Token).ConfigureAwait(false);
         await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
@@ -228,12 +420,25 @@ public static class PortDiscovery
         return output;
     }
 
-    private static IReadOnlyList<string> ParseListOutput(string output)
+    private static IReadOnlyList<string> ParseListOutput(string output) =>
+        ParseLineOutput(output, ListLineRegex);
+
+    internal static IReadOnlyList<string> ParseLineOutput(string output, Regex? lineRegex = null)
     {
         var ports = new List<string>();
         foreach (var line in output.Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries))
         {
-            var match = ListLineRegex.Match(line);
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                continue;
+
+            if (lineRegex is null)
+            {
+                ports.Add(trimmed);
+                continue;
+            }
+
+            var match = lineRegex.Match(trimmed);
             if (match.Success)
             {
                 var port = match.Groups[1].Value.Trim();
@@ -241,6 +446,7 @@ public static class PortDiscovery
                     ports.Add(port);
             }
         }
+
         return ports;
     }
 }

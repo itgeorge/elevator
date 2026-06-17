@@ -14,7 +14,7 @@
 | **Slice 1** | Native connect, ping, hw version, LF tune | ✅ Complete (`00a9ac8`) |
 | **Slice 2** | Native T55 detect + read, demod, integration tests | ✅ Complete (`828ae8d`, `8f2ef38`) |
 | **Slice 3** | Native T55 write + dump | ✅ Complete (`52392ba`) |
-| **Slice 4** | Production enablement, cross-platform validation | 🔲 In progress |
+| **Slice 4** | Production enablement, cross-platform validation | 🔲 In progress (macOS native read/detect validated) |
 
 **Recent commits on `pm3-integration`:**
 
@@ -211,13 +211,22 @@ Stage A is complete. All items checked for historical reference.
 
 ### Slice 4: Production Enablement 🔲
 
-- [ ] **S4.1** macOS validation — USB CDC as `/dev/cu.usbmodem*`
+- [x] **S4.1** macOS validation — USB CDC as `/dev/cu.usbmodem*` (native detect/read/dump verified 2026-06-17)
 - [ ] **S4.2** Linux validation — USB CDC as `/dev/ttyACM0`
-- [ ] **S4.3** Native port discovery on Unix without requiring pm3 install
-  - Today: `PortDiscovery` uses pm3 `--list` script on Unix; native executor pings candidates
+- [x] **S4.3** Native port discovery on Unix without requiring pm3 install (ioreg + sysfs fallback)
 - [ ] **S4.4** Decide global default: keep `Pm3Options` default as `Process`, or switch library default to `Native`
-- [ ] **S4.5** Run full native integration suite on non-Windows hardware and record results
+- [x] **S4.5** Run full native integration suite on macOS hardware (19 pass / 2 skip CLI passthrough)
 - [ ] **S4.6** Merge `pm3-integration` → `master` after validation sign-off
+
+#### Native hang fix (2026-06-17)
+
+**Symptom:** RidesCli `read` hung after `signal strength` (post-tune). Native `DownloadBigBuf` timed out after successful `CMD_LF_T55XX_READBL`.
+
+**Root cause:** `Pm3SerialTransport.ReadResponseFrame` used a fresh buffer per call and discarded trailing bytes when multiple PM3 OLD/NG frames arrived in one serial read. BigBuf download sends many back-to-back `CMD_DOWNLOADED_BIGBUF` (544-byte OLD) frames; losing tail bytes desynced the stream.
+
+**Fix:** Persistent `_receiveBuffer` across reads; `ClearReceiveBuffer()` before download (mirrors proxmark3 `clearCommandBuffer`); WTX handling; post-LF-tune RF settle.
+
+**Offline regression:** captured fixture `Pm3UsbApi.Tests/Fixtures/Native/t55-block0-samples.bin` + `Pm3T55NativeOfflineTests` (no device required). Re-capture via `dotnet run --project NativeT55Probe -- --capture`.
 
 #### Optional optimizations (not required for elevator token path)
 

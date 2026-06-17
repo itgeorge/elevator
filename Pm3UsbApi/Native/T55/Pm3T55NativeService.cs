@@ -10,11 +10,13 @@ namespace Pm3UsbApi.Native.T55;
 /// </summary>
 internal sealed class Pm3T55NativeService
 {
-    private static readonly TimeSpan ReadCommandTimeout = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan WriteCommandTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ReadCommandTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan WriteCommandTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan WriteSettleDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan RfSettleDelay = TimeSpan.FromMilliseconds(150);
     private const int WriteMaxAttempts = 3;
-    private static readonly TimeSpan DownloadTimeout = TimeSpan.FromSeconds(4);
+    private const int AcquireMaxAttempts = 2;
+    private static readonly TimeSpan DownloadTimeout = TimeSpan.FromSeconds(8);
 
     private readonly Pm3SerialTransport _transport;
     private readonly Pm3GraphState _graph = new();
@@ -28,11 +30,16 @@ internal sealed class Pm3T55NativeService
 
     public bool Detect(Pm3T55Config config, CancellationToken ct)
     {
+        config.Detected = false;
+
         foreach (var downlinkMode in new byte[] { 0, 1, 2, 3 })
         {
             ct.ThrowIfCancellationRequested();
             if (!AcquireData(block: 0, page1: false, usePassword: false, password: 0, downlinkMode, ct))
+            {
+                WaitForRfSettle(ct);
                 continue;
+            }
 
             foreach (var invert in new[] { false, true })
             {
@@ -54,6 +61,8 @@ internal sealed class Pm3T55NativeService
                     candidate.Clock);
                 return true;
             }
+
+            WaitForRfSettle(ct);
         }
 
         return false;
@@ -210,32 +219,62 @@ internal sealed class Pm3T55NativeService
         payload[6] = (byte)(usePassword ? 1 : 0);
         payload[7] = downlinkMode;
 
-        var response = _transport.SendCommandAndWait(
-            Pm3CommandCodes.CmdLfT55XxReadBl,
-            payload,
-            Pm3CommandCodes.CmdLfT55XxReadBl,
-            ReadCommandTimeout,
-            ct);
-
-        if (response.Status != Pm3CommandCodes.Pm3Success)
-            return false;
-
-        byte[] raw;
-        try
+        for (var attempt = 0; attempt < AcquireMaxAttempts; attempt++)
         {
-            raw = _transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, DownloadTimeout, ct);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-        _graph.LoadSamples(raw);
-        var sampleLen = _graph.CopyToByteSamples(_sampleScratch);
-        _graph.Signal.Compute(_sampleScratch.AsSpan(0, sampleLen));
-        if (_graph.Signal.IsNoise)
-            return false;
+            ct.ThrowIfCancellationRequested();
+            if (attempt > 0)
+                WaitForRfSettle(ct);
 
-        return true;
+            _transport.DiscardPendingInput();
+
+            Pm3ResponseFrame response;
+            try
+            {
+                response = _transport.SendCommandAndWait(
+                    Pm3CommandCodes.CmdLfT55XxReadBl,
+                    payload,
+                    Pm3CommandCodes.CmdLfT55XxReadBl,
+                    ReadCommandTimeout,
+                    ct);
+            }
+            catch (TimeoutException)
+            {
+                continue;
+            }
+
+            if (response.Status != Pm3CommandCodes.Pm3Success)
+                continue;
+
+            byte[] raw;
+            try
+            {
+                raw = _transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, DownloadTimeout, ct);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            _graph.LoadSamples(raw);
+            var sampleLen = _graph.CopyToByteSamples(_sampleScratch);
+            _graph.Signal.Compute(_sampleScratch.AsSpan(0, sampleLen));
+            if (_graph.Signal.IsNoise)
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void WaitForRfSettle(CancellationToken ct)
+    {
+        var deadline = Environment.TickCount64 + (long)RfSettleDelay.TotalMilliseconds;
+        while (Environment.TickCount64 < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            Thread.Sleep(Math.Min(10, Math.Max(1, (int)(deadline - Environment.TickCount64))));
+        }
     }
 
     private bool TryAskDetect(bool invert, byte downlinkMode, out DetectCandidate candidate)
