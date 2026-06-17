@@ -14,16 +14,18 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
 
     private readonly string _portName;
     private readonly int _baudRate;
+    private readonly Action<string>? _nativeTrace;
     private SerialPort? _port;
     private readonly object _lock = new();
     private readonly List<byte> _receiveBuffer = new(8192);
 
-    public Pm3SerialTransport(string portName, int baudRate = 115200)
+    public Pm3SerialTransport(string portName, int baudRate = 115200, Action<string>? nativeTrace = null)
     {
         if (string.IsNullOrWhiteSpace(portName))
             throw new ArgumentException("Port name is required.", nameof(portName));
         _portName = portName.Trim();
         _baudRate = baudRate;
+        _nativeTrace = nativeTrace;
     }
 
     public bool IsOpen
@@ -100,8 +102,11 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
     public Pm3ResponseFrame SendCommand(ushort command, ReadOnlySpan<byte> payload, TimeSpan timeout, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        Trace($"send cmd=0x{command:X4} payload={payload.Length}B");
         Write(Pm3NgPacketCodec.EncodeCommand(command, payload));
-        return Pm3NgPacketCodec.DecodeAnyResponse(ReadResponseFrame(timeout, ct));
+        var response = Pm3NgPacketCodec.DecodeAnyResponse(ReadResponseFrame(timeout, ct));
+        Trace($"recv cmd=0x{response.Command:X4} status={response.Status} reason={response.Reason}");
+        return response;
     }
 
     public Pm3ResponseFrame SendCommandAndWait(
@@ -112,13 +117,17 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        Trace($"send cmd=0x{command:X4} wait=0x{expectedResponseCommand:X4} payload={payload.Length}B");
         Write(Pm3NgPacketCodec.EncodeCommand(command, payload));
-        return WaitForResponse(expectedResponseCommand, timeout, ct);
+        var response = WaitForResponse(expectedResponseCommand, timeout, ct);
+        Trace($"recv cmd=0x{response.Command:X4} status={response.Status} reason={response.Reason}");
+        return response;
     }
 
     public byte[] DownloadBigBuf(uint startIndex, uint byteCount, TimeSpan timeout, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        Trace($"download bigbuf start={startIndex} count={byteCount}");
         ClearReceiveBuffer();
         Write(Pm3NgPacketCodec.EncodeMixCommand(Pm3CommandCodes.CmdDownloadBigBuf, startIndex, byteCount, 0));
 
@@ -131,7 +140,10 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
         {
             ct.ThrowIfCancellationRequested();
             if (Environment.TickCount64 >= deadline)
+            {
+                Trace($"download bigbuf timeout {bytesCompleted}/{byteCount}");
                 throw new TimeoutException($"Timed out downloading BigBuf ({bytesCompleted}/{byteCount} bytes).");
+            }
 
             var remaining = Math.Max(1, (int)(deadline - Environment.TickCount64));
             var response = Pm3NgPacketCodec.DecodeAnyResponse(ReadResponseFrame(TimeSpan.FromMilliseconds(remaining), ct));
@@ -172,6 +184,7 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
         }
 
         DrainDownloadAck(TimeSpan.FromMilliseconds(250), ct);
+        Trace($"download bigbuf complete bytes={byteCount}");
         return dest;
     }
 
@@ -360,4 +373,6 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
         Close();
         return ValueTask.CompletedTask;
     }
+
+    private void Trace(string message) => _nativeTrace?.Invoke(message);
 }

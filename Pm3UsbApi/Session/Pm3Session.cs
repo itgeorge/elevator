@@ -1,6 +1,8 @@
 using Pm3UsbApi.Commands;
+using Pm3UsbApi.Diagnostics;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Parsers;
+using System.Diagnostics;
 
 namespace Pm3UsbApi.Session;
 
@@ -27,6 +29,7 @@ public sealed class Pm3Session : IAsyncDisposable
     {
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        Pm3DiagnosticLog.EnsureInitialized();
     }
 
     /// <summary>
@@ -38,55 +41,67 @@ public sealed class Pm3Session : IAsyncDisposable
     public async Task ConnectAsync(CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var log = Pm3DiagnosticLog.Current;
 
-        string? portOverride = null;
-
-        if (string.IsNullOrWhiteSpace(_options.DevicePort))
+        try
         {
-            if (!_options.AutoConnect)
+            string? portOverride = null;
+
+            if (string.IsNullOrWhiteSpace(_options.DevicePort))
             {
-                throw new Pm3ConnectionException(
-                    "DevicePort must be set when autoConnect is false. Use Pm3Options.DevicePort or config to set the port. " +
-                    "Run 'pm3 --list' (or use PortDiscovery.ListPortsAsync) to discover available ports.");
+                if (!_options.AutoConnect)
+                {
+                    throw new Pm3ConnectionException(
+                        "DevicePort must be set when autoConnect is false. Use Pm3Options.DevicePort or config to set the port. " +
+                        "Run 'pm3 --list' (or use PortDiscovery.ListPortsAsync) to discover available ports.");
+                }
+
+                portOverride = await PortDiscovery.DiscoverFirstPortAsync(_options.Pm3ClientPath, ct).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(portOverride))
+                {
+                    throw new Pm3ConnectionException(
+                        "No Proxmark3 device found. Connect the device via USB and ensure no other process is using it. " +
+                        "Run 'pm3 --list' to verify detection.");
+                }
+                _discoveredPort = portOverride;
             }
 
-            portOverride = await PortDiscovery.DiscoverFirstPortAsync(_options.Pm3ClientPath, ct).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(portOverride))
+            log.WriteSession($"connect start executor={_options.ExecutorKind} port={portOverride ?? _options.DevicePort ?? "auto"}");
+
+            var result = await ExecuteAsync(
+                [new HwVersionCommand()],
+                _options.ConnectTimeout,
+                ct,
+                portOverride).ConfigureAwait(false);
+
+            if (OutputParser.DetectOfflineMode(result.OutputLines))
             {
                 throw new Pm3ConnectionException(
-                    "No Proxmark3 device found. Connect the device via USB and ensure no other process is using it. " +
-                    "Run 'pm3 --list' to verify detection.");
+                    "Proxmark3 is in offline mode. Connect the device via USB and ensure no other process is using it.",
+                    result);
             }
-            _discoveredPort = portOverride;
+
+            var hasDeviceResponse = result.RawOutput.Contains("Proxmark3", StringComparison.OrdinalIgnoreCase)
+                && (result.RawOutput.Contains("RDV4") || result.RawOutput.Contains("Device") || result.RawOutput.Contains("Bootrom") || result.RawOutput.Contains("AT91SAM"));
+
+            if (!hasDeviceResponse && (result.HasErrors || result.ExitCode != 0))
+            {
+                throw new Pm3ConnectionException(
+                    $"Failed to connect to Proxmark3. {result.ErrorSummary ?? "Unknown error"}",
+                    result);
+            }
+
+            lock (_lock)
+            {
+                _connected = true;
+            }
+
+            log.WriteSession($"connect ok port={portOverride ?? _options.DevicePort ?? _discoveredPort}");
         }
-
-        var result = await ExecuteAsync(
-            [new HwVersionCommand()],
-            _options.ConnectTimeout,
-            ct,
-            portOverride).ConfigureAwait(false);
-
-        if (OutputParser.DetectOfflineMode(result.OutputLines))
+        catch (Exception ex)
         {
-            throw new Pm3ConnectionException(
-                "Proxmark3 is in offline mode. Connect the device via USB and ensure no other process is using it.",
-                result);
-        }
-
-        // Consider connected if we got a device response, even with firmware-mismatch warnings ([!])
-        var hasDeviceResponse = result.RawOutput.Contains("Proxmark3", StringComparison.OrdinalIgnoreCase)
-            && (result.RawOutput.Contains("RDV4") || result.RawOutput.Contains("Device") || result.RawOutput.Contains("Bootrom") || result.RawOutput.Contains("AT91SAM"));
-
-        if (!hasDeviceResponse && (result.HasErrors || result.ExitCode != 0))
-        {
-            throw new Pm3ConnectionException(
-                $"Failed to connect to Proxmark3. {result.ErrorSummary ?? "Unknown error"}",
-                result);
-        }
-
-        lock (_lock)
-        {
-            _connected = true;
+            log.WriteError("connect failed", ex);
+            throw;
         }
     }
 
@@ -104,6 +119,7 @@ public sealed class Pm3Session : IAsyncDisposable
         }
 
         CloseTranscript();
+        Pm3DiagnosticLog.Current.WriteSession("disconnect");
 
         await _executor.DisposeAsync().ConfigureAwait(false);
 
@@ -173,21 +189,38 @@ public sealed class Pm3Session : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         CommandBatchValidator.Validate(commands);
-        LogTranscript($">>> {Pm3CliFormatter.FormatBatch(commands)}");
+        var batch = Pm3CliFormatter.FormatBatch(commands);
+        LogTranscript($">>> {batch}");
+        Pm3DiagnosticLog.Current.WriteSession($">>> {batch}");
 
         var port = portOverride ?? _options.DevicePort ?? _discoveredPort;
-        var result = await _executor.ExecuteAsync(
-            commands,
-            timeout ?? _options.DefaultCommandTimeout,
-            ct,
-            port).ConfigureAwait(false);
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await _executor.ExecuteAsync(
+                commands,
+                timeout ?? _options.DefaultCommandTimeout,
+                ct,
+                port).ConfigureAwait(false);
 
-        LogTranscript("<<< " + result.RawOutput);
+            LogTranscript("<<< " + result.RawOutput);
+            var summary = result.HasErrors
+                ? $"<<< FAIL exit={result.ExitCode} {result.ErrorSummary}"
+                : $"<<< OK exit={result.ExitCode}";
+            Pm3DiagnosticLog.Current.WriteSession($"{summary} ({sw.ElapsedMilliseconds}ms)");
+            if (result.HasErrors)
+                Pm3DiagnosticLog.Current.WriteError($"command batch failed: {batch} — {result.ErrorSummary}");
 
-        if (commands.Any(c => c is T55DetectCommand))
-            _lastDetectTime = DateTime.UtcNow; // For future interactive-mode cache optimization
+            if (commands.Any(c => c is T55DetectCommand))
+                _lastDetectTime = DateTime.UtcNow;
 
-        return result;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Pm3DiagnosticLog.Current.WriteError($"command batch exception: {batch} ({sw.ElapsedMilliseconds}ms)", ex);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -240,4 +273,4 @@ public sealed class Pm3Session : IAsyncDisposable
         }
     }
 }
-
+

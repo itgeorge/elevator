@@ -6,10 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Pm3UsbApi\Pm3UsbApi.csproj" />
-    <ProjectReference Include="..\Tokens\Tokens.csproj" />
+    <ProjectReference Include="..\..\Pm3UsbApi\Pm3UsbApi.csproj" />
+    <ProjectReference Include="..\..\Tokens\Tokens.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\Pm3UsbApi.Tests\Integration\NativeRideLoadTestRunner.cs" Link="Integration\NativeRideLoadTestRunner.cs" />
+    <Compile Include="..\..\Pm3UsbApi.Tests\Integration\NativeRideLoadTestRunner.cs" Link="Integration\NativeRideLoadTestRunner.cs" />
   </ItemGroup>
 </Project>

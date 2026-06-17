@@ -1,10 +1,28 @@
 using Pm3UsbApi;
+using Pm3UsbApi.Diagnostics;
 
 namespace RidesCli;
 
 class RidesCliProgram
 {
     static async Task<int> Main(string[] args)
+    {
+        Pm3DiagnosticLog.EnsureInitialized();
+        Console.WriteLine($"PM3 logs: {Pm3DiagnosticLog.Current.BaseDirectory}");
+        try
+        {
+            return await RunAsync(args);
+        }
+        catch (Exception ex)
+        {
+            Pm3DiagnosticLog.LogFatal(ex, "RidesCli");
+            Console.WriteLine($"Fatal error: {ex.Message}");
+            Console.WriteLine($"Details written to: {Pm3DiagnosticLog.Current.ErrorsLogPath}");
+            return 1;
+        }
+    }
+
+    static async Task<int> RunAsync(string[] args)
     {
         var config = new RidesConfig();
         var options = ParsePm3Options(args);

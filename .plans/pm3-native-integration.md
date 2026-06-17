@@ -16,7 +16,9 @@
 | **Slice 3** | Native T55 write + dump | ✅ Complete (`52392ba`) |
 | **Slice 4** | Production enablement, cross-platform validation | 🔲 Mostly done (see below) |
 | **Slice 5** | Native default executor | ✅ Complete |
-| **Slices 6–11** | Capabilities, logging, cache, perf, debug layout | 🔲 Planned — see handoff docs |
+| **Slice 7** | Diagnostic logging (temp files) | ✅ Complete |
+| **Slice 11** | Debug tooling → `debug/` | ✅ Complete |
+| **Slices 6, 8–10** | Capabilities, cache, perf, modulation | 🔲 Planned — see handoff docs |
 
 **Recent commits on `pm3-integration`:**
 
@@ -84,7 +86,8 @@ Native read/write scope is intentionally narrow: elevator T55x7 tokens, ASK/Manc
 | Synthetic CLI output | `Pm3UsbApi/Native/Pm3NativeOutputBuilder.cs` |
 | Typed commands | `Pm3UsbApi/Commands/` |
 | Integration tests | `Pm3UsbApi.Tests/Integration/Pm3IntegrationTests.cs` |
-| Debug probe | `NativeT55Probe/Program.cs` |
+| Debug probe | `debug/NativeT55Probe/Program.cs` |
+| Diagnostic logs | `Pm3UsbApi/Diagnostics/Pm3DiagnosticLog.cs` |
 
 ---
 
@@ -226,7 +229,7 @@ Stage A is complete. All items checked for historical reference.
 
 **Fix:** Persistent `_receiveBuffer` across reads; `ClearReceiveBuffer()` before download (mirrors proxmark3 `clearCommandBuffer`); WTX handling; post-LF-tune RF settle.
 
-**Offline regression:** captured fixture `Pm3UsbApi.Tests/Fixtures/Native/t55-block0-samples.bin` + `Pm3T55NativeOfflineTests` (no device required). Re-capture via `dotnet run --project NativeT55Probe -- --capture`.
+**Offline regression:** captured fixture `Pm3UsbApi.Tests/Fixtures/Native/t55-block0-samples.bin` + `Pm3T55NativeOfflineTests` (no device required). Re-capture via `dotnet run --project debug/NativeT55Probe -- --capture`.
 
 #### Optional optimizations — moved to Slices 6–11
 
@@ -236,8 +239,8 @@ Stage A is complete. All items checked for historical reference.
 | S4.8 Dump performance (not RESET_READ) | 10 | [pm3-slice-10-dump-performance.md](pm3-slice-10-dump-performance.md) |
 | S4.9 Detect cache (30s TTL, test-first) | 9 | [pm3-slice-9-detect-cache.md](pm3-slice-9-detect-cache.md) |
 | S4.10 Unsupported modulation detection | 8 | [pm3-slice-8-unsupported-modulation.md](pm3-slice-8-unsupported-modulation.md) |
-| S4.11 Debug tooling → `debug/` | 11 | [pm3-slice-11-debug-relocation.md](pm3-slice-11-debug-relocation.md) |
-| Diagnostic logging (temp files) | 7 | [pm3-slice-7-logging.md](pm3-slice-7-logging.md) |
+| S4.11 Debug tooling → `debug/` | 11 | ✅ [pm3-slice-11-debug-relocation.md](pm3-slice-11-debug-relocation.md) |
+| Diagnostic logging (temp files) | 7 | ✅ [pm3-slice-7-logging.md](pm3-slice-7-logging.md) |
 
 Broader demod beyond ASK/Manchester: **explicitly skipped**; use process executor fallback (Slice 8).
 
@@ -293,16 +296,14 @@ Parameterized `[TestFixture(Process)]` + `[TestFixture(Native)]`. Native skips o
 
 ## Recommended Next Steps for Handoff Agent
 
-**Suggested order:**
+**Suggested order (remaining):**
 
-1. [Slice 11](pm3-slice-11-debug-relocation.md) — debug folder (independent, quick)
-2. [Slice 7](pm3-slice-7-logging.md) — always-on temp logging + unhandled exceptions
-3. [Slice 9](pm3-slice-9-detect-cache.md) — detect cache (30s TTL, test-first)
-4. [Slice 8](pm3-slice-8-unsupported-modulation.md) — unsupported modulation error
-5. [Slice 6](pm3-slice-6-capabilities.md) — capabilities on connect
-6. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
-7. **S4.6** — merge to `master` when ready
-8. **S4.2** — Linux validation when hardware available
+1. [Slice 9](pm3-slice-9-detect-cache.md) — detect cache (30s TTL, test-first)
+2. [Slice 8](pm3-slice-8-unsupported-modulation.md) — unsupported modulation error
+3. [Slice 6](pm3-slice-6-capabilities.md) — capabilities on connect
+4. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
+5. **S4.6** — merge to `master` when ready
+6. **S4.2** — Linux validation when hardware available
 
 ---
 

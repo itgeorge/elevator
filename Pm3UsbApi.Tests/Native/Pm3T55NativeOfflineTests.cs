@@ -14,7 +14,7 @@ public class Pm3T55NativeOfflineTests
     public void CapturedBlock0Samples_DetectElevatorTokenOffline()
     {
         if (!File.Exists(FixturePath))
-            Assert.Ignore($"Captured fixture not found at {FixturePath}. Run NativeT55Probe --capture on hardware.");
+            Assert.Ignore($"Captured fixture not found at {FixturePath}. Run: dotnet run --project debug/NativeT55Probe -- --capture");
 
         var raw = File.ReadAllBytes(FixturePath);
         Assert.That(raw, Has.Length.EqualTo(Pm3GraphState.MaxGraphSamples));

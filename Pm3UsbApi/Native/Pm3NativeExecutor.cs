@@ -1,4 +1,5 @@
 using Pm3UsbApi.Commands;
+using Pm3UsbApi.Diagnostics;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Native.Demod;
 using Pm3UsbApi.Native.Protocol;
@@ -362,7 +363,12 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         if (_transport is not null)
             await _transport.DisposeAsync().ConfigureAwait(false);
 
-        _transport = new Pm3SerialTransport(port, _options.SerialBaudRate);
+        _transport = new Pm3SerialTransport(
+            port,
+            _options.SerialBaudRate,
+            Pm3DiagnosticLog.Current.NativeTraceEnabled
+                ? msg => Pm3DiagnosticLog.Current.WriteNativeTrace(msg)
+                : null);
         _transport.Open();
         _connectedPort = port;
     }

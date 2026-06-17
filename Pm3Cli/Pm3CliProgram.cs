@@ -1,4 +1,5 @@
 using Pm3UsbApi;
+using Pm3UsbApi.Diagnostics;
 using Tokens;
 
 namespace Pm3Cli;
@@ -10,6 +11,23 @@ class Pm3CliProgram
     private static bool _connected;
 
     static async Task<int> Main(string[] args)
+    {
+        Pm3DiagnosticLog.EnsureInitialized();
+        Console.WriteLine($"PM3 logs: {Pm3DiagnosticLog.Current.BaseDirectory}");
+        try
+        {
+            return await RunAsync(args);
+        }
+        catch (Exception ex)
+        {
+            Pm3DiagnosticLog.LogFatal(ex, "Pm3Cli");
+            Console.WriteLine($"Fatal error: {ex.Message}");
+            Console.WriteLine($"Details written to: {Pm3DiagnosticLog.Current.ErrorsLogPath}");
+            return 1;
+        }
+    }
+
+    static async Task<int> RunAsync(string[] args)
     {
         ParseArgs(args);
 

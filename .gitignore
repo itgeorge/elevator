@@ -9,6 +9,9 @@
 
 # Build results
 [Dd]ebug/
+# Repo PM3 debug tooling (exception to [Dd]ebug/ — not MSBuild output)
+!debug/
+!debug/**
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/

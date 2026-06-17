@@ -1,4 +1,5 @@
 using Pm3UsbApi.Commands;
+using Pm3UsbApi.Diagnostics;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Parsers;
 using Pm3UsbApi.Session;
@@ -20,6 +21,7 @@ public sealed class Pm3 : IAsyncDisposable
     /// <param name="options">Configuration. Uses sensible defaults if null.</param>
     public Pm3(Pm3Options? options = null)
     {
+        Pm3DiagnosticLog.EnsureInitialized();
         var opts = options ?? new Pm3Options();
         IPm3CommandExecutor executor = opts.ExecutorKind switch
         {

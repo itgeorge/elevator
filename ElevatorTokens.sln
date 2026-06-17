@@ -26,6 +26,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RideCaptureCli", "RideCaptu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RideCaptureCli.Tests", "RideCaptureCli.Tests\RideCaptureCli.Tests.csproj", "{A61FCC17-CA0E-4414-AE4B-002F90F7F184}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "debug", "debug", "{FF849AB8-1A80-3BF4-B6E8-CC61916D18DE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeT55Probe", "debug\NativeT55Probe\NativeT55Probe.csproj", "{6C974535-ACED-4755-AEA6-50014645F928}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -192,8 +196,23 @@ Global
 		{A61FCC17-CA0E-4414-AE4B-002F90F7F184}.Release|x64.Build.0 = Release|Any CPU
 		{A61FCC17-CA0E-4414-AE4B-002F90F7F184}.Release|x86.ActiveCfg = Release|Any CPU
 		{A61FCC17-CA0E-4414-AE4B-002F90F7F184}.Release|x86.Build.0 = Release|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Debug|x64.Build.0 = Debug|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Debug|x86.Build.0 = Debug|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Release|x64.ActiveCfg = Release|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Release|x64.Build.0 = Release|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Release|x86.ActiveCfg = Release|Any CPU
+		{6C974535-ACED-4755-AEA6-50014645F928}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{6C974535-ACED-4755-AEA6-50014645F928} = {FF849AB8-1A80-3BF4-B6E8-CC61916D18DE}
 	EndGlobalSection
 EndGlobal

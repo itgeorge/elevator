@@ -1,6 +1,6 @@
 # Slice 11 — Debug Tooling Relocation (S4.11)
 
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete  
 **Depends on:** None (can land early)  
 **Branch:** `pm3-integration`
 
