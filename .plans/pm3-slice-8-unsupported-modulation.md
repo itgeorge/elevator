@@ -1,4 +1,4 @@
-# Slice 8 — Unsupported Modulation Detection (S4.10 rescoped)
+# Slice 8 — Unsupported Modulation + Chip Type Detection (S4.10 rescoped)
 
 **Status:** ✅ Done (`pm3-integration`)  
 **Depends on:** Slice 5; benefits from Slice 7 (logging)  
@@ -6,53 +6,65 @@
 
 ## Goal
 
-Do **not** implement broader demod. Instead, detect when a tag's config block indicates a non-ASK modulation and return a clear error directing the user to `PM3_EXECUTOR=process`.
+Do **not** implement broader demod. Instead:
+
+1. Detect **real** non-ASK T55 configs (known block0 variants) → `Pm3UnsupportedModulationException` + `PM3_EXECUTOR=process`
+2. Detect **non-T55 LF tags** (e.g. EM410x false positives on T55 ReadBl samples) → `Pm3UnsupportedChipTypeException`
 
 ## Background
 
-Native detect only runs ASK/Manchester demod (`Pm3LfDemod.AskDemodExt`). Non-ASK tags fail all 4×2 attempts with generic "detect failed" — indistinguishable from no tag.
+Native detect only runs ASK/Manchester demod (`Pm3LfDemod.AskDemodExt`). Non-ASK T55 tags and alien LF chips (EM410x) both failed with generic "detect failed" or misleading FSK2 false positives.
 
 ## Approach
 
-1. After successful LF acquisition (samples present), if ASK detect fails across all modes:
-2. Run **modulation-agnostic config scan** — parse candidate block0 offsets, read `modRead` without `TestModulation(ASK-only)` filter.
-3. If plausible T55 config found with `modRead != 0x08` (ASK):
-   - Throw `Pm3UnsupportedModulationException` (new type in `Pm3Exception` hierarchy)
-   - Message: native supports ASK only; set `PM3_EXECUTOR=process` and ensure proxmark3 client installed.
-4. If no plausible config → keep existing detect-failed behavior.
+After successful LF acquisition, if ASK T55 detect fails:
 
-**No auto-fallback** to process executor (requires pm3 install; blurs executor boundary).
+1. Try **EM410x decode** on raw samples (`Pm3LfEm410x`) when demod preamble is present
+2. Run modulation-agnostic T55 config scan
+3. If non-ASK config with **known elevator block0 / modulation variant** → unsupported modulation
+4. If non-ASK config with **unknown block0** (e.g. `0x600E5BFF` from EM410x on T55 path) → **non-T55 LF chip type**
+
+**No auto-fallback** to process executor.
 
 ## Implementation
 
 - [x] `Pm3UnsupportedModulationException` + `Pm3T55ModulationNames`
-- [x] `Pm3BitUtils.TryFindPlausibleConfig` (modulation-agnostic)
-- [x] `Pm3T55ModulationScanner` + scan hook in `Pm3T55NativeService.Detect`
-- [x] `Pm3NativeExecutor` throws `Pm3UnsupportedModulationException` with output lines
-- [x] `Pm3UnsupportedModulationTests` (offline fixture + PSK mutation + garbage)
-- [x] `Pm3NativeUnsupportedModulationIntegrationTests` — ASK tag must **not** false-positive
+- [x] `Pm3UnsupportedChipTypeException` + `Pm3LfChipFamily` (`Em410x`, `NonT55Lf`)
+- [x] `Pm3LfEm410x` decode (proxmark3 `Em410xDecode` port)
+- [x] `Pm3BitUtils.TryFindPlausibleConfig` + `IsKnownConfigModulationVariant`
+- [x] `Pm3T55ModulationScanner` + chip-type routing in `Pm3T55NativeService.Detect`
+- [x] Offline fixtures:
+  - `Fixtures/Native/em410x-samples.bin` — BigBuf from T55 ReadBl after tune (read-only capture)
+  - `Fixtures/Native/em410x-samples.json` — pm3 reader ID `1400711C5D`, false-positive metadata
+- [x] `Pm3UnsupportedModulationTests` + `Pm3UnsupportedChipTypeTests`
+- [x] Hardware: `Pm3NativeUnsupportedChipTypeIntegrationTests`
 
 ## Validation
 
 | Layer | Command | Expected |
 |-------|---------|----------|
-| Unit (offline) | `dotnet test --filter "FullyQualifiedName~Pm3UnsupportedModulationTests"` | 5 pass |
-| Unit (all non-integration) | `dotnet test --filter "Category!=Integration&Category!=IntegrationParity"` | 99 pass |
-| Hardware (negative) | `dotnet test --filter "FullyQualifiedName~Pm3NativeUnsupportedModulationIntegrationTests" -- NUnit.RunExplicitTests=true` | ASK token read succeeds, no `Pm3UnsupportedModulationException` |
+| Unit | `dotnet test --filter "FullyQualifiedName~Pm3UnsupportedChipTypeTests"` | pass (fixture-based, no device) |
+| Unit | `dotnet test --filter "Category!=Integration&Category!=IntegrationParity"` | 104 pass |
+| Hardware EM410x | `dotnet test --filter "Native_Em410xTag" -- NUnit.RunExplicitTests=true` | `Pm3UnsupportedChipTypeException` (non-T55 LF) |
+| Hardware ASK T55 | `dotnet test --filter "Native_AskToken" -- NUnit.RunExplicitTests=true` | no chip-type/modulation false positive |
 
-Positive hardware validation (real PSK/FSK tag → unsupported error) deferred — no non-ASK tag in test kit.
+### Re-capture EM410x fixture (read-only)
+
+```bash
+dotnet run --project debug/NativeT55Probe -- --capture --fixture em410x-samples.bin --port /dev/cu.usbmodem1201
+```
+
+Uses LF tune + `CMD_LF_T55XX_READBL` BigBuf download only (no writes).
 
 ## Key files
 
-- `Pm3UsbApi/Pm3Exception.cs` — `Pm3UnsupportedModulationException`
-- `Pm3UsbApi/Pm3T55ModulationNames.cs`
-- `Pm3UsbApi/Native/Demod/Pm3BitUtils.cs` — `TryFindPlausibleConfig`
-- `Pm3UsbApi/Native/T55/Pm3T55ModulationScanner.cs`
+- `Pm3UsbApi/Native/Demod/Pm3LfEm410x.cs`
+- `Pm3UsbApi/Native/T55/Pm3LfChipTypeScanner.cs`
 - `Pm3UsbApi/Native/T55/Pm3T55NativeService.cs`
-- `Pm3UsbApi/Native/Pm3NativeExecutor.cs`
-- `Pm3UsbApi.Tests/Native/Pm3UnsupportedModulationTests.cs`
-- `Pm3UsbApi.Tests/Integration/Pm3NativeUnsupportedModulationIntegrationTests.cs`
+- `Pm3UsbApi/Pm3Exception.cs`
+- `Pm3UsbApi.Tests/Fixtures/Native/em410x-samples.*`
+- `Pm3UsbApi.Tests/Native/Pm3UnsupportedChipTypeTests.cs`
 
 ## Done when
 
-Offline tests pass; native detect on non-ASK config yields actionable error; S4.10 marked done (demod expansion explicitly skipped).
+Offline fixture tests pass; EM410x tag on hardware yields chip-type error (not FSK2 modulation); real non-ASK T55 known configs still yield modulation + process fallback hint.

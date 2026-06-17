@@ -85,6 +85,37 @@ public class Pm3CommandException : Pm3Exception
 }
 
 /// <summary>
+/// Thrown when native detect recognizes a non-T55 LF chip family (e.g. EM410x).
+/// </summary>
+public class Pm3UnsupportedChipTypeException : Pm3CommandException
+{
+    public Pm3LfChipFamily ChipFamily { get; }
+    public ulong CardId { get; }
+    public string CardIdHex { get; }
+    public int Clock { get; }
+
+    public Pm3UnsupportedChipTypeException(
+        Pm3LfChipFamily chipFamily,
+        ulong cardId,
+        int clock,
+        CommandResult? commandResult = null)
+        : base(
+            $"Native executor supports T55x7 ASK/Manchester tokens only (detected {Pm3LfChipFamilyNames.Name(chipFamily)}" +
+            (chipFamily == Pm3LfChipFamily.Em410x || cardId != 0
+                ? $" ID {Pm3LfChipFamilyNames.FormatCardId(chipFamily, cardId)}"
+                : string.Empty) +
+            (clock > 0 ? $", RF/{clock}" : string.Empty) +
+            "). This chip family is not supported by elevator tooling.",
+            commandResult)
+    {
+        ChipFamily = chipFamily;
+        CardId = cardId;
+        CardIdHex = Pm3LfChipFamilyNames.FormatCardId(chipFamily, cardId);
+        Clock = clock;
+    }
+}
+
+/// <summary>
 /// Thrown when native detect finds a T55 config block using an unsupported modulation.
 /// </summary>
 public class Pm3UnsupportedModulationException : Pm3CommandException

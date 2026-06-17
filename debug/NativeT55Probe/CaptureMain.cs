@@ -15,6 +15,7 @@ internal static class CaptureMain
     {
         var port = GetArg(args, "--port") ?? DefaultPort;
         var timeout = TimeSpan.FromSeconds(12);
+        var fixtureName = GetArg(args, "--fixture") ?? "t55-block0-samples.bin";
         var fixtureDir = Path.Combine(
             Directory.GetCurrentDirectory(),
             "Pm3UsbApi.Tests",
@@ -31,6 +32,15 @@ internal static class CaptureMain
 
         await RunStep("readbl+download block0", async () =>
         {
+            if (fixtureName.StartsWith("em410x", StringComparison.OrdinalIgnoreCase))
+            {
+                await using var pm3 = CreatePm3(port, timeout);
+                await pm3.ConnectAsync();
+                await pm3.StartLfTuneAsync();
+                var mv = await pm3.GetLfTuneLastMilliVoltsAsync();
+                Log($"pre-capture tune mv={mv}");
+            }
+
             await using var t = Open(port);
             t.DiscardPendingInput();
             Span<byte> payload = stackalloc byte[8];
@@ -45,9 +55,25 @@ internal static class CaptureMain
             sw.Restart();
             var raw = t.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, timeout, CancellationToken.None);
             Log($"download bytes={raw.Length} ms={sw.ElapsedMilliseconds}");
-            var path = Path.Combine(fixtureDir, "t55-block0-samples.bin");
+            var path = Path.Combine(fixtureDir, fixtureName);
             await File.WriteAllBytesAsync(path, raw);
             Log($"saved {path}");
+
+            if (fixtureName.StartsWith("em410x", StringComparison.OrdinalIgnoreCase))
+            {
+                var metaPath = Path.Combine(fixtureDir, "em410x-samples.json");
+                await File.WriteAllTextAsync(metaPath,
+                    """
+                    {
+                      "chipFamily": "EM410x",
+                      "cardIdHex": "1400711C5D",
+                      "clock": 64,
+                      "captureCommand": "CMD_LF_T55XX_READBL block0 (LF samples via BigBuf)",
+                      "notes": "Captured from EM410x tag for offline unsupported-chip regression."
+                    }
+                    """.Trim());
+                Log($"saved {metaPath}");
+            }
 
             var graph = new Pm3GraphState();
             graph.LoadSamples(raw);

@@ -39,6 +39,31 @@ internal static class Pm3BitUtils
             or 0x00148046 or 0x00148047 or 0x00148048 or 0x00148049 or 0x0014804A or 0x0014804B
             or 0x0014804C or 0x0014804D or 0x0014804E or 0x0014804F;
 
+    public static bool IsKnownConfigModulationVariant(uint block0)
+    {
+        var baseConfig = block0 & ~0x1F000u;
+        ReadOnlySpan<uint> known =
+        [
+            0x00088040, 0x00088041, T55X7EmUniqueConfigBlock, 0x000880E0, 0x000880E1,
+            0x000880E2, 0x000880E3, 0x000880E4, 0x000880E5, 0x000880E6, 0x000880E7,
+            0x000880E8, 0x000880E9, 0x000880EA, 0x000880EB, 0x000880EC, 0x000880ED,
+            0x000880EE, 0x000880EF, 0x000880F0, 0x000880F1, 0x000880F2, 0x000880F3,
+            0x000880F4, 0x000880F5, 0x000880F6, 0x000880F7, 0x000880F8, 0x000880F9,
+            0x000880FA, 0x000880FB, 0x000880FC, 0x000880FD, 0x000880FE, 0x000880FF,
+            0x00148040, 0x00148041, 0x00148042, 0x00148043, 0x00148044, 0x00148045,
+            0x00148046, 0x00148047, 0x00148048, 0x00148049, 0x0014804A, 0x0014804B,
+            0x0014804C, 0x0014804D, 0x0014804E, 0x0014804F,
+        ];
+
+        foreach (var candidate in known)
+        {
+            if ((candidate & ~0x1F000u) == baseConfig)
+                return true;
+        }
+
+        return false;
+    }
+
     public static bool TryFindConfigOffset(ReadOnlySpan<byte> demodBits, byte modulation, int clk, out byte offset, out byte bitrate)
     {
         offset = 0;

@@ -62,6 +62,12 @@ internal static class Pm3NativeOutputBuilder
         "[!] Could not detect modulation automatically. Try setting it manually with 'lf t55xx config'",
     ];
 
+    public static IReadOnlyList<string> BuildUnsupportedChipTypeLines(Pm3UnsupportedChipTypeInfo info) =>
+    [
+        "[!] Could not detect modulation automatically. Try setting it manually with 'lf t55xx config'",
+        $"[!] Native executor supports T55x7 ASK/Manchester only (detected {Pm3LfChipFamilyNames.Name(info.ChipFamily)} ID {Pm3LfChipFamilyNames.FormatCardId(info.ChipFamily, info.CardId)}, RF/{info.Clock}).",
+    ];
+
     public static IReadOnlyList<string> BuildUnsupportedModulationLines(Pm3T55UnsupportedModulationInfo info) =>
     [
         "[!] Could not detect modulation automatically. Try setting it manually with 'lf t55xx config'",

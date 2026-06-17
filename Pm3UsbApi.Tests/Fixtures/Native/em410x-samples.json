@@ -1,0 +1,14 @@
+{
+  "chipFamily": "EM410x",
+  "cardIdHex": "1400711C5D",
+  "clock": 64,
+  "captureCommand": "CMD_LF_T55XX_READBL block0 after LF tune (BigBuf samples)",
+  "pm3ReaderCommand": "lf em 410x reader",
+  "offlineClassification": "non-T55 LF",
+  "falsePositiveT55Scan": {
+    "modulation": "FSK2",
+    "block0": "600E5BFF",
+    "invert": true
+  },
+  "notes": "EM410x tag on elevator reader. pm3 lf search/reader reports ID 1400711C5D. T55 ReadBl samples do not demod to EM410x preamble, but inverted ASK demod yields a false T55 FSK2 config; native detect should classify as non-T55 LF chip type."
+}

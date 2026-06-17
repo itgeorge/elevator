@@ -69,9 +69,11 @@ try
     var config = new Pm3T55Config();
     var outcome = service.Detect(config, CancellationToken.None);
     if (!outcome.IsFound)
-        throw new InvalidOperationException(outcome.IsUnsupported
-            ? $"Unsupported modulation: {Pm3T55ModulationNames.Name(outcome.UnsupportedInfo.Modulation)}"
-            : "Detect failed");
+        throw new InvalidOperationException(outcome.IsUnsupportedChipType
+            ? $"Unsupported chip: {Pm3LfChipFamilyNames.Name(outcome.UnsupportedChip.ChipFamily)} {outcome.UnsupportedChip.CardId:X}"
+            : outcome.IsUnsupportedModulation
+                ? $"Unsupported modulation: {Pm3T55ModulationNames.Name(outcome.UnsupportedInfo.Modulation)}"
+                : "Detect failed");
     Log($"detect {sw.ElapsedMilliseconds}ms block0=0x{config.Block0:X8} clk={config.Clock} offset={config.Offset}");
 
     sw.Restart();

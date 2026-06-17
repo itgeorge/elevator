@@ -151,7 +151,24 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
     {
         var service = CreateT55Service();
         var outcome = service.Detect(_t55Config, ct);
-        if (outcome.IsUnsupported)
+        if (outcome.IsUnsupportedChipType)
+        {
+            var failed = new CommandResult
+            {
+                Commands = commands,
+                OutputLines = Pm3NativeOutputBuilder.BuildUnsupportedChipTypeLines(outcome.UnsupportedChip),
+                ExitCode = 1,
+                HasErrors = true,
+                ErrorSummary = "T55 unsupported chip type",
+            };
+            throw new Pm3UnsupportedChipTypeException(
+                outcome.UnsupportedChip.ChipFamily,
+                outcome.UnsupportedChip.CardId,
+                outcome.UnsupportedChip.Clock,
+                failed);
+        }
+
+        if (outcome.IsUnsupportedModulation)
         {
             var failed = new CommandResult
             {

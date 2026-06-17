@@ -62,8 +62,22 @@ internal sealed class Pm3T55NativeService
                 return Pm3T55DetectOutcome.Found;
             }
 
+            if (TryScanUnsupportedChipType(out var unsupportedChip))
+                return Pm3T55DetectOutcome.UnsupportedChipType(unsupportedChip);
+
             if (TryScanUnsupportedModulation(out var unsupported))
+            {
+                if (unsupported.Block0 == 0 ||
+                    (!Pm3BitUtils.TestKnownConfigBlock(unsupported.Block0) &&
+                     unsupported.Block0 != Pm3BitUtils.T55X7EmUniqueConfigBlock &&
+                     !Pm3BitUtils.IsKnownConfigModulationVariant(unsupported.Block0)))
+                {
+                    return Pm3T55DetectOutcome.UnsupportedChipType(new Pm3UnsupportedChipTypeInfo(
+                        Pm3LfChipFamily.NonT55Lf, 0, Pm3LfEm410x.DefaultClock));
+                }
+
                 return Pm3T55DetectOutcome.Unsupported(unsupported);
+            }
 
             WaitForRfSettle(ct);
         }
@@ -278,6 +292,19 @@ internal sealed class Pm3T55NativeService
             ct.ThrowIfCancellationRequested();
             Thread.Sleep(Math.Min(10, Math.Max(1, (int)(deadline - Environment.TickCount64))));
         }
+    }
+
+    private bool TryScanUnsupportedChipType(out Pm3UnsupportedChipTypeInfo info)
+    {
+        info = default;
+        var sampleLen = _graph.CopyToByteSamples(_sampleScratch);
+        if (sampleLen < 255)
+            return false;
+
+        return Pm3LfChipTypeScanner.TryDetectUnsupportedChip(
+            _sampleScratch.AsSpan(0, sampleLen),
+            _graph.Signal,
+            out info);
     }
 
     private bool TryScanUnsupportedModulation(out Pm3T55UnsupportedModulationInfo info)

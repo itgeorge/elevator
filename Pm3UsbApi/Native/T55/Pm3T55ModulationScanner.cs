@@ -23,6 +23,9 @@ internal static class Pm3T55ModulationScanner
             if (!Pm3BitUtils.TryFindPlausibleConfig(demodBits, tryClk, out _, out _, out var modRead, out var block0))
                 continue;
 
+            if (block0 == 0)
+                continue;
+
             if (modRead == Pm3BitUtils.DemodAsk)
                 continue;
 
