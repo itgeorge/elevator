@@ -177,14 +177,46 @@ internal sealed class Pm3T55NativeService
         if (!config.Detected || blockValues.Length < 8)
             return false;
 
+        // Clear any detect tail once; subsequent blocks reuse the synced transport stream.
+        _transport.DiscardPendingInput();
+
         for (byte block = 0; block < 8; block++)
         {
             ct.ThrowIfCancellationRequested();
-            if (!ReadBlock(config, block, out blockValues[block], ct))
+            if (TryReadBlockWithKnownConfig(config, block, discardPendingInput: false, out blockValues[block], ct))
+                continue;
+
+            WaitForRfSettle(ct);
+            if (!TryReadBlockWithKnownConfig(config, block, discardPendingInput: true, out blockValues[block], ct))
                 return false;
         }
 
         return true;
+    }
+
+    private bool TryReadBlockWithKnownConfig(
+        Pm3T55Config config,
+        byte block,
+        bool discardPendingInput,
+        out uint blockValue,
+        CancellationToken ct)
+    {
+        blockValue = 0;
+
+        if (!AcquireData(
+                block,
+                page1: false,
+                usePassword: config.UsePassword,
+                config.Password,
+                config.DownlinkMode,
+                ct,
+                discardPendingInput))
+            return false;
+
+        if (!DecodeWithConfig(config))
+            return false;
+
+        return TryGetBlockData(config.Offset, out blockValue);
     }
 
     internal static byte[] BuildWriteBlockPayload(
@@ -227,7 +259,14 @@ internal sealed class Pm3T55NativeService
         }
     }
 
-    private bool AcquireData(byte block, bool page1, bool usePassword, uint password, byte downlinkMode, CancellationToken ct)
+    private bool AcquireData(
+        byte block,
+        bool page1,
+        bool usePassword,
+        uint password,
+        byte downlinkMode,
+        CancellationToken ct,
+        bool discardPendingInput = true)
     {
         Span<byte> payload = stackalloc byte[8];
         BinaryPrimitives.WriteUInt32LittleEndian(payload, password);
@@ -242,7 +281,8 @@ internal sealed class Pm3T55NativeService
             if (attempt > 0)
                 WaitForRfSettle(ct);
 
-            _transport.DiscardPendingInput();
+            if (discardPendingInput || attempt > 0)
+                _transport.DiscardPendingInput();
 
             Pm3ResponseFrame response;
             try

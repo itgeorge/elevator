@@ -21,7 +21,7 @@
 | **Slice 9** | T55 detect cache (30s TTL) | ✅ Complete |
 | **Slice 6** | Capabilities on connect (`CMD_CAPABILITIES`) | ✅ Complete |
 | **Slice 8** | Unsupported modulation + chip type detection | ✅ Complete (`cd7e254`, `ae19cf5`) |
-| **Slice 10** | Dump performance tuning | 🔲 Planned — see handoff doc |
+| **Slice 10** | Dump performance tuning | ✅ Complete (scoped) |
 
 **Recent commits on `pm3-integration`:**
 
@@ -239,7 +239,7 @@ Stage A is complete. All items checked for historical reference.
 | Item | Slice | Handoff doc |
 |------|-------|-------------|
 | S4.7 `CMD_CAPABILITIES` | 6 | ✅ [pm3-slice-6-capabilities.md](pm3-slice-6-capabilities.md) |
-| S4.8 Dump performance (not RESET_READ) | 10 | [pm3-slice-10-dump-performance.md](pm3-slice-10-dump-performance.md) |
+| S4.8 Dump performance (not RESET_READ) | 10 | ✅ [pm3-slice-10-dump-performance.md](pm3-slice-10-dump-performance.md) |
 | S4.9 Detect cache (30s TTL, test-first) | 9 | ✅ [pm3-slice-9-detect-cache.md](pm3-slice-9-detect-cache.md) |
 | S4.10 Unsupported modulation detection | 8 | ✅ [pm3-slice-8-unsupported-modulation.md](pm3-slice-8-unsupported-modulation.md) |
 | S4.11 Debug tooling → `debug/` | 11 | ✅ [pm3-slice-11-debug-relocation.md](pm3-slice-11-debug-relocation.md) |
@@ -262,6 +262,13 @@ Broader demod beyond ASK/Manchester: **explicitly skipped**; use process executo
 - [x] `T55SampleCount` clamped from `bigbuf_size` (max 12 000)
 - [x] LF guard via `EnsureLfSupported()` before T55 operations
 - [x] Unit + integration tests (`Pm3CapabilitiesTests`, `Pm3NativeCapabilitiesIntegrationTests`)
+
+### Slice 10: Dump Performance Tuning ✅ (scoped)
+
+- [x] **S4.8** Dump path: one transport flush at dump start; skip per-block `DiscardPendingInput` when synced
+- [x] `TryReadBlockWithKnownConfig` — single acquire + `DecodeWithConfig` per block (no 3× read majority loop)
+- [x] RF settle delays unchanged; retry still settles + flushes on failure
+- [x] No `RESET_READ` shortcut (8× `READBL` retained)
 
 ---
 
