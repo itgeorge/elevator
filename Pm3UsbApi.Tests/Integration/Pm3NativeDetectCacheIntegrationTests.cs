@@ -67,7 +67,7 @@ public class Pm3NativeDetectCacheIntegrationTests
 
         // 3) Dump — cache hit
         var dump1 = await pm3.DumpAsync();
-        Assert.That(dump1, Does.Contain("Block").Or.Contain("block"));
+        Assert.That(dump1, Does.Contain("blk").Or.Contain("Page 0"));
         LogStep("after cached dump");
         Assert.That(CacheHitCount(), Is.EqualTo(2));
         Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 dump"));
