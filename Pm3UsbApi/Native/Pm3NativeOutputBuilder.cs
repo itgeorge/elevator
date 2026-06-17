@@ -65,6 +65,55 @@ internal static class Pm3NativeOutputBuilder
         $"[!] Could not read block {block}",
     ];
 
+    public static IReadOnlyList<string> BuildWriteBlockLines(uint block, uint data) =>
+    [
+        $"[=] Writing page 0  block: {block:D2}  data: 0x{data:X8}",
+        $"[+] Writing T55x7 block {block} data {data:X8}",
+    ];
+
+    public static IReadOnlyList<string> BuildWriteFailedLines(uint block) =>
+    [
+        $"[-] Write failed (block {block})",
+    ];
+
+    public static IReadOnlyList<string> BuildDumpLines(IReadOnlyList<uint> blockValues)
+    {
+        var lines = new List<string>
+        {
+            "[+] Page 0",
+            "[+] blk | hex data | binary                           | ascii",
+            "[+] ----+----------+----------------------------------+-------",
+        };
+
+        for (var i = 0; i < blockValues.Count; i++)
+        {
+            var value = blockValues[i];
+            var hex = value.ToString("X8");
+            var binary = Convert.ToString(value, 2).PadLeft(32, '0');
+            var ascii = ToAsciiColumn(value);
+            lines.Add($"[+] {i,1}   | {hex} | {binary} | {ascii}");
+        }
+
+        return lines;
+    }
+
+    public static IReadOnlyList<string> BuildDumpFailedLines() =>
+    [
+        "[-] Failed to dump T55 page 0",
+    ];
+
     public static IReadOnlyList<string> BuildErrorLines(string message) =>
         [$"[-] {message}"];
+
+    private static string ToAsciiColumn(uint value)
+    {
+        Span<char> chars = stackalloc char[4];
+        for (var i = 0; i < 4; i++)
+        {
+            var b = (byte)((value >> (8 * (3 - i))) & 0xFF);
+            chars[i] = b is >= 32 and <= 126 ? (char)b : '.';
+        }
+
+        return new string(chars);
+    }
 }

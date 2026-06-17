@@ -31,9 +31,9 @@ public class Pm3IntegrationTests
 
     public Pm3IntegrationTests(Pm3ExecutorKind executorKind) => _executorKind = executorKind;
 
-    private bool SupportsWrite => _executorKind == Pm3ExecutorKind.Process;
+    private bool SupportsWrite => true;
 
-    private bool SupportsDump => _executorKind == Pm3ExecutorKind.Process;
+    private bool SupportsDump => true;
 
     private bool SupportsCliPassthrough => _executorKind == Pm3ExecutorKind.Process;
 

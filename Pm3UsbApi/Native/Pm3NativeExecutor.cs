@@ -45,9 +45,9 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
                 LfTuneCommand => await ExecuteLfTuneAsync(commands, ct).ConfigureAwait(false),
                 T55DetectCommand => ExecuteT55Detect(commands, ct),
                 T55ReadBlockCommand read => ExecuteT55ReadBlock(commands, read.Block, ct),
+                T55WriteBlockCommand write => ExecuteT55WriteBlock(commands, write.Block, write.Data.Value, ct),
+                T55DumpCommand => ExecuteT55Dump(commands, ct),
                 CliPassthroughCommand => throw new Pm3CommandException("Raw CLI commands are not supported by the native executor."),
-                T55WriteBlockCommand or T55DumpCommand =>
-                    throw new Pm3CommandException($"{commands[0].GetType().Name} is not supported by the native executor yet."),
                 _ => throw new Pm3CommandException($"Unsupported command type: {commands[0].GetType().Name}"),
             };
         }
@@ -91,9 +91,23 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
                     hasErrors |= result.HasErrors;
                     break;
                 }
+                case T55WriteBlockCommand write:
+                {
+                    var result = ExecuteT55WriteBlock([command], write.Block, write.Data.Value, ct);
+                    lines.AddRange(result.OutputLines);
+                    hasErrors |= result.HasErrors;
+                    break;
+                }
+                case T55DumpCommand:
+                {
+                    var result = ExecuteT55Dump([command], ct);
+                    lines.AddRange(result.OutputLines);
+                    hasErrors |= result.HasErrors;
+                    break;
+                }
                 default:
                     throw new Pm3CommandException(
-                        $"Native executor batch supports T55 detect/read only. Unsupported: {command.GetType().Name}");
+                        $"Native executor batch supports T55 detect/read/write/dump only. Unsupported: {command.GetType().Name}");
             }
 
             await Task.Yield();
@@ -157,6 +171,63 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         {
             Commands = commands,
             OutputLines = Pm3NativeOutputBuilder.BuildReadBlockLines(block, value),
+            ExitCode = 0,
+            HasErrors = false,
+        };
+    }
+
+    private CommandResult ExecuteT55WriteBlock(IReadOnlyList<IPm3DeviceCommand> commands, uint block, uint data, CancellationToken ct)
+    {
+        if (!_t55Config.Detected)
+            throw new Pm3CommandException("T55 session is not active. Run detect before write.");
+
+        var service = CreateT55Service();
+        if (!service.WriteBlock(_t55Config, (byte)block, data, ct))
+        {
+            var failed = new CommandResult
+            {
+                Commands = commands,
+                OutputLines = Pm3NativeOutputBuilder.BuildWriteFailedLines(block),
+                ExitCode = 1,
+                HasErrors = true,
+                ErrorSummary = $"Failed to write block {block}",
+            };
+            throw new Pm3CommandException($"Failed to write block {block}.", failed);
+        }
+
+        return new CommandResult
+        {
+            Commands = commands,
+            OutputLines = Pm3NativeOutputBuilder.BuildWriteBlockLines(block, data),
+            ExitCode = 0,
+            HasErrors = false,
+        };
+    }
+
+    private CommandResult ExecuteT55Dump(IReadOnlyList<IPm3DeviceCommand> commands, CancellationToken ct)
+    {
+        if (!_t55Config.Detected)
+            throw new Pm3CommandException("T55 session is not active. Run detect before dump.");
+
+        var blockValues = new uint[8];
+        var service = CreateT55Service();
+        if (!service.DumpPage0(_t55Config, blockValues, ct))
+        {
+            var failed = new CommandResult
+            {
+                Commands = commands,
+                OutputLines = Pm3NativeOutputBuilder.BuildDumpFailedLines(),
+                ExitCode = 1,
+                HasErrors = true,
+                ErrorSummary = "Failed to dump page 0",
+            };
+            throw new Pm3CommandException("Failed to dump page 0.", failed);
+        }
+
+        return new CommandResult
+        {
+            Commands = commands,
+            OutputLines = Pm3NativeOutputBuilder.BuildDumpLines(blockValues),
             ExitCode = 0,
             HasErrors = false,
         };

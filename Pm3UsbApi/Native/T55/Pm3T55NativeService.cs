@@ -11,6 +11,9 @@ namespace Pm3UsbApi.Native.T55;
 internal sealed class Pm3T55NativeService
 {
     private static readonly TimeSpan ReadCommandTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan WriteCommandTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan WriteSettleDelay = TimeSpan.FromMilliseconds(150);
+    private const int WriteMaxAttempts = 3;
     private static readonly TimeSpan DownloadTimeout = TimeSpan.FromSeconds(4);
 
     private readonly Pm3SerialTransport _transport;
@@ -62,6 +65,38 @@ internal sealed class Pm3T55NativeService
         if (!config.Detected)
             return false;
 
+        Span<uint> candidates = stackalloc uint[3];
+        var successes = 0;
+
+        for (var attempt = 0; attempt < candidates.Length; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!TryReadBlockOnce(config, block, out var candidate, ct))
+                continue;
+
+            candidates[successes++] = candidate;
+            for (var i = 0; i < successes - 1; i++)
+            {
+                if (candidates[i] == candidate)
+                {
+                    blockValue = candidate;
+                    return true;
+                }
+            }
+        }
+
+        if (successes == 0)
+            return false;
+
+        // If demod phase jitter gives no majority, prefer the latest successful acquisition.
+        blockValue = candidates[successes - 1];
+        return true;
+    }
+
+    private bool TryReadBlockOnce(Pm3T55Config config, byte block, out uint blockValue, CancellationToken ct)
+    {
+        blockValue = 0;
+
         if (!AcquireData(block, page1: false, usePassword: config.UsePassword, config.Password, config.DownlinkMode, ct))
             return false;
 
@@ -69,6 +104,101 @@ internal sealed class Pm3T55NativeService
             return false;
 
         return TryGetBlockData(config.Offset, out blockValue);
+    }
+
+    public bool WriteBlock(Pm3T55Config config, byte block, uint data, CancellationToken ct)
+    {
+        if (!config.Detected)
+            return false;
+
+        var payload = BuildWriteBlockPayload(
+            data,
+            config.Password,
+            block,
+            config.UsePassword,
+            page1: false,
+            testMode: false,
+            config.DownlinkMode);
+
+        for (var attempt = 0; attempt < WriteMaxAttempts; attempt++)
+        {
+            // Native mode can issue T55 commands much faster than the CLI process path.
+            // Give the tag a short RF-off recovery window before programming and before
+            // read-back verification so marginal writes are retried instead of accepted.
+            WaitForWriteSettle(ct);
+
+            var response = _transport.SendCommandAndWait(
+                Pm3CommandCodes.CmdLfT55XxWriteBl,
+                payload,
+                Pm3CommandCodes.CmdLfT55XxWriteBl,
+                WriteCommandTimeout,
+                ct);
+
+            if (response.Status != Pm3CommandCodes.Pm3Success)
+                continue;
+
+            WaitForWriteSettle(ct);
+
+            if (ReadBlock(config, block, out var readBack, ct) && readBack == data)
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool DumpPage0(Pm3T55Config config, uint[] blockValues, CancellationToken ct)
+    {
+        if (!config.Detected || blockValues.Length < 8)
+            return false;
+
+        for (byte block = 0; block < 8; block++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!ReadBlock(config, block, out blockValues[block], ct))
+                return false;
+        }
+
+        return true;
+    }
+
+    internal static byte[] BuildWriteBlockPayload(
+        uint data,
+        uint password,
+        byte block,
+        bool usePassword,
+        bool page1,
+        bool testMode,
+        byte downlinkMode)
+    {
+        var payload = new byte[10];
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0), data);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(4), password);
+        payload[8] = block;
+        payload[9] = BuildWriteFlags(usePassword, page1, testMode, downlinkMode);
+        return payload;
+    }
+
+    internal static byte BuildWriteFlags(bool usePassword, bool page1, bool testMode, byte downlinkMode)
+    {
+        byte flags = 0;
+        if (usePassword)
+            flags |= 0x1;
+        if (page1)
+            flags |= 0x2;
+        if (testMode)
+            flags |= 0x4;
+        flags |= (byte)(downlinkMode << 3);
+        return flags;
+    }
+
+    private static void WaitForWriteSettle(CancellationToken ct)
+    {
+        var deadline = Environment.TickCount64 + (long)WriteSettleDelay.TotalMilliseconds;
+        while (Environment.TickCount64 < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            Thread.Sleep(Math.Min(10, Math.Max(1, (int)(deadline - Environment.TickCount64))));
+        }
     }
 
     private bool AcquireData(byte block, bool page1, bool usePassword, uint password, byte downlinkMode, CancellationToken ct)
