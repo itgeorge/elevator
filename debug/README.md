@@ -39,3 +39,7 @@ Backup saved at `debug/tag-backups/spare-t55-ask-backup.json`. Restore verified 
 ## Logs
 
 PM3 diagnostic logs (Slice 7) are written under `{GetTempPath()}/elevator/` when using `Pm3` / `RidesCli` / `Pm3Cli`. See `.plans/pm3-slice-7-logging.md`.
+
+## LF tune probes
+
+`RidesCli tune-probe` writes CSV/JSON under `debug/lf-tune-probes/` (gitignored). Plot with `debug/plot-lf-tune-probe.py`.

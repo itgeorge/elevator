@@ -72,7 +72,7 @@ Important columns:
 
 ## Seeded starting tokens
 
-These are seeded from `familyerrors/README.md`:
+These are defined in `SeededTokenCatalog.cs`:
 
 - `D3FE005D-522BC69D-650432F5-650432F5` → `24`
 - `43FE0062-5BA494A3-D6D1C733-D6D1C733` → `181`
