@@ -576,6 +576,31 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void TryDecode_valid_block_returns_true()
+    {
+        var block = TokenBlockUtils.Encode(73);
+
+        Assert.That(TokenBlockUtils.TryDecode(block, out var rides), Is.True);
+        Assert.That(rides, Is.EqualTo(73u));
+    }
+
+    [Test]
+    public void TryDecode_unknown_family_returns_false()
+    {
+        var block = new T55Block(0xDEAD1234);
+
+        Assert.That(TokenBlockUtils.TryDecode(block, out _), Is.False);
+    }
+
+    [Test]
+    public void TryDecode_invalid_payload_returns_false()
+    {
+        var block = new T55Block(0xCCC70000);
+
+        Assert.That(TokenBlockUtils.TryDecode(block, out _), Is.False);
+    }
+
+    [Test]
     public void EncodeDecode_RoundTrip_AllValues()
     {
         for (uint value = 0; value <= 500; value++)

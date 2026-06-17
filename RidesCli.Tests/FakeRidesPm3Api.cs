@@ -28,6 +28,25 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         return new FakeRidesPm3Api(new T55xxImage(blocks));
     }
 
+    public int DumpCallCount { get; private set; }
+    public int TuneCallCount { get; private set; }
+
+    public static FakeRidesPm3Api WithMismatchedRides(uint rides5, uint rides6)
+    {
+        var blocks = CreatePage0Blocks(0);
+        blocks[5] = TokenBlockUtils.Encode(rides5);
+        blocks[6] = TokenBlockUtils.Encode(rides6);
+        return new FakeRidesPm3Api(new T55xxImage(blocks));
+    }
+
+    public static FakeRidesPm3Api WithBlocks5And6(T55Block block5, T55Block block6)
+    {
+        var blocks = CreatePage0Blocks(0);
+        blocks[5] = block5;
+        blocks[6] = block6;
+        return new FakeRidesPm3Api(new T55xxImage(blocks));
+    }
+
     public static FakeRidesPm3Api WithInvalidBlock5()
     {
         var blocks = CreatePage0Blocks(0);
@@ -94,12 +113,16 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     public Task<string> DumpAsync(CancellationToken ct = default)
     {
+        DumpCallCount++;
         EnsureTokenPresent();
         return Task.FromResult(DumpResult);
     }
 
-    public Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default) =>
-        Task.FromResult(SignalStrengthMv);
+    public Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default)
+    {
+        TuneCallCount++;
+        return Task.FromResult(SignalStrengthMv);
+    }
 
     private void EnsureTokenPresent()
     {

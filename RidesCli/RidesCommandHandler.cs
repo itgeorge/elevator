@@ -138,27 +138,39 @@ public sealed class RidesCommandHandler
     {
         try
         {
-            var mv = await _pm3.GetSignalStrengthMvAsync();
-            _output.WriteLine($"signal strength: {mv} mV");
-
-            var dump = await _pm3.DumpAsync();
-            _lastDumpRaw = dump;
-            if (showDump)
-                _output.WriteLine(dump);
-
             var block5Hex = await _pm3.ReadPage0BlockAsync(5);
+            var block6Hex = await _pm3.ReadPage0BlockAsync(6);
             var block5 = T55Block.FromHex(block5Hex);
-            if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _))
+            var block6 = T55Block.FromHex(block6Hex);
+
+            if (showDump)
             {
-                _rides = null;
-                await HandleUnknownEncodingFamilyAsync(block5);
-                return true;
+                var dump = await _pm3.DumpAsync();
+                _lastDumpRaw = dump;
+                _output.WriteLine(dump);
             }
 
-            var rides = TokenBlockUtils.Decode(block5);
-            _rides = rides;
-            _output.WriteLine($"rides remaining: {rides}");
-            return true;
+            var result = RideBlockResolver.Resolve(block5, block6);
+
+            if (!string.IsNullOrEmpty(result.WarningMessage))
+                _output.WriteLine(result.WarningMessage);
+
+            switch (result.Status)
+            {
+                case RideReadStatus.Success:
+                    _rides = result.Rides!.Value;
+                    _output.WriteLine($"rides remaining: {_rides.Value}");
+                    return true;
+                case RideReadStatus.UnknownEncodingFamily:
+                    _rides = null;
+                    await HandleUnknownEncodingFamilyAsync(block5).ConfigureAwait(false);
+                    return true;
+                default:
+                    _rides = null;
+                    _lastDumpRaw = null;
+                    _output.WriteLine("Error: could not decode rides from token (invalid block format).");
+                    return true;
+            }
         }
         catch (Exception ex)
         {
@@ -559,7 +571,7 @@ public sealed class RidesCommandHandler
     {
         _output.WriteLine("Commands:");
         _output.WriteLine("  tune          Run signal check and show antenna strength");
-        _output.WriteLine("  read [-d]     Detect and read token, show signal and rides (use -d for dump)");
+        _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
         _output.WriteLine("  reset         Reset token using default image and set rides to 0");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token");
