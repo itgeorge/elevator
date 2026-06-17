@@ -205,11 +205,33 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
+    /// TEMPORARY: run LF tune while recording every sample, then write probe files (JSON + CSV).
+    /// </summary>
+    public async Task<string> RunLfTuneProbeAsync(
+        string label,
+        int? sampleCount = null,
+        TimeSpan? timeout = null,
+        string? outputDirectory = null,
+        CancellationToken ct = default)
+    {
+        var samples = sampleCount ?? 60;
+        var tuneTimeout = timeout ?? TimeSpan.FromSeconds(3);
+
+        using var probe = LfTuneProbeSession.Begin(label, samples, tuneTimeout);
+        await StartLfTuneAsync(ct, samples, tuneTimeout).ConfigureAwait(false);
+        await GetLfTuneLastMilliVoltsAsync(ct).ConfigureAwait(false);
+        return probe.WriteResults(outputDirectory);
+    }
+
+    /// <summary>
     /// Run LF tune to measure antenna characteristics. Call GetLfTuneLastMilliVoltsAsync to read the result.
     /// </summary>
-    public async Task<bool> StartLfTuneAsync(CancellationToken ct = default, int? sampleCount = null)
+    public async Task<bool> StartLfTuneAsync(
+        CancellationToken ct = default,
+        int? sampleCount = null,
+        TimeSpan? timeout = null)
     {
-        _lastTuneResult = await _session.ExecuteAsync([new LfTuneCommand(sampleCount)], null, ct).ConfigureAwait(false);
+        _lastTuneResult = await _session.ExecuteAsync([new LfTuneCommand(sampleCount, timeout)], null, ct).ConfigureAwait(false);
         return true;
     }
 

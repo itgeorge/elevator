@@ -47,6 +47,18 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void TuneProbe_writes_probe_paths()
+    {
+        var output = new StringBuilderRidesOutput();
+        var handler = new RidesCommandHandler(new FakeRidesPm3Api(), output, new RidesConfig());
+
+        handler.Execute(["tune-probe", "fake-token-center"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("LF tune probe written:"));
+        Assert.That(output.Lines, Has.Some.Contains("fake-token-center"));
+    }
+
+    [Test]
     public void Tune_shows_signal_strength_only()
     {
         var output = new StringBuilderRidesOutput();

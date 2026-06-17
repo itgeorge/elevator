@@ -4,7 +4,7 @@ namespace Pm3UsbApi.Commands;
 
 public sealed record HwVersionCommand : IPm3DeviceCommand;
 
-public sealed record LfTuneCommand(int? SampleCount = null) : IPm3DeviceCommand;
+public sealed record LfTuneCommand(int? SampleCount = null, TimeSpan? Timeout = null) : IPm3DeviceCommand;
 
 public sealed record T55DetectCommand : IPm3DeviceCommand;
 

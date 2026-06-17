@@ -53,7 +53,7 @@ internal static class CaptureMain
                 CancellationToken.None);
             Log($"readbl status={resp.Status} cmd=0x{resp.Command:X4} ms={sw.ElapsedMilliseconds}");
             sw.Restart();
-            var raw = t.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, timeout, CancellationToken.None);
+            var raw = t.DownloadBigBuf(0, Pm3CommandCodes.DefaultT55SampleCount, timeout, CancellationToken.None);
             Log($"download bytes={raw.Length} ms={sw.ElapsedMilliseconds}");
             var path = Path.Combine(fixtureDir, fixtureName);
             await File.WriteAllBytesAsync(path, raw);

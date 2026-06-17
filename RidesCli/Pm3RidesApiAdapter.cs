@@ -49,7 +49,15 @@ public sealed class Pm3RidesApiAdapter : IRidesPm3Api
 
     public async Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default)
     {
-        await _pm3.StartLfTuneAsync(ct, RidesPm3Defaults.LfTuneSampleCount).ConfigureAwait(false);
+        await _pm3.StartLfTuneAsync(ct).ConfigureAwait(false);
         return await _pm3.GetLfTuneLastMilliVoltsAsync(ct).ConfigureAwait(false);
     }
+
+    public Task<string> RunLfTuneProbeAsync(
+        string label,
+        int? sampleCount = null,
+        TimeSpan? timeout = null,
+        string? outputDirectory = null,
+        CancellationToken ct = default) =>
+        _pm3.RunLfTuneProbeAsync(label, sampleCount, timeout, outputDirectory, ct);
 }

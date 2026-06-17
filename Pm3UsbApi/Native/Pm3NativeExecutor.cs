@@ -329,7 +329,7 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
     private CommandResult ExecuteLfTuneAsync(IReadOnlyList<IPm3DeviceCommand> commands, LfTuneCommand tune, CancellationToken ct)
     {
         var sampleCount = tune.SampleCount ?? _options.NativeLfTuneSampleCount;
-        var timeout = _options.NativeLfTuneTimeout;
+        var timeout = tune.Timeout ?? _options.NativeLfTuneTimeout;
         var measureTimeout = TimeSpan.FromSeconds(1);
         Pm3ResponseFrame? lastResponse = null;
 

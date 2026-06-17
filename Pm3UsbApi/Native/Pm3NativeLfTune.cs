@@ -1,3 +1,4 @@
+using Pm3UsbApi.Diagnostics;
 using Pm3UsbApi.Native.Protocol;
 
 namespace Pm3UsbApi.Native;
@@ -24,9 +25,11 @@ internal static class Pm3NativeLfTune
         if (response.Status != Pm3CommandCodes.Pm3Success)
             throw new InvalidOperationException("LF tune initialization failed.");
 
+        var startedTick = now();
         uint peak = 0;
         var samplesTaken = 0;
-        var deadline = now() + (long)timeout.TotalMilliseconds;
+        var deadline = startedTick + (long)timeout.TotalMilliseconds;
+        var probe = LfTuneProbeSession.Current;
 
         while (samplesTaken < sampleCount && now() < deadline)
         {
@@ -42,6 +45,7 @@ internal static class Pm3NativeLfTune
             if (volt > peak)
                 peak = volt;
 
+            probe?.RecordSample(samplesTaken, now() - startedTick, volt, peak);
             samplesTaken++;
         }
 
@@ -57,6 +61,7 @@ internal static class Pm3NativeLfTune
         if (peak == 0)
             throw new InvalidOperationException("LF tune returned no voltage samples.");
 
+        probe?.Complete(peak);
         return peak;
     }
 }

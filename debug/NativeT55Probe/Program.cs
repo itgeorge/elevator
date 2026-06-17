@@ -34,7 +34,7 @@ try
     transport.SendCommandAndWait(
         Pm3CommandCodes.CmdLfT55XxReadBl, payload, Pm3CommandCodes.CmdLfT55XxReadBl,
         TimeSpan.FromSeconds(12), CancellationToken.None);
-    var raw = transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, TimeSpan.FromSeconds(12), CancellationToken.None);
+    var raw = transport.DownloadBigBuf(0, Pm3CommandCodes.DefaultT55SampleCount, TimeSpan.FromSeconds(12), CancellationToken.None);
     Log($"samples={raw.Length} ({sw.ElapsedMilliseconds}ms)");
 
     var graph = new Pm3GraphState();

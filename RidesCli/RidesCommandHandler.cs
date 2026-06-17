@@ -38,6 +38,7 @@ public sealed class RidesCommandHandler
             {
                 "config" => ExecuteConfig(args[1..]),
                 "tune" => ExecuteTune(args[1..]),
+                "tune-probe" => ExecuteTuneProbe(args[1..]),
                 "read" => ExecuteRead(args[1..]),
                 "reset" => ExecuteReset(args[1..]),
                 "set" => ExecuteSet(args[1..]),
@@ -98,6 +99,75 @@ public sealed class RidesCommandHandler
 
     private static string FormatInvariant2(decimal value) =>
         value.ToString("F2", CultureInfo.InvariantCulture);
+
+    private bool ExecuteTuneProbe(string[] args)
+    {
+        if (!TryParseTuneProbeArgs(args, out var label, out var sampleCount, out var timeout, out var error))
+        {
+            _output.WriteLine(error);
+            return true;
+        }
+
+        return ExecuteTuneProbeCore(label, sampleCount, timeout).GetAwaiter().GetResult();
+    }
+
+    private async Task<bool> ExecuteTuneProbeCore(string label, int sampleCount, TimeSpan timeout)
+    {
+        var jsonPath = await _pm3.RunLfTuneProbeAsync(label, sampleCount, timeout).ConfigureAwait(false);
+        var csvPath = Path.ChangeExtension(jsonPath, ".csv");
+        _output.WriteLine($"LF tune probe written:");
+        _output.WriteLine($"  json: {jsonPath}");
+        _output.WriteLine($"  csv:  {csvPath}");
+        _output.WriteLine($"Plot with: python3 debug/plot-lf-tune-probe.py {Path.GetDirectoryName(jsonPath)}");
+        return true;
+    }
+
+    private static bool TryParseTuneProbeArgs(
+        string[] args,
+        out string label,
+        out int sampleCount,
+        out TimeSpan timeout,
+        out string error)
+    {
+        label = string.Empty;
+        sampleCount = 60;
+        timeout = TimeSpan.FromSeconds(3);
+        error = string.Empty;
+
+        if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
+        {
+            error = "Usage: tune-probe <label> [--samples N] [--timeout SEC]";
+            return false;
+        }
+
+        label = args[0];
+        for (var i = 1; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--samples" when i + 1 < args.Length:
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out sampleCount) || sampleCount < 1)
+                    {
+                        error = "Error: --samples must be a positive integer";
+                        return false;
+                    }
+                    break;
+                case "--timeout" when i + 1 < args.Length:
+                    if (!double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) || seconds <= 0)
+                    {
+                        error = "Error: --timeout must be a positive number of seconds";
+                        return false;
+                    }
+                    timeout = TimeSpan.FromSeconds(seconds);
+                    break;
+                default:
+                    error = "Usage: tune-probe <label> [--samples N] [--timeout SEC]";
+                    return false;
+            }
+        }
+
+        return true;
+    }
 
     private bool ExecuteTune(string[] args)
     {
@@ -514,6 +584,8 @@ public sealed class RidesCommandHandler
     {
         _output.WriteLine("Commands:");
         _output.WriteLine("  tune          Run signal check and show antenna strength");
+        _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
+        _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
         _output.WriteLine("  reset         Reset token using default image and set rides to 0");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");

@@ -173,6 +173,14 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         return Task.FromResult(SignalStrengthMv);
     }
 
+    public Task<string> RunLfTuneProbeAsync(
+        string label,
+        int? sampleCount = null,
+        TimeSpan? timeout = null,
+        string? outputDirectory = null,
+        CancellationToken ct = default) =>
+        Task.FromResult(Path.Combine(outputDirectory ?? "debug/lf-tune-probes", $"fake-{label}.json"));
+
     private void EnsureTokenPresent()
     {
         if (!TokenPresent)

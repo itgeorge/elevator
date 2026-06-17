@@ -27,4 +27,12 @@ public interface IRidesPm3Api
 
     /// <summary>Run LF tune and return peak mV.</summary>
     Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default);
+
+    /// <summary>TEMPORARY: record all LF tune samples and write probe files.</summary>
+    Task<string> RunLfTuneProbeAsync(
+        string label,
+        int? sampleCount = null,
+        TimeSpan? timeout = null,
+        string? outputDirectory = null,
+        CancellationToken ct = default);
 }

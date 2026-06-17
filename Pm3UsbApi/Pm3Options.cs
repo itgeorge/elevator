@@ -69,8 +69,9 @@ public record Pm3Options
 
     /// <summary>
     /// Number of LF tune voltage samples for the native executor.
+    /// Default of 35 was derived through experimentation and covers the 90th percentile of peak measurements.
     /// </summary>
-    public int NativeLfTuneSampleCount { get; init; } = 60;
+    public int NativeLfTuneSampleCount { get; init; } = 35;
 
     /// <summary>
     /// Maximum time for native LF tune sampling. Sampling stops when this elapses even if
