@@ -7,6 +7,14 @@ namespace Pm3UsbApi.Tests;
 public class Pm3OptionsTests
 {
     [Test]
+    public void NativeLfTuneDefaults_AreSixtySamplesAndThreeSecondTimeout()
+    {
+        var options = new Pm3Options();
+        Assert.That(options.NativeLfTuneSampleCount, Is.EqualTo(60));
+        Assert.That(options.NativeLfTuneTimeout, Is.EqualTo(TimeSpan.FromSeconds(3)));
+    }
+
+    [Test]
     public void DefaultExecutorKind_IsNative()
     {
         var options = new Pm3Options();

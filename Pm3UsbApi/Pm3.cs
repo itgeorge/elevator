@@ -207,9 +207,9 @@ public sealed class Pm3 : IAsyncDisposable
     /// <summary>
     /// Run LF tune to measure antenna characteristics. Call GetLfTuneLastMilliVoltsAsync to read the result.
     /// </summary>
-    public async Task<bool> StartLfTuneAsync(CancellationToken ct = default)
+    public async Task<bool> StartLfTuneAsync(CancellationToken ct = default, int? sampleCount = null)
     {
-        _lastTuneResult = await _session.ExecuteAsync([new LfTuneCommand()], null, ct).ConfigureAwait(false);
+        _lastTuneResult = await _session.ExecuteAsync([new LfTuneCommand(sampleCount)], null, ct).ConfigureAwait(false);
         return true;
     }
 

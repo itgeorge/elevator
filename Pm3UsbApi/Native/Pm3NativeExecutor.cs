@@ -45,7 +45,7 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
             return commands[0] switch
             {
                 HwVersionCommand => ExecuteHwVersion(commands, effectiveTimeout, ct),
-                LfTuneCommand => await ExecuteLfTuneAsync(commands, ct).ConfigureAwait(false),
+                LfTuneCommand tune => ExecuteLfTuneAsync(commands, tune, ct),
                 T55DetectCommand => ExecuteT55Detect(commands, ct),
                 T55ReadBlockCommand read => ExecuteT55ReadBlock(commands, read.Block, ct),
                 T55WriteBlockCommand write => ExecuteT55WriteBlock(commands, write.Block, write.Data.Value, ct),
@@ -326,53 +326,45 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         };
     }
 
-    private async Task<CommandResult> ExecuteLfTuneAsync(IReadOnlyList<IPm3DeviceCommand> commands, CancellationToken ct)
+    private CommandResult ExecuteLfTuneAsync(IReadOnlyList<IPm3DeviceCommand> commands, LfTuneCommand tune, CancellationToken ct)
     {
-        var divisor = Pm3CommandCodes.LfDivisor125;
-        var init = new byte[] { 1, divisor };
-        var measure = new byte[] { 2, divisor };
-        var shutdown = new byte[] { 3, divisor };
-
+        var sampleCount = tune.SampleCount ?? _options.NativeLfTuneSampleCount;
+        var timeout = _options.NativeLfTuneTimeout;
         var measureTimeout = TimeSpan.FromSeconds(1);
-        var response = Send(Pm3CommandCodes.CmdMeasureAntennaTuningLf, init, measureTimeout, ct);
-        if (response.Status != Pm3CommandCodes.Pm3Success)
-            throw new Pm3CommandException("LF tune initialization failed.", ToErrorResult(commands, response));
+        Pm3ResponseFrame? lastResponse = null;
 
-        uint peak = 0;
-        var end = Environment.TickCount64 + (long)Pm3ProcessExecutor.LfTuneCaptureInterval.TotalMilliseconds;
-        while (Environment.TickCount64 < end)
-        {
-            ct.ThrowIfCancellationRequested();
-            response = Send(Pm3CommandCodes.CmdMeasureAntennaTuningLf, measure, measureTimeout, ct);
-            if (response.Status == Pm3CommandCodes.Pm3EopAborted || response.Data.Length != sizeof(uint))
-                break;
-
-            if (response.Status != Pm3CommandCodes.Pm3Success)
-                throw new Pm3CommandException("LF tune measurement failed.", ToErrorResult(commands, response));
-
-            var volt = BitConverter.ToUInt32(response.Data, 0);
-            if (volt > peak)
-                peak = volt;
-
-            await Task.Delay(50, ct).ConfigureAwait(false);
-        }
-
+        uint peak;
         try
         {
-            Send(Pm3CommandCodes.CmdMeasureAntennaTuningLf, shutdown, measureTimeout, ct);
+            peak = Pm3NativeLfTune.MeasurePeakMillivolts(
+                payload =>
+                {
+                    lastResponse = Send(Pm3CommandCodes.CmdMeasureAntennaTuningLf, payload, measureTimeout, ct);
+                    return lastResponse;
+                },
+                sampleCount,
+                timeout,
+                ct);
         }
-        catch
+        catch (InvalidOperationException ex)
         {
-            // Best effort shutdown, same as client on abort.
+            var errorResult = lastResponse is not null
+                ? ToErrorResult(commands, lastResponse)
+                : new CommandResult
+                {
+                    Commands = commands,
+                    OutputLines = Pm3NativeOutputBuilder.BuildErrorLines(ex.Message),
+                    ExitCode = -1,
+                    HasErrors = true,
+                    ErrorSummary = ex.Message,
+                };
+            throw new Pm3CommandException(ex.Message, errorResult);
         }
         finally
         {
             _lfTuneRecentlyActive = true;
             _transport?.DiscardPendingInput();
         }
-
-        if (peak == 0)
-            throw new Pm3CommandException("LF tune returned no voltage samples.", ToErrorResult(commands, response));
 
         return new CommandResult
         {

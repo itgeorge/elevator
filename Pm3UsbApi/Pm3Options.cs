@@ -68,6 +68,17 @@ public record Pm3Options
     ];
 
     /// <summary>
+    /// Number of LF tune voltage samples for the native executor.
+    /// </summary>
+    public int NativeLfTuneSampleCount { get; init; } = 60;
+
+    /// <summary>
+    /// Maximum time for native LF tune sampling. Sampling stops when this elapses even if
+    /// <see cref="NativeLfTuneSampleCount"/> has not been reached.
+    /// </summary>
+    public TimeSpan NativeLfTuneTimeout { get; init; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
     /// Enable transcript logging of all commands and responses.
     /// </summary>
     public bool EnableTranscriptLogging { get; init; }
