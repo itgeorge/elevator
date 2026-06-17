@@ -9,6 +9,9 @@
 
 # Build results
 [Dd]ebug/
+# Repo PM3 debug tooling (exception to [Dd]ebug/ — not MSBuild output)
+!debug/
+!debug/**
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
@@ -59,6 +62,18 @@ nunit-*.xml
 # Data dumps
 dumps/*
 
+# RidesCli unknown-family dumps written to the repo root
+elevator-t55xx-*.bin
+
+# LF tune probe output (see debug/plot-lf-tune-probe.py)
+debug/lf-tune-probes/*
+!debug/lf-tune-probes/.gitkeep
+
+# Ephemeral hardware capture logs under tag-backups
+debug/tag-backups/*/
+
+# Experimental native fixtures (regenerate via debug probes)
+Pm3UsbApi.Tests/Fixtures/Native/psk1-block0-samples.bin
 # User-specific and idea/vscode files
 .idea/*
 .vscode/*

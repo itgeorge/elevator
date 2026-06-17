@@ -1,3 +1,5 @@
+using Pm3UsbApi.Commands;
+using Pm3UsbApi.Diagnostics;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Parsers;
 using Pm3UsbApi.Session;
@@ -11,7 +13,6 @@ namespace Pm3UsbApi;
 public sealed class Pm3 : IAsyncDisposable
 {
     private readonly Pm3Session _session;
-    private readonly Pm3ProcessExecutor _executor;
     private CommandResult? _lastTuneResult;
 
     /// <summary>
@@ -20,9 +21,14 @@ public sealed class Pm3 : IAsyncDisposable
     /// <param name="options">Configuration. Uses sensible defaults if null.</param>
     public Pm3(Pm3Options? options = null)
     {
+        Pm3DiagnosticLog.EnsureInitialized();
         var opts = options ?? new Pm3Options();
-        _executor = new Pm3ProcessExecutor(opts);
-        _session = new Pm3Session(_executor, opts);
+        IPm3CommandExecutor executor = opts.ExecutorKind switch
+        {
+            Pm3ExecutorKind.Native => new Native.Pm3NativeExecutor(opts),
+            _ => new Pm3ProcessExecutor(opts),
+        };
+        _session = new Pm3Session(executor, opts);
     }
 
     /// <summary>
@@ -54,12 +60,17 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
+    /// Clears cached T55 detect state so the next read/write/dump re-runs detect.
+    /// </summary>
+    public void InvalidateT55DetectCache() => _session.InvalidateT55DetectCache();
+
+    /// <summary>
     /// Ensures a T55xx tag is detected on the reader. Throws if no chip found.
     /// </summary>
     /// <exception cref="Pm3CommandException">When no T55xx chip is detected.</exception>
     public async Task EnsureT55SessionActiveAsync(CancellationToken ct = default)
     {
-        var result = await _session.ExecuteT55CommandAsync("lf t55 detect", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteAsync([new T55DetectCommand()], null, ct).ConfigureAwait(false);
         var detect = DetectParser.Parse(result);
         if (!detect.ChipFound)
             throw new Pm3CommandException("No T55xx chip detected. Place a tag on the reader.", result);
@@ -76,11 +87,33 @@ public sealed class Pm3 : IAsyncDisposable
         if (block > 7)
             throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 0 and 7.");
 
-        var result = await _session.ExecuteT55CommandAsync($"lf t55 read -b {block}", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteT55Async(new T55ReadBlockCommand(block), null, ct).ConfigureAwait(false);
         var parsed = BlockReadParser.Parse(result, (int)block);
         if (!parsed.Success || parsed.HexData is null)
             throw new Pm3CommandException($"Failed to read block {block}.", result);
         return parsed.HexData;
+    }
+
+    /// <summary>
+    /// Read mirrored ride blocks 5 and 6 in one T55 batch.
+    /// Kept for symmetry with <see cref="WriteRideMirrorBlocksAsync"/>; in normal operation
+    /// (warm detect cache) this is flat vs two <see cref="ReadPage0BlockAsync"/> calls because the
+    /// second sequential read already skips detect. Minor gain only when the cache was invalidated.
+    /// </summary>
+    public async Task<(string Block5Hex, string Block6Hex)> ReadRideMirrorBlocksAsync(CancellationToken ct = default)
+    {
+        var result = await _session.ExecuteT55BatchAsync([
+            new T55ReadBlockCommand(5),
+            new T55ReadBlockCommand(6),
+        ], null, ct).ConfigureAwait(false);
+
+        var read5 = BlockReadParser.Parse(result, 5);
+        var read6 = BlockReadParser.Parse(result, 6);
+        if (!read5.Success || read5.HexData is null)
+            throw new Pm3CommandException("Failed to read block 5.", result);
+        if (!read6.Success || read6.HexData is null)
+            throw new Pm3CommandException("Failed to read block 6.", result);
+        return (read5.HexData, read6.HexData);
     }
 
     /// <summary>
@@ -98,11 +131,89 @@ public sealed class Pm3 : IAsyncDisposable
         if (block > 7)
             throw new ArgumentOutOfRangeException(nameof(block), "Block must be between 1 and 6.");
 
-        var hex = data.ToHex();
-        var result = await _session.ExecuteT55CommandAsync($"lf t55 write -b {block} -d {hex}", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteT55Async(new T55WriteBlockCommand(block, data), null, ct).ConfigureAwait(false);
         if (result.HasErrors)
             throw new Pm3CommandException($"Failed to write block {block}. {result.ErrorSummary}", result);
         return true;
+    }
+
+    /// <summary>
+    /// Write mirrored ride blocks 5 and 6 and verify both reads in as few round-trips as possible.
+    /// </summary>
+    public async Task<bool> WriteRideMirrorBlocksAsync(T55Block data, CancellationToken ct = default)
+    {
+        CommandResult? lastResult = null;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            lastResult = await _session.ExecuteT55BatchAsync([
+                new T55WriteBlockCommand(5, data),
+                new T55WriteBlockCommand(6, data),
+                new T55ReadBlockCommand(5),
+                new T55ReadBlockCommand(6),
+            ], null, ct).ConfigureAwait(false);
+
+            if (lastResult.HasErrors)
+                continue;
+
+            var read5 = BlockReadParser.Parse(lastResult, 5);
+            var read6 = BlockReadParser.Parse(lastResult, 6);
+            var expected = data.ToHex();
+            if (read5.Success && read6.Success &&
+                read5.HexData == expected && read6.HexData == expected)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Write page 0 blocks in range and verify each block, batching per attempt.
+    /// </summary>
+    public async Task<bool> WriteAndVerifyPage0BlocksAsync(
+        IReadOnlyList<T55Block> blocks,
+        int firstBlock,
+        int lastBlock,
+        CancellationToken ct = default)
+    {
+        if (firstBlock < 1 || lastBlock > 6 || firstBlock > lastBlock)
+            throw new ArgumentOutOfRangeException(nameof(firstBlock), "Blocks must be in range 1-6.");
+        if (blocks.Count <= lastBlock)
+            throw new ArgumentException("Block list does not contain the requested range.", nameof(blocks));
+
+        var confirmed = new bool[lastBlock - firstBlock + 1];
+        CommandResult? lastResult = null;
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var commands = new List<IPm3DeviceCommand>();
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                if (!confirmed[index])
+                    commands.Add(new T55WriteBlockCommand((uint)block, blocks[block]));
+            }
+
+            for (var block = firstBlock; block <= lastBlock; block++)
+                commands.Add(new T55ReadBlockCommand((uint)block));
+
+            lastResult = await _session.ExecuteT55BatchAsync(commands, null, ct).ConfigureAwait(false);
+            if (lastResult.HasErrors)
+                continue;
+
+            var allConfirmed = true;
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                var parsed = BlockReadParser.Parse(lastResult, block);
+                confirmed[index] = parsed.Success && parsed.HexData == blocks[block].ToHex();
+                allConfirmed &= confirmed[index];
+            }
+
+            if (allConfirmed)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -111,16 +222,38 @@ public sealed class Pm3 : IAsyncDisposable
     /// <returns>Raw dump output string.</returns>
     public async Task<string> DumpAsync(CancellationToken ct = default)
     {
-        var result = await _session.ExecuteT55CommandAsync("lf t55 dump", null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteT55Async(new T55DumpCommand(), null, ct).ConfigureAwait(false);
         return result.RawOutput;
+    }
+
+    /// <summary>
+    /// TEMPORARY: run LF tune while recording every sample, then write probe files (JSON + CSV).
+    /// </summary>
+    public async Task<string> RunLfTuneProbeAsync(
+        string label,
+        int? sampleCount = null,
+        TimeSpan? timeout = null,
+        string? outputDirectory = null,
+        CancellationToken ct = default)
+    {
+        var samples = sampleCount ?? 60;
+        var tuneTimeout = timeout ?? TimeSpan.FromSeconds(3);
+
+        using var probe = LfTuneProbeSession.Begin(label, samples, tuneTimeout);
+        await StartLfTuneAsync(ct, samples, tuneTimeout).ConfigureAwait(false);
+        await GetLfTuneLastMilliVoltsAsync(ct).ConfigureAwait(false);
+        return probe.WriteResults(outputDirectory);
     }
 
     /// <summary>
     /// Run LF tune to measure antenna characteristics. Call GetLfTuneLastMilliVoltsAsync to read the result.
     /// </summary>
-    public async Task<bool> StartLfTuneAsync(CancellationToken ct = default)
+    public async Task<bool> StartLfTuneAsync(
+        CancellationToken ct = default,
+        int? sampleCount = null,
+        TimeSpan? timeout = null)
     {
-        _lastTuneResult = await _session.ExecuteCommandAsync("lf tune", null, ct).ConfigureAwait(false);
+        _lastTuneResult = await _session.ExecuteAsync([new LfTuneCommand(sampleCount, timeout)], null, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -144,14 +277,15 @@ public sealed class Pm3 : IAsyncDisposable
     public Task<bool> StopLfTuneAsync(CancellationToken ct = default) => Task.FromResult(true);
 
     /// <summary>
-    /// Execute a raw Proxmark3 command and return the output.
+    /// Execute a raw Proxmark3 CLI command and return the output.
     /// Use for commands that are not wrapped by the high-level API (e.g., hw version, lf search).
+    /// Only supported by the process-wrapper executor.
     /// </summary>
     /// <param name="command">The full pm3 command string.</param>
     /// <returns>The raw output from the command.</returns>
     public async Task<string> ExecuteRawCommandAsync(string command, CancellationToken ct = default)
     {
-        var result = await _session.ExecuteCommandAsync(command, null, ct).ConfigureAwait(false);
+        var result = await _session.ExecuteAsync([new CliPassthroughCommand(command)], null, ct).ConfigureAwait(false);
         return result.RawOutput;
     }
 
@@ -162,3 +296,4 @@ public sealed class Pm3 : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 }
+

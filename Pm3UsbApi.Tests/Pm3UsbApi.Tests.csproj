@@ -18,4 +18,9 @@
     <ProjectReference Include="..\Pm3UsbApi\Pm3UsbApi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures\Native\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\TokenDumpsCli\Data\default-500-rides.bin" Link="Fixtures\default-500-rides.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

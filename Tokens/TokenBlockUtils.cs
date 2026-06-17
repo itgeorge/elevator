@@ -151,6 +151,20 @@ public static class TokenBlockUtils
         return EncodeByFamily(ridesRemaining, Families.GetFamilyFromRides(ridesRemaining));
     }
 
+    public static bool TryDecode(T55Block block, out uint ridesRemaining)
+    {
+        ridesRemaining = 0;
+        try
+        {
+            ridesRemaining = Decode(block);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
     public static uint Decode(T55Block block)
     {
         var family = Families.GetFamilyFromBlock(block);

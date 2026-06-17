@@ -1,0 +1,29 @@
+{
+  "label": "spare-t55-pre-psk1",
+  "capturedAt": "2026-06-17",
+  "detect": {
+    "modulation": "ASK",
+    "block0": "00148040",
+    "bitrate": "RF/64",
+    "offset": 32
+  },
+  "blocks": {
+    "0": "00148040",
+    "1": "43FE0062",
+    "2": "5BA494A3",
+    "3": "D6D1C733",
+    "4": "D6D1C733",
+    "5": "48C73D0F",
+    "6": "48C73D0F",
+    "7": "00000000"
+  },
+  "psk1Experiment": {
+    "targetBlock0": "00141040",
+    "modulation": "PSK1",
+    "note": "Only block0 changes; data blocks 1-6 unchanged"
+  },
+  "restore": {
+    "command": "pm3 -p $PORT -c \"lf t55xx config -c 00141040; lf t55 write -b 0 -d 00148040 --verify\"",
+    "note": "After restore, lf t55 detect should show ASK / 00148040 again"
+  }
+}

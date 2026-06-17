@@ -38,6 +38,7 @@ public sealed class RidesCommandHandler
             {
                 "config" => ExecuteConfig(args[1..]),
                 "tune" => ExecuteTune(args[1..]),
+                "tune-probe" => ExecuteTuneProbe(args[1..]),
                 "read" => ExecuteRead(args[1..]),
                 "reset" => ExecuteReset(args[1..]),
                 "set" => ExecuteSet(args[1..]),
@@ -99,6 +100,75 @@ public sealed class RidesCommandHandler
     private static string FormatInvariant2(decimal value) =>
         value.ToString("F2", CultureInfo.InvariantCulture);
 
+    private bool ExecuteTuneProbe(string[] args)
+    {
+        if (!TryParseTuneProbeArgs(args, out var label, out var sampleCount, out var timeout, out var error))
+        {
+            _output.WriteLine(error);
+            return true;
+        }
+
+        return ExecuteTuneProbeCore(label, sampleCount, timeout).GetAwaiter().GetResult();
+    }
+
+    private async Task<bool> ExecuteTuneProbeCore(string label, int sampleCount, TimeSpan timeout)
+    {
+        var jsonPath = await _pm3.RunLfTuneProbeAsync(label, sampleCount, timeout).ConfigureAwait(false);
+        var csvPath = Path.ChangeExtension(jsonPath, ".csv");
+        _output.WriteLine($"LF tune probe written:");
+        _output.WriteLine($"  json: {jsonPath}");
+        _output.WriteLine($"  csv:  {csvPath}");
+        _output.WriteLine($"Plot with: python3 debug/plot-lf-tune-probe.py {Path.GetDirectoryName(jsonPath)}");
+        return true;
+    }
+
+    private static bool TryParseTuneProbeArgs(
+        string[] args,
+        out string label,
+        out int sampleCount,
+        out TimeSpan timeout,
+        out string error)
+    {
+        label = string.Empty;
+        sampleCount = 60;
+        timeout = TimeSpan.FromSeconds(3);
+        error = string.Empty;
+
+        if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
+        {
+            error = "Usage: tune-probe <label> [--samples N] [--timeout SEC]";
+            return false;
+        }
+
+        label = args[0];
+        for (var i = 1; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--samples" when i + 1 < args.Length:
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out sampleCount) || sampleCount < 1)
+                    {
+                        error = "Error: --samples must be a positive integer";
+                        return false;
+                    }
+                    break;
+                case "--timeout" when i + 1 < args.Length:
+                    if (!double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) || seconds <= 0)
+                    {
+                        error = "Error: --timeout must be a positive number of seconds";
+                        return false;
+                    }
+                    timeout = TimeSpan.FromSeconds(seconds);
+                    break;
+                default:
+                    error = "Usage: tune-probe <label> [--samples N] [--timeout SEC]";
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
     private bool ExecuteTune(string[] args)
     {
         if (args.Length > 0)
@@ -138,27 +208,38 @@ public sealed class RidesCommandHandler
     {
         try
         {
-            var mv = await _pm3.GetSignalStrengthMvAsync();
-            _output.WriteLine($"signal strength: {mv} mV");
-
-            var dump = await _pm3.DumpAsync();
-            _lastDumpRaw = dump;
-            if (showDump)
-                _output.WriteLine(dump);
-
-            var block5Hex = await _pm3.ReadPage0BlockAsync(5);
+            var (block5Hex, block6Hex) = await _pm3.ReadRideMirrorBlocksAsync();
             var block5 = T55Block.FromHex(block5Hex);
-            if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _))
+            var block6 = T55Block.FromHex(block6Hex);
+
+            if (showDump)
             {
-                _rides = null;
-                await HandleUnknownEncodingFamilyAsync(block5);
-                return true;
+                var dump = await _pm3.DumpAsync();
+                _lastDumpRaw = dump;
+                _output.WriteLine(dump);
             }
 
-            var rides = TokenBlockUtils.Decode(block5);
-            _rides = rides;
-            _output.WriteLine($"rides remaining: {rides}");
-            return true;
+            var result = RideBlockResolver.Resolve(block5, block6);
+
+            if (!string.IsNullOrEmpty(result.WarningMessage))
+                _output.WriteLine(result.WarningMessage);
+
+            switch (result.Status)
+            {
+                case RideReadStatus.Success:
+                    _rides = result.Rides!.Value;
+                    _output.WriteLine($"rides remaining: {_rides.Value}");
+                    return true;
+                case RideReadStatus.UnknownEncodingFamily:
+                    _rides = null;
+                    await HandleUnknownEncodingFamilyAsync(block5).ConfigureAwait(false);
+                    return true;
+                default:
+                    _rides = null;
+                    _lastDumpRaw = null;
+                    _output.WriteLine("Error: could not decode rides from token (invalid block format).");
+                    return true;
+            }
         }
         catch (Exception ex)
         {
@@ -173,16 +254,31 @@ public sealed class RidesCommandHandler
     {
         _rides = null;
 
-        var mv = await _pm3.GetSignalStrengthMvAsync();
-        _output.WriteLine($"signal strength: {mv} mV");
-
-        if (!await _pm3.TryDetectTokenAsync().ConfigureAwait(false))
+        try
         {
-            _output.WriteLine("Error: no token detected. Place a token on the reader and try again.");
+            var (block5Hex, block6Hex) = await _pm3.ReadRideMirrorBlocksAsync().ConfigureAwait(false);
+            var describe = RideBlockResolver.Resolve(
+                T55Block.FromHex(block5Hex),
+                T55Block.FromHex(block6Hex));
+
+            switch (describe.Status)
+            {
+                case RideReadStatus.Success:
+                    _output.WriteLine($"current token rides: {describe.Rides!.Value}");
+                    break;
+                case RideReadStatus.UnknownEncodingFamily:
+                    _output.WriteLine($"Current token cannot be decoded: unknown encoding family in block 5 ({block5Hex}).");
+                    break;
+                default:
+                    _output.WriteLine($"Current token cannot be decoded: invalid block format in block 5 ({block5Hex}).");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Error: no token detected. {ex.Message}");
             return true;
         }
-
-        await DescribeCurrentTokenForResetAsync().ConfigureAwait(false);
 
         if (!PromptForYesNo("Overwrite token with reset image and set rides to 0? [y/N]"))
         {
@@ -195,11 +291,7 @@ public sealed class RidesCommandHandler
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var success = await WriteAndVerifyPage0BlocksAsync(resetBlocks, 1, 6).ConfigureAwait(false);
-
-        var finalDump = await _pm3.DumpAsync().ConfigureAwait(false);
-        _lastDumpRaw = finalDump;
-        _output.WriteLine(finalDump);
+        var success = await _pm3.WriteAndVerifyPage0BlocksAsync(resetBlocks, 1, 6).ConfigureAwait(false);
 
         _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
         if (success)
@@ -209,27 +301,6 @@ public sealed class RidesCommandHandler
         }
 
         return true;
-    }
-
-    private async Task DescribeCurrentTokenForResetAsync()
-    {
-        try
-        {
-            var block5Hex = await _pm3.ReadPage0BlockAsync(5).ConfigureAwait(false);
-            var block5 = T55Block.FromHex(block5Hex);
-            if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _))
-            {
-                _output.WriteLine($"Current token cannot be decoded: unknown encoding family in block 5 ({block5.ToHex()}).");
-                return;
-            }
-
-            var rides = TokenBlockUtils.Decode(block5);
-            _output.WriteLine($"current token rides: {rides}");
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"Current token could not be read: {ex.Message}");
-        }
     }
 
     private bool PromptForYesNo(string prompt)
@@ -273,33 +344,6 @@ public sealed class RidesCommandHandler
         }
 
         return blocks;
-    }
-
-    private async Task<bool> WriteAndVerifyPage0BlocksAsync(IReadOnlyList<T55Block> blocks, int firstBlock, int lastBlock)
-    {
-        var confirmed = new bool[lastBlock - firstBlock + 1];
-
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            for (var block = firstBlock; block <= lastBlock; block++)
-            {
-                var index = block - firstBlock;
-                if (!confirmed[index])
-                    await _pm3.WritePage0BlockAsync((uint)block, blocks[block]).ConfigureAwait(false);
-            }
-
-            for (var block = firstBlock; block <= lastBlock; block++)
-            {
-                var index = block - firstBlock;
-                var readBack = await _pm3.ReadPage0BlockAsync((uint)block).ConfigureAwait(false);
-                confirmed[index] = readBack == blocks[block].ToHex();
-            }
-
-            if (confirmed.All(x => x))
-                return true;
-        }
-
-        return false;
     }
 
     private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
@@ -449,28 +493,7 @@ public sealed class RidesCommandHandler
         _rides = (uint)number;
         var block = TokenBlockUtils.Encode(_rides.Value);
 
-        bool block5Confirmed = false, block6Confirmed = false;
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            if (!block5Confirmed)
-                await _pm3.WritePage0BlockAsync(5, block);
-            if (!block6Confirmed)
-                await _pm3.WritePage0BlockAsync(6, block);
-
-            var read5 = await _pm3.ReadPage0BlockAsync(5);
-            var read6 = await _pm3.ReadPage0BlockAsync(6);
-            block5Confirmed = read5 == block.ToHex();
-            block6Confirmed = read6 == block.ToHex();
-
-            if (block5Confirmed && block6Confirmed)
-                break;
-        }
-
-        var success = block5Confirmed && block6Confirmed;
-
-        var finalDump = await _pm3.DumpAsync();
-        _lastDumpRaw = finalDump;
-        _output.WriteLine(finalDump);
+        var success = await _pm3.WriteRideMirrorBlocksAsync(block).ConfigureAwait(false);
 
         _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
         if (success)
@@ -559,7 +582,9 @@ public sealed class RidesCommandHandler
     {
         _output.WriteLine("Commands:");
         _output.WriteLine("  tune          Run signal check and show antenna strength");
-        _output.WriteLine("  read [-d]     Detect and read token, show signal and rides (use -d for dump)");
+        _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
+        _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
+        _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
         _output.WriteLine("  reset         Reset token using default image and set rides to 0");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token");

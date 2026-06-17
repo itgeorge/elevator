@@ -6,6 +6,16 @@ namespace Pm3UsbApi;
 public record Pm3Options
 {
     /// <summary>
+    /// How commands are executed. <see cref="Pm3ExecutorKind.Native"/> is the default.
+    /// </summary>
+    public Pm3ExecutorKind ExecutorKind { get; init; } = Pm3ExecutorKind.Native;
+
+    /// <summary>
+    /// Baud rate for native USB CDC serial communication.
+    /// </summary>
+    public int SerialBaudRate { get; init; } = 115200;
+
+    /// <summary>
     /// Folder name for dev/test runs. Use with <see cref="WorkingDirectory"/> to isolate
     /// proxmark3 output files (e.g. lf-t55xx-*.bin) from the repo. Ignore via .gitignore.
     /// </summary>
@@ -58,6 +68,18 @@ public record Pm3Options
     ];
 
     /// <summary>
+    /// Number of LF tune voltage samples for the native executor.
+    /// Default of 35 was derived through experimentation and covers the 90th percentile of peak measurements.
+    /// </summary>
+    public int NativeLfTuneSampleCount { get; init; } = 35;
+
+    /// <summary>
+    /// Maximum time for native LF tune sampling. Sampling stops when this elapses even if
+    /// <see cref="NativeLfTuneSampleCount"/> has not been reached.
+    /// </summary>
+    public TimeSpan NativeLfTuneTimeout { get; init; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
     /// Enable transcript logging of all commands and responses.
     /// </summary>
     public bool EnableTranscriptLogging { get; init; }
@@ -66,4 +88,18 @@ public record Pm3Options
     /// Path for transcript log file. null = auto-generate in temp.
     /// </summary>
     public string? TranscriptPath { get; init; }
+
+    /// <summary>
+    /// Reads <c>PM3_EXECUTOR</c> (process|native). Defaults to <see cref="Pm3ExecutorKind.Native"/>.
+    /// </summary>
+    public static Pm3ExecutorKind ReadExecutorKindFromEnvironment()
+    {
+        var value = Environment.GetEnvironmentVariable("PM3_EXECUTOR");
+        if (string.IsNullOrWhiteSpace(value))
+            return Pm3ExecutorKind.Native;
+
+        return value.Trim().Equals("process", StringComparison.OrdinalIgnoreCase)
+            ? Pm3ExecutorKind.Process
+            : Pm3ExecutorKind.Native;
+    }
 }

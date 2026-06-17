@@ -1,0 +1,33 @@
+Read mirror benchmark (native executor, token with 50 rides, n=10)
+
+Date: 2026-06-18
+Tool: debug/ReadBenchmark (compare mode)
+
+## Warm cache (typical session — detect cache hit after first op)
+
+| Mode | Mean | Median | Min | Max |
+|------|------|--------|-----|-----|
+| sequential (read5 then read6) | 0.845s | 0.845s | 0.842s | 0.849s |
+| batch (read5+read6)           | 0.842s | 0.842s | 0.841s | 0.844s |
+
+Delta: ~3ms (~0.4%) — within measurement noise.
+
+## Cold cache (InvalidateT55DetectCache before each read)
+
+| Mode | Mean | Median | Min | Max |
+|------|------|--------|-----|-----|
+| sequential | 1.054s | 1.055s | 1.053s | 1.056s |
+| batch      | 1.054s | 1.055s | 1.052s | 1.056s |
+
+Delta: none — both paths run exactly one detect per read pair.
+
+## Why batch doesn't help much
+
+- **Warm:** sequential read6 already skips detect (cache hit). Batch only saves one session round-trip (~few ms).
+- **Cold:** sequential does detect+read5, then cached read6 — still one detect total. Batch does detect+read5+read6 in one batch — also one detect.
+
+RF acquisition time dominates (~0.84s warm, ~1.05s with detect); batching doesn't reduce acquisitions.
+
+## Recommendation
+
+No meaningful performance gain. Revert `ReadRideMirrorBlocksAsync` unless API symmetry with `WriteRideMirrorBlocksAsync` is worth the extra surface area.

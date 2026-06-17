@@ -1,5 +1,8 @@
+using Pm3UsbApi.Commands;
+using Pm3UsbApi.Diagnostics;
 using Pm3UsbApi.Execution;
 using Pm3UsbApi.Parsers;
+using System.Diagnostics;
 
 namespace Pm3UsbApi.Session;
 
@@ -14,8 +17,7 @@ public sealed class Pm3Session : IAsyncDisposable
     private StreamWriter? _transcriptWriter;
     private bool _connected;
     private string? _discoveredPort;
-    private DateTime _lastDetectTime;
-    private TimeSpan _detectCacheTtl = TimeSpan.FromSeconds(5);
+    private readonly Pm3T55DetectCache _detectCache = new();
     private bool _disposed;
     private readonly object _lock = new();
 
@@ -26,6 +28,7 @@ public sealed class Pm3Session : IAsyncDisposable
     {
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        Pm3DiagnosticLog.EnsureInitialized();
     }
 
     /// <summary>
@@ -37,61 +40,68 @@ public sealed class Pm3Session : IAsyncDisposable
     public async Task ConnectAsync(CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var log = Pm3DiagnosticLog.Current;
 
-        string? portOverride = null;
-
-        if (string.IsNullOrWhiteSpace(_options.DevicePort))
+        try
         {
-            if (!_options.AutoConnect)
+            string? portOverride = null;
+
+            if (string.IsNullOrWhiteSpace(_options.DevicePort))
             {
-                throw new Pm3ConnectionException(
-                    "DevicePort must be set when autoConnect is false. Use Pm3Options.DevicePort or config to set the port. " +
-                    "Run 'pm3 --list' (or use PortDiscovery.ListPortsAsync) to discover available ports.");
+                if (!_options.AutoConnect)
+                {
+                    throw new Pm3ConnectionException(
+                        "DevicePort must be set when autoConnect is false. Use Pm3Options.DevicePort or config to set the port. " +
+                        "Run 'pm3 --list' (or use PortDiscovery.ListPortsAsync) to discover available ports.");
+                }
+
+                portOverride = await PortDiscovery.DiscoverFirstPortAsync(_options.Pm3ClientPath, ct).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(portOverride))
+                {
+                    throw new Pm3ConnectionException(
+                        "No Proxmark3 device found. Connect the device via USB and ensure no other process is using it. " +
+                        "Run 'pm3 --list' to verify detection.");
+                }
+                _discoveredPort = portOverride;
             }
 
-            portOverride = await PortDiscovery.DiscoverFirstPortAsync(_options.Pm3ClientPath, ct).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(portOverride))
+            log.WriteSession($"connect start executor={_options.ExecutorKind} port={portOverride ?? _options.DevicePort ?? "auto"}");
+
+            var result = await ExecuteAsync(
+                [new HwVersionCommand()],
+                _options.ConnectTimeout,
+                ct,
+                portOverride).ConfigureAwait(false);
+
+            if (OutputParser.DetectOfflineMode(result.OutputLines))
             {
                 throw new Pm3ConnectionException(
-                    "No Proxmark3 device found. Connect the device via USB and ensure no other process is using it. " +
-                    "Run 'pm3 --list' to verify detection.");
+                    "Proxmark3 is in offline mode. Connect the device via USB and ensure no other process is using it.",
+                    result);
             }
-            _discoveredPort = portOverride;
+
+            var hasDeviceResponse = result.RawOutput.Contains("Proxmark3", StringComparison.OrdinalIgnoreCase)
+                && (result.RawOutput.Contains("RDV4") || result.RawOutput.Contains("Device") || result.RawOutput.Contains("Bootrom") || result.RawOutput.Contains("AT91SAM"));
+
+            if (!hasDeviceResponse && (result.HasErrors || result.ExitCode != 0))
+            {
+                throw new Pm3ConnectionException(
+                    $"Failed to connect to Proxmark3. {result.ErrorSummary ?? "Unknown error"}",
+                    result);
+            }
+
+            lock (_lock)
+            {
+                _connected = true;
+            }
+
+            log.WriteSession($"connect ok port={portOverride ?? _options.DevicePort ?? _discoveredPort}");
         }
-
-        var result = await _executor.ExecuteAsync(
-            ["hw version"],
-            _options.ConnectTimeout,
-            ct,
-            portOverride).ConfigureAwait(false);
-
-        if (OutputParser.DetectOfflineMode(result.OutputLines))
+        catch (Exception ex)
         {
-            throw new Pm3ConnectionException(
-                "Proxmark3 is in offline mode. Connect the device via USB and ensure no other process is using it.",
-                result);
+            log.WriteError("connect failed", ex);
+            throw;
         }
-
-        // Consider connected if we got a device response, even with firmware-mismatch warnings ([!])
-        var hasDeviceResponse = result.RawOutput.Contains("Proxmark3", StringComparison.OrdinalIgnoreCase)
-            && (result.RawOutput.Contains("RDV4") || result.RawOutput.Contains("Device") || result.RawOutput.Contains("Bootrom") || result.RawOutput.Contains("AT91SAM"));
-
-        if (!hasDeviceResponse && (result.HasErrors || result.ExitCode != 0))
-        {
-            throw new Pm3ConnectionException(
-                $"Failed to connect to Proxmark3. {result.ErrorSummary ?? "Unknown error"}",
-                result);
-        }
-
-        lock (_lock)
-        {
-            _connected = true;
-        }
-
-        LogTranscript(">>> hw version");
-        LogTranscript("<<< " + result.RawOutput);
-
-        // Version info is useful for diagnostics; caller can inspect CommandResult if needed
     }
 
     /// <summary>
@@ -108,6 +118,8 @@ public sealed class Pm3Session : IAsyncDisposable
         }
 
         CloseTranscript();
+        _detectCache.InvalidateForDisconnect();
+        Pm3DiagnosticLog.Current.WriteSession("disconnect");
 
         await _executor.DisposeAsync().ConfigureAwait(false);
 
@@ -135,8 +147,8 @@ public sealed class Pm3Session : IAsyncDisposable
         try
         {
             var port = _options.DevicePort ?? _discoveredPort;
-            var result = await _executor.ExecuteAsync(
-                ["hw version"],
+            var result = await ExecuteAsync(
+                [new HwVersionCommand()],
                 TimeSpan.FromSeconds(5),
                 ct,
                 port).ConfigureAwait(false);
@@ -156,55 +168,105 @@ public sealed class Pm3Session : IAsyncDisposable
     }
 
     /// <summary>
-    /// Execute a T55 command, chaining lf t55 detect before it.
-    /// Use for commands like lf t55 read, lf t55 write, lf t55 dump.
+    /// Clears the T55 detect cache so the next T55 operation re-runs detect.
     /// </summary>
-    public async Task<CommandResult> ExecuteT55CommandAsync(
-        string command,
+    public void InvalidateT55DetectCache() => _detectCache.Invalidate();
+
+    /// <summary>
+    /// Execute multiple T55 commands in one batch, prepending detect once when cache is cold.
+    /// </summary>
+    public async Task<CommandResult> ExecuteT55BatchAsync(
+        IReadOnlyList<IPm3DeviceCommand> followOnCommands,
         TimeSpan? timeout = null,
         CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        var commands = new[] { "lf t55 detect", command };
-        LogTranscript($">>> {string.Join("; ", commands)}");
+        if (followOnCommands is null || followOnCommands.Count == 0)
+            throw new ArgumentException("At least one T55 command is required.", nameof(followOnCommands));
 
         var port = _options.DevicePort ?? _discoveredPort;
-        var result = await _executor.ExecuteAsync(
-            commands,
-            timeout ?? _options.DefaultCommandTimeout,
-            ct,
-            port).ConfigureAwait(false);
+        var now = DateTime.UtcNow;
+        var skippedDetect = _detectCache.ShouldSkipDetect(
+            _options.ExecutorKind,
+            port,
+            followOnCommands[0],
+            now);
 
-        LogTranscript("<<< " + result.RawOutput);
+        IReadOnlyList<IPm3DeviceCommand> commands = skippedDetect
+            ? followOnCommands
+            : [new T55DetectCommand(), .. followOnCommands];
 
-        _lastDetectTime = DateTime.UtcNow; // For future interactive-mode cache optimization
+        if (skippedDetect)
+            Pm3DiagnosticLog.Current.WriteSession("T55 detect cache hit; skipping detect");
+
+        var result = await ExecuteAsync(commands, timeout, ct).ConfigureAwait(false);
+
+        if (skippedDetect)
+        {
+            foreach (var command in followOnCommands)
+                ApplyT55CacheAfterFollowOn(command, skippedDetect: true, result);
+        }
 
         return result;
     }
 
     /// <summary>
-    /// Execute a non-T55 command (e.g., hw version, lf tune) without chaining detect.
+    /// Execute a T55 command, chaining detect before it when cache is cold.
+    /// Use for commands like T55 read, T55 write, T55 dump.
     /// </summary>
-    public async Task<CommandResult> ExecuteCommandAsync(
-        string command,
+    public Task<CommandResult> ExecuteT55Async(
+        IPm3DeviceCommand command,
         TimeSpan? timeout = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        ExecuteT55BatchAsync([command], timeout, ct);
+
+    /// <summary>
+    /// Execute one or more device commands without T55 detect chaining.
+    /// </summary>
+    public async Task<CommandResult> ExecuteAsync(
+        IReadOnlyList<IPm3DeviceCommand> commands,
+        TimeSpan? timeout = null,
+        CancellationToken ct = default,
+        string? portOverride = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        LogTranscript($">>> {command}");
+        CommandBatchValidator.Validate(commands);
+        if (commands.Any(c => c is LfTuneCommand))
+            _detectCache.InvalidateForLfTune();
 
-        var port = _options.DevicePort ?? _discoveredPort;
-        var result = await _executor.ExecuteAsync(
-            [command],
-            timeout ?? _options.DefaultCommandTimeout,
-            ct,
-            port).ConfigureAwait(false);
+        var batch = Pm3CliFormatter.FormatBatch(commands);
+        LogTranscript($">>> {batch}");
+        Pm3DiagnosticLog.Current.WriteSession($">>> {batch}");
 
-        LogTranscript("<<< " + result.RawOutput);
+        var port = portOverride ?? _options.DevicePort ?? _discoveredPort;
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await _executor.ExecuteAsync(
+                commands,
+                timeout ?? _options.DefaultCommandTimeout,
+                ct,
+                port).ConfigureAwait(false);
 
-        return result;
+            LogTranscript("<<< " + result.RawOutput);
+            var summary = result.HasErrors
+                ? $"<<< FAIL exit={result.ExitCode} {result.ErrorSummary}"
+                : $"<<< OK exit={result.ExitCode}";
+            Pm3DiagnosticLog.Current.WriteSession($"{summary} ({sw.ElapsedMilliseconds}ms)");
+            if (result.HasErrors)
+                Pm3DiagnosticLog.Current.WriteError($"command batch failed: {batch} — {result.ErrorSummary}");
+
+            var now = DateTime.UtcNow;
+            if (commands.Any(c => c is T55DetectCommand) && !result.HasErrors)
+                _detectCache.TryRecordFromBatchResult(_options.ExecutorKind, port, commands, result, now);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Pm3DiagnosticLog.Current.WriteError($"command batch exception: {batch} ({sw.ElapsedMilliseconds}ms)", ex);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -248,6 +310,28 @@ public sealed class Pm3Session : IAsyncDisposable
         return new StreamWriter(fs) { AutoFlush = true };
     }
 
+    private void ApplyT55CacheAfterFollowOn(
+        IPm3DeviceCommand followOn,
+        bool skippedDetect,
+        CommandResult result)
+    {
+        if (!skippedDetect || followOn is not T55ReadBlockCommand read)
+            return;
+
+        if (result.HasErrors)
+        {
+            _detectCache.InvalidateForReadFailure();
+            return;
+        }
+
+        if (read.Block != 0)
+            return;
+
+        var parsed = BlockReadParser.Parse(result, 0);
+        if (parsed.Success && parsed.HexData is not null)
+            _detectCache.InvalidateForBlock0Mismatch(parsed.HexData);
+    }
+
     private void CloseTranscript()
     {
         lock (_lock)
@@ -257,3 +341,4 @@ public sealed class Pm3Session : IAsyncDisposable
         }
     }
 }
+

@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Pm3UsbApi;
+using Pm3UsbApi.Commands;
 using Pm3UsbApi.Parsers;
 using Tokens;
 
@@ -11,7 +12,7 @@ public class DumpParserTests
     private static CommandResult ToResult(string output) =>
         new()
         {
-            Commands = ["lf t55 dump"],
+            Commands = [new T55DumpCommand()],
             OutputLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s.TrimEnd()).ToList(),
             ExitCode = 0,
             HasErrors = false

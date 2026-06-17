@@ -47,6 +47,18 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void TuneProbe_writes_probe_paths()
+    {
+        var output = new StringBuilderRidesOutput();
+        var handler = new RidesCommandHandler(new FakeRidesPm3Api(), output, new RidesConfig());
+
+        handler.Execute(["tune-probe", "fake-token-center"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("LF tune probe written:"));
+        Assert.That(output.Lines, Has.Some.Contains("fake-token-center"));
+    }
+
+    [Test]
     public void Tune_shows_signal_strength_only()
     {
         var output = new StringBuilderRidesOutput();
@@ -76,13 +88,12 @@ public class RidesCommandHandlerTests
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithRides(73);
-        pm3.SignalStrengthMv = 420;
         var input = new ScriptedRidesInput("y");
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), input);
 
         handler.Execute(["reset"]);
 
-        Assert.That(output.Lines, Has.Some.EqualTo("signal strength: 420 mV"));
+        Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
         Assert.That(output.Lines, Has.Some.EqualTo("current token rides: 73"));
         Assert.That(output.Lines, Has.Some.EqualTo("Success."));
         Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 0"));
@@ -99,14 +110,14 @@ public class RidesCommandHandlerTests
     public void Reset_when_no_token_detected_prints_error_and_signal_strength()
     {
         var output = new StringBuilderRidesOutput();
-        var pm3 = new FakeRidesPm3Api { SignalStrengthMv = 420 };
+        var pm3 = new FakeRidesPm3Api();
         pm3.RemoveToken();
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
 
         handler.Execute(["reset"]);
 
-        Assert.That(output.Lines, Has.Some.EqualTo("signal strength: 420 mV"));
-        Assert.That(output.Lines, Has.Some.EqualTo("Error: no token detected. Place a token on the reader and try again."));
+        Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
+        Assert.That(output.Lines, Has.Some.Contains("no token detected"));
         Assert.That(output.Lines, Has.None.EqualTo("Success."));
     }
 
@@ -143,17 +154,18 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
-    public void Read_shows_signal_strength_and_rides()
+    public void Read_matching_blocks_decodes_rides_without_tune_or_dump()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithRides(73);
-        pm3.SignalStrengthMv = 420;
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
 
         handler.Execute(["read"]);
 
-        Assert.That(output.Lines, Has.Some.Matches(@"signal strength: 420 mV"));
         Assert.That(output.Lines, Has.Some.Matches(@"rides remaining: 73"));
+        Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
+        Assert.That(pm3.TuneCallCount, Is.EqualTo(0));
+        Assert.That(pm3.DumpCallCount, Is.EqualTo(0));
     }
 
     [Test]
@@ -165,7 +177,7 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["read"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("Error"));
+        Assert.That(output.Lines, Has.Some.Contains("invalid block format"));
         // Subsequent set should fail with "no rides in memory"
         handler.Execute(["set", "50"]);
         Assert.That(output.Lines, Has.Some.Contains("no rides in memory"));
@@ -349,6 +361,33 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Read_mismatch_only_block6_valid_loads_rides_from_block6()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithBlocks5And6(new T55Block(0xCCC70000), TokenBlockUtils.Encode(42));
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+
+        handler.Execute(["read"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Warning: blocks 5 and 6 differ; using block 6."));
+        Assert.That(output.Lines, Has.Some.Matches(@"rides remaining: 42"));
+    }
+
+    [Test]
+    public void Read_mismatch_both_valid_prefers_block5()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithMismatchedRides(73, 80);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+
+        handler.Execute(["read"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Warning: blocks 5 and 6 differ; using block 5 (73 rides)."));
+        Assert.That(output.Lines, Has.Some.Matches(@"rides remaining: 73"));
+        Assert.That(pm3.DumpCallCount, Is.EqualTo(0));
+    }
+
+    [Test]
     public void Read_with_d_flag_shows_dump()
     {
         var output = new StringBuilderRidesOutput();
@@ -359,6 +398,8 @@ public class RidesCommandHandlerTests
         handler.Execute(["read", "-d"]);
 
         Assert.That(output.Lines, Has.Some.EqualTo("raw dump output"));
+        Assert.That(pm3.DumpCallCount, Is.EqualTo(1));
+        Assert.That(pm3.TuneCallCount, Is.EqualTo(0));
     }
 
     [Test]
