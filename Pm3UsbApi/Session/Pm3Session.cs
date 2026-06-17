@@ -17,8 +17,7 @@ public sealed class Pm3Session : IAsyncDisposable
     private StreamWriter? _transcriptWriter;
     private bool _connected;
     private string? _discoveredPort;
-    private DateTime _lastDetectTime;
-    private TimeSpan _detectCacheTtl = TimeSpan.FromSeconds(5);
+    private readonly Pm3T55DetectCache _detectCache = new();
     private bool _disposed;
     private readonly object _lock = new();
 
@@ -119,6 +118,7 @@ public sealed class Pm3Session : IAsyncDisposable
         }
 
         CloseTranscript();
+        _detectCache.InvalidateForDisconnect();
         Pm3DiagnosticLog.Current.WriteSession("disconnect");
 
         await _executor.DisposeAsync().ConfigureAwait(false);
@@ -168,14 +168,36 @@ public sealed class Pm3Session : IAsyncDisposable
     }
 
     /// <summary>
-    /// Execute a T55 command, chaining detect before it.
+    /// Clears the T55 detect cache so the next T55 operation re-runs detect.
+    /// </summary>
+    public void InvalidateT55DetectCache() => _detectCache.Invalidate();
+
+    /// <summary>
+    /// Execute a T55 command, chaining detect before it when cache is cold.
     /// Use for commands like T55 read, T55 write, T55 dump.
     /// </summary>
-    public Task<CommandResult> ExecuteT55Async(
+    public async Task<CommandResult> ExecuteT55Async(
         IPm3DeviceCommand command,
         TimeSpan? timeout = null,
-        CancellationToken ct = default) =>
-        ExecuteAsync([new T55DetectCommand(), command], timeout, ct);
+        CancellationToken ct = default)
+    {
+        var port = _options.DevicePort ?? _discoveredPort;
+        var now = DateTime.UtcNow;
+        var skippedDetect = _detectCache.ShouldSkipDetect(_options.ExecutorKind, port, command, now);
+        var commands = Pm3T55DetectCache.BuildT55CommandBatch(
+            _detectCache,
+            _options.ExecutorKind,
+            port,
+            command,
+            now);
+
+        if (skippedDetect)
+            Pm3DiagnosticLog.Current.WriteSession("T55 detect cache hit; skipping detect");
+
+        var result = await ExecuteAsync(commands, timeout, ct).ConfigureAwait(false);
+        ApplyT55CacheAfterFollowOn(command, skippedDetect, result);
+        return result;
+    }
 
     /// <summary>
     /// Execute one or more device commands without T55 detect chaining.
@@ -189,6 +211,9 @@ public sealed class Pm3Session : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         CommandBatchValidator.Validate(commands);
+        if (commands.Any(c => c is LfTuneCommand))
+            _detectCache.InvalidateForLfTune();
+
         var batch = Pm3CliFormatter.FormatBatch(commands);
         LogTranscript($">>> {batch}");
         Pm3DiagnosticLog.Current.WriteSession($">>> {batch}");
@@ -211,8 +236,12 @@ public sealed class Pm3Session : IAsyncDisposable
             if (result.HasErrors)
                 Pm3DiagnosticLog.Current.WriteError($"command batch failed: {batch} — {result.ErrorSummary}");
 
-            if (commands.Any(c => c is T55DetectCommand))
-                _lastDetectTime = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            if (commands.Any(c => c is T55DetectCommand) && !result.HasErrors)
+                _detectCache.TryRecordFromBatchResult(_options.ExecutorKind, port, commands, result, now);
+
+            if (commands.Any(c => c is T55WriteBlockCommand) && !result.HasErrors)
+                _detectCache.InvalidateForWrite();
 
             return result;
         }
@@ -262,6 +291,28 @@ public sealed class Pm3Session : IAsyncDisposable
 
         var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         return new StreamWriter(fs) { AutoFlush = true };
+    }
+
+    private void ApplyT55CacheAfterFollowOn(
+        IPm3DeviceCommand followOn,
+        bool skippedDetect,
+        CommandResult result)
+    {
+        if (!skippedDetect || followOn is not T55ReadBlockCommand read)
+            return;
+
+        if (result.HasErrors)
+        {
+            _detectCache.InvalidateForReadFailure();
+            return;
+        }
+
+        if (read.Block != 0)
+            return;
+
+        var parsed = BlockReadParser.Parse(result, 0);
+        if (parsed.Success && parsed.HexData is not null)
+            _detectCache.InvalidateForBlock0Mismatch(parsed.HexData);
     }
 
     private void CloseTranscript()

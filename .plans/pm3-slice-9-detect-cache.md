@@ -1,6 +1,6 @@
 # Slice 9 — T55 Detect Cache (S4.9, test-first)
 
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete  
 **Depends on:** Slice 5  
 **Branch:** `pm3-integration`
 
@@ -40,15 +40,11 @@ Skip redundant 4×2 detect search when session config is still valid. **TTL: 30 
 
 ## Test-first tasks
 
-- [ ] `Pm3T55DetectCache` policy class + `Pm3T55DetectCacheTests` (no hardware):
-  - `detect → read` → cache hit
-  - `detect → tune → read` → miss
-  - `detect → write → read` → miss
-  - TTL 30s elapsed → miss
-  - read mismatch → invalidate
-- [ ] Wire into `Pm3Session.ExecuteT55Async` — strip `T55DetectCommand` when cache valid
-- [ ] Native executor: honor skipped detect (use existing `_t55Config`)
-- [ ] Integration test: two reads in same session; second faster / log shows skip (optional timing assert)
+- [x] `Pm3T55DetectCache` policy class + `Pm3T55DetectCacheTests` (no hardware)
+- [x] `Pm3SessionDetectCacheTests` with recording executor
+- [x] Wire into `Pm3Session.ExecuteT55Async` — strip `T55DetectCommand` when cache valid (native only)
+- [x] Native executor honors skipped detect via persisted `_t55Config`
+- [x] `Pm3.InvalidateT55DetectCache()` escape hatch
 
 ## Key files
 

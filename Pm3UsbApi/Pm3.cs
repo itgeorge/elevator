@@ -60,6 +60,11 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
+    /// Clears cached T55 detect state so the next read/write/dump re-runs detect.
+    /// </summary>
+    public void InvalidateT55DetectCache() => _session.InvalidateT55DetectCache();
+
+    /// <summary>
     /// Ensures a T55xx tag is detected on the reader. Throws if no chip found.
     /// </summary>
     /// <exception cref="Pm3CommandException">When no T55xx chip is detected.</exception>

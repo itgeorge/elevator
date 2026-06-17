@@ -18,7 +18,8 @@
 | **Slice 5** | Native default executor | ✅ Complete |
 | **Slice 7** | Diagnostic logging (temp files) | ✅ Complete |
 | **Slice 11** | Debug tooling → `debug/` | ✅ Complete |
-| **Slices 6, 8–10** | Capabilities, cache, perf, modulation | 🔲 Planned — see handoff docs |
+| **Slice 9** | T55 detect cache (30s TTL) | ✅ Complete |
+| **Slices 6, 8, 10** | Capabilities, modulation, dump perf | 🔲 Planned — see handoff docs |
 
 **Recent commits on `pm3-integration`:**
 
@@ -237,7 +238,7 @@ Stage A is complete. All items checked for historical reference.
 |------|-------|-------------|
 | S4.7 `CMD_CAPABILITIES` | 6 | [pm3-slice-6-capabilities.md](pm3-slice-6-capabilities.md) |
 | S4.8 Dump performance (not RESET_READ) | 10 | [pm3-slice-10-dump-performance.md](pm3-slice-10-dump-performance.md) |
-| S4.9 Detect cache (30s TTL, test-first) | 9 | [pm3-slice-9-detect-cache.md](pm3-slice-9-detect-cache.md) |
+| S4.9 Detect cache (30s TTL, test-first) | 9 | ✅ [pm3-slice-9-detect-cache.md](pm3-slice-9-detect-cache.md) |
 | S4.10 Unsupported modulation detection | 8 | [pm3-slice-8-unsupported-modulation.md](pm3-slice-8-unsupported-modulation.md) |
 | S4.11 Debug tooling → `debug/` | 11 | ✅ [pm3-slice-11-debug-relocation.md](pm3-slice-11-debug-relocation.md) |
 | Diagnostic logging (temp files) | 7 | ✅ [pm3-slice-7-logging.md](pm3-slice-7-logging.md) |
@@ -298,12 +299,11 @@ Parameterized `[TestFixture(Process)]` + `[TestFixture(Native)]`. Native skips o
 
 **Suggested order (remaining):**
 
-1. [Slice 9](pm3-slice-9-detect-cache.md) — detect cache (30s TTL, test-first)
-2. [Slice 8](pm3-slice-8-unsupported-modulation.md) — unsupported modulation error
-3. [Slice 6](pm3-slice-6-capabilities.md) — capabilities on connect
-4. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
-5. **S4.6** — merge to `master` when ready
-6. **S4.2** — Linux validation when hardware available
+1. [Slice 8](pm3-slice-8-unsupported-modulation.md) — unsupported modulation error
+2. [Slice 6](pm3-slice-6-capabilities.md) — capabilities on connect
+3. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
+4. **S4.6** — merge to `master` when ready
+5. **S4.2** — Linux validation when hardware available
 
 ---
 
