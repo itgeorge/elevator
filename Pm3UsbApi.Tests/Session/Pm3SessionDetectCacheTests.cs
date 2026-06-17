@@ -100,7 +100,7 @@ public class Pm3SessionDetectCacheTests
   }
 
   [Test]
-  public async Task ExecuteT55Async_Write_InvalidatesDetectCache()
+  public async Task ExecuteT55Async_Write_KeepsDetectCache()
   {
     var executor = new RecordingExecutor([
       DetectAndReadSuccess(),
@@ -116,7 +116,7 @@ public class Pm3SessionDetectCacheTests
         ExitCode = 0,
         HasErrors = false,
       },
-      DetectAndReadSuccess(),
+      ReadOnlySuccess(),
     ]);
 
     var session = new Pm3Session(executor, new Pm3Options
@@ -129,7 +129,8 @@ public class Pm3SessionDetectCacheTests
     await session.ExecuteT55Async(new T55WriteBlockCommand(5, new T55Block(0xDEADBEEF)));
     await session.ExecuteT55Async(new T55ReadBlockCommand(5));
 
-    Assert.That(executor.Batches[2], Has.Count.EqualTo(2));
+    Assert.That(executor.Batches[2], Has.Count.EqualTo(1));
+    Assert.That(executor.Batches[2][0], Is.InstanceOf<T55ReadBlockCommand>());
   }
 
   [Test]

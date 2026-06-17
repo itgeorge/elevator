@@ -118,6 +118,55 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         return Task.FromResult(DumpResult);
     }
 
+    public async Task<bool> WriteRideMirrorBlocksAsync(T55Block data, CancellationToken ct = default)
+    {
+        EnsureTokenPresent();
+        var expected = data.ToHex();
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await WritePage0BlockAsync(5, data, ct);
+            await WritePage0BlockAsync(6, data, ct);
+            var read5 = await ReadPage0BlockAsync(5, ct);
+            var read6 = await ReadPage0BlockAsync(6, ct);
+            if (read5 == expected && read6 == expected)
+                return true;
+        }
+
+        return false;
+    }
+
+    public async Task<bool> WriteAndVerifyPage0BlocksAsync(
+        IReadOnlyList<T55Block> blocks,
+        int firstBlock,
+        int lastBlock,
+        CancellationToken ct = default)
+    {
+        EnsureTokenPresent();
+        var confirmed = new bool[lastBlock - firstBlock + 1];
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                if (!confirmed[index])
+                    await WritePage0BlockAsync((uint)block, blocks[block], ct);
+            }
+
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                var readBack = await ReadPage0BlockAsync((uint)block, ct);
+                confirmed[index] = readBack == blocks[block].ToHex();
+            }
+
+            if (confirmed.All(x => x))
+                return true;
+        }
+
+        return false;
+    }
+
     public Task<uint> GetSignalStrengthMvAsync(CancellationToken ct = default)
     {
         TuneCallCount++;

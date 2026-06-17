@@ -173,31 +173,51 @@ public sealed class Pm3Session : IAsyncDisposable
     public void InvalidateT55DetectCache() => _detectCache.Invalidate();
 
     /// <summary>
-    /// Execute a T55 command, chaining detect before it when cache is cold.
-    /// Use for commands like T55 read, T55 write, T55 dump.
+    /// Execute multiple T55 commands in one batch, prepending detect once when cache is cold.
     /// </summary>
-    public async Task<CommandResult> ExecuteT55Async(
-        IPm3DeviceCommand command,
+    public async Task<CommandResult> ExecuteT55BatchAsync(
+        IReadOnlyList<IPm3DeviceCommand> followOnCommands,
         TimeSpan? timeout = null,
         CancellationToken ct = default)
     {
+        if (followOnCommands is null || followOnCommands.Count == 0)
+            throw new ArgumentException("At least one T55 command is required.", nameof(followOnCommands));
+
         var port = _options.DevicePort ?? _discoveredPort;
         var now = DateTime.UtcNow;
-        var skippedDetect = _detectCache.ShouldSkipDetect(_options.ExecutorKind, port, command, now);
-        var commands = Pm3T55DetectCache.BuildT55CommandBatch(
-            _detectCache,
+        var skippedDetect = _detectCache.ShouldSkipDetect(
             _options.ExecutorKind,
             port,
-            command,
+            followOnCommands[0],
             now);
+
+        IReadOnlyList<IPm3DeviceCommand> commands = skippedDetect
+            ? followOnCommands
+            : [new T55DetectCommand(), .. followOnCommands];
 
         if (skippedDetect)
             Pm3DiagnosticLog.Current.WriteSession("T55 detect cache hit; skipping detect");
 
         var result = await ExecuteAsync(commands, timeout, ct).ConfigureAwait(false);
-        ApplyT55CacheAfterFollowOn(command, skippedDetect, result);
+
+        if (skippedDetect)
+        {
+            foreach (var command in followOnCommands)
+                ApplyT55CacheAfterFollowOn(command, skippedDetect: true, result);
+        }
+
         return result;
     }
+
+    /// <summary>
+    /// Execute a T55 command, chaining detect before it when cache is cold.
+    /// Use for commands like T55 read, T55 write, T55 dump.
+    /// </summary>
+    public Task<CommandResult> ExecuteT55Async(
+        IPm3DeviceCommand command,
+        TimeSpan? timeout = null,
+        CancellationToken ct = default) =>
+        ExecuteT55BatchAsync([command], timeout, ct);
 
     /// <summary>
     /// Execute one or more device commands without T55 detect chaining.
@@ -239,9 +259,6 @@ public sealed class Pm3Session : IAsyncDisposable
             var now = DateTime.UtcNow;
             if (commands.Any(c => c is T55DetectCommand) && !result.HasErrors)
                 _detectCache.TryRecordFromBatchResult(_options.ExecutorKind, port, commands, result, now);
-
-            if (commands.Any(c => c is T55WriteBlockCommand) && !result.HasErrors)
-                _detectCache.InvalidateForWrite();
 
             return result;
         }

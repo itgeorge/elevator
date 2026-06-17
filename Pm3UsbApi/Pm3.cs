@@ -116,6 +116,85 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
+    /// Write mirrored ride blocks 5 and 6 and verify both reads in as few round-trips as possible.
+    /// </summary>
+    public async Task<bool> WriteRideMirrorBlocksAsync(T55Block data, CancellationToken ct = default)
+    {
+        CommandResult? lastResult = null;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            lastResult = await _session.ExecuteT55BatchAsync([
+                new T55WriteBlockCommand(5, data),
+                new T55WriteBlockCommand(6, data),
+                new T55ReadBlockCommand(5),
+                new T55ReadBlockCommand(6),
+            ], null, ct).ConfigureAwait(false);
+
+            if (lastResult.HasErrors)
+                continue;
+
+            var read5 = BlockReadParser.Parse(lastResult, 5);
+            var read6 = BlockReadParser.Parse(lastResult, 6);
+            var expected = data.ToHex();
+            if (read5.Success && read6.Success &&
+                read5.HexData == expected && read6.HexData == expected)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Write page 0 blocks in range and verify each block, batching per attempt.
+    /// </summary>
+    public async Task<bool> WriteAndVerifyPage0BlocksAsync(
+        IReadOnlyList<T55Block> blocks,
+        int firstBlock,
+        int lastBlock,
+        CancellationToken ct = default)
+    {
+        if (firstBlock < 1 || lastBlock > 6 || firstBlock > lastBlock)
+            throw new ArgumentOutOfRangeException(nameof(firstBlock), "Blocks must be in range 1-6.");
+        if (blocks.Count <= lastBlock)
+            throw new ArgumentException("Block list does not contain the requested range.", nameof(blocks));
+
+        var confirmed = new bool[lastBlock - firstBlock + 1];
+        CommandResult? lastResult = null;
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var commands = new List<IPm3DeviceCommand>();
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                if (!confirmed[index])
+                    commands.Add(new T55WriteBlockCommand((uint)block, blocks[block]));
+            }
+
+            for (var block = firstBlock; block <= lastBlock; block++)
+                commands.Add(new T55ReadBlockCommand((uint)block));
+
+            lastResult = await _session.ExecuteT55BatchAsync(commands, null, ct).ConfigureAwait(false);
+            if (lastResult.HasErrors)
+                continue;
+
+            var allConfirmed = true;
+            for (var block = firstBlock; block <= lastBlock; block++)
+            {
+                var index = block - firstBlock;
+                var parsed = BlockReadParser.Parse(lastResult, block);
+                confirmed[index] = parsed.Success && parsed.HexData == blocks[block].ToHex();
+                allConfirmed &= confirmed[index];
+            }
+
+            if (allConfirmed)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Dump all page 0 blocks from the tag.
     /// </summary>
     /// <returns>Raw dump output string.</returns>

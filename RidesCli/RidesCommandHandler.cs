@@ -185,16 +185,32 @@ public sealed class RidesCommandHandler
     {
         _rides = null;
 
-        var mv = await _pm3.GetSignalStrengthMvAsync();
-        _output.WriteLine($"signal strength: {mv} mV");
-
-        if (!await _pm3.TryDetectTokenAsync().ConfigureAwait(false))
+        try
         {
-            _output.WriteLine("Error: no token detected. Place a token on the reader and try again.");
+            var block5Hex = await _pm3.ReadPage0BlockAsync(5).ConfigureAwait(false);
+            var block6Hex = await _pm3.ReadPage0BlockAsync(6).ConfigureAwait(false);
+            var describe = RideBlockResolver.Resolve(
+                T55Block.FromHex(block5Hex),
+                T55Block.FromHex(block6Hex));
+
+            switch (describe.Status)
+            {
+                case RideReadStatus.Success:
+                    _output.WriteLine($"current token rides: {describe.Rides!.Value}");
+                    break;
+                case RideReadStatus.UnknownEncodingFamily:
+                    _output.WriteLine($"Current token cannot be decoded: unknown encoding family in block 5 ({block5Hex}).");
+                    break;
+                default:
+                    _output.WriteLine($"Current token cannot be decoded: invalid block format in block 5 ({block5Hex}).");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Error: no token detected. {ex.Message}");
             return true;
         }
-
-        await DescribeCurrentTokenForResetAsync().ConfigureAwait(false);
 
         if (!PromptForYesNo("Overwrite token with reset image and set rides to 0? [y/N]"))
         {
@@ -207,11 +223,7 @@ public sealed class RidesCommandHandler
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var success = await WriteAndVerifyPage0BlocksAsync(resetBlocks, 1, 6).ConfigureAwait(false);
-
-        var finalDump = await _pm3.DumpAsync().ConfigureAwait(false);
-        _lastDumpRaw = finalDump;
-        _output.WriteLine(finalDump);
+        var success = await _pm3.WriteAndVerifyPage0BlocksAsync(resetBlocks, 1, 6).ConfigureAwait(false);
 
         _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
         if (success)
@@ -221,27 +233,6 @@ public sealed class RidesCommandHandler
         }
 
         return true;
-    }
-
-    private async Task DescribeCurrentTokenForResetAsync()
-    {
-        try
-        {
-            var block5Hex = await _pm3.ReadPage0BlockAsync(5).ConfigureAwait(false);
-            var block5 = T55Block.FromHex(block5Hex);
-            if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _))
-            {
-                _output.WriteLine($"Current token cannot be decoded: unknown encoding family in block 5 ({block5.ToHex()}).");
-                return;
-            }
-
-            var rides = TokenBlockUtils.Decode(block5);
-            _output.WriteLine($"current token rides: {rides}");
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"Current token could not be read: {ex.Message}");
-        }
     }
 
     private bool PromptForYesNo(string prompt)
@@ -285,33 +276,6 @@ public sealed class RidesCommandHandler
         }
 
         return blocks;
-    }
-
-    private async Task<bool> WriteAndVerifyPage0BlocksAsync(IReadOnlyList<T55Block> blocks, int firstBlock, int lastBlock)
-    {
-        var confirmed = new bool[lastBlock - firstBlock + 1];
-
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            for (var block = firstBlock; block <= lastBlock; block++)
-            {
-                var index = block - firstBlock;
-                if (!confirmed[index])
-                    await _pm3.WritePage0BlockAsync((uint)block, blocks[block]).ConfigureAwait(false);
-            }
-
-            for (var block = firstBlock; block <= lastBlock; block++)
-            {
-                var index = block - firstBlock;
-                var readBack = await _pm3.ReadPage0BlockAsync((uint)block).ConfigureAwait(false);
-                confirmed[index] = readBack == blocks[block].ToHex();
-            }
-
-            if (confirmed.All(x => x))
-                return true;
-        }
-
-        return false;
     }
 
     private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
@@ -461,28 +425,7 @@ public sealed class RidesCommandHandler
         _rides = (uint)number;
         var block = TokenBlockUtils.Encode(_rides.Value);
 
-        bool block5Confirmed = false, block6Confirmed = false;
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            if (!block5Confirmed)
-                await _pm3.WritePage0BlockAsync(5, block);
-            if (!block6Confirmed)
-                await _pm3.WritePage0BlockAsync(6, block);
-
-            var read5 = await _pm3.ReadPage0BlockAsync(5);
-            var read6 = await _pm3.ReadPage0BlockAsync(6);
-            block5Confirmed = read5 == block.ToHex();
-            block6Confirmed = read6 == block.ToHex();
-
-            if (block5Confirmed && block6Confirmed)
-                break;
-        }
-
-        var success = block5Confirmed && block6Confirmed;
-
-        var finalDump = await _pm3.DumpAsync();
-        _lastDumpRaw = finalDump;
-        _output.WriteLine(finalDump);
+        var success = await _pm3.WriteRideMirrorBlocksAsync(block).ConfigureAwait(false);
 
         _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
         if (success)

@@ -76,13 +76,12 @@ public class RidesCommandHandlerTests
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithRides(73);
-        pm3.SignalStrengthMv = 420;
         var input = new ScriptedRidesInput("y");
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), input);
 
         handler.Execute(["reset"]);
 
-        Assert.That(output.Lines, Has.Some.EqualTo("signal strength: 420 mV"));
+        Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
         Assert.That(output.Lines, Has.Some.EqualTo("current token rides: 73"));
         Assert.That(output.Lines, Has.Some.EqualTo("Success."));
         Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 0"));
@@ -99,14 +98,14 @@ public class RidesCommandHandlerTests
     public void Reset_when_no_token_detected_prints_error_and_signal_strength()
     {
         var output = new StringBuilderRidesOutput();
-        var pm3 = new FakeRidesPm3Api { SignalStrengthMv = 420 };
+        var pm3 = new FakeRidesPm3Api();
         pm3.RemoveToken();
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
 
         handler.Execute(["reset"]);
 
-        Assert.That(output.Lines, Has.Some.EqualTo("signal strength: 420 mV"));
-        Assert.That(output.Lines, Has.Some.EqualTo("Error: no token detected. Place a token on the reader and try again."));
+        Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
+        Assert.That(output.Lines, Has.Some.Contains("no token detected"));
         Assert.That(output.Lines, Has.None.EqualTo("Success."));
     }
 
