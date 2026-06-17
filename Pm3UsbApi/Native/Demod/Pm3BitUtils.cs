@@ -6,9 +6,10 @@ namespace Pm3UsbApi.Native.Demod;
 internal static class Pm3BitUtils
 {
     public const byte DemodAsk = 0x08;
+    public const byte DemodPsk1 = 0x01;
     public const uint T55X7EmUniqueConfigBlock = 0x00148040;
 
-    private static readonly int[] BitRateClocks = [8, 16, 32, 40, 50, 64, 100, 128];
+    internal static readonly int[] BitRateClocks = [8, 16, 32, 40, 50, 64, 100, 128];
 
     public static uint PackBits(int start, int len, ReadOnlySpan<byte> bits)
     {
@@ -81,5 +82,79 @@ internal static class Pm3BitUtils
         }
 
         return false;
+    }
+
+    public static bool TryFindPlausibleConfig(
+        ReadOnlySpan<byte> demodBits,
+        int clk,
+        out byte offset,
+        out byte bitrate,
+        out byte modRead,
+        out uint block0)
+    {
+        offset = 0;
+        bitrate = 0;
+        modRead = 0;
+        block0 = 0;
+
+        if (demodBits.Length < 64)
+            return false;
+
+        for (byte idx = 28; idx < 64; idx++)
+        {
+            if (!TryParseConfigCandidate(demodBits, idx, clk, out offset, out bitrate, out modRead, out block0))
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    internal static bool TryParseConfigCandidate(
+        ReadOnlySpan<byte> demodBits,
+        byte idx,
+        int clk,
+        out byte offset,
+        out byte bitrate,
+        out byte modRead,
+        out uint block0)
+    {
+        offset = 0;
+        bitrate = 0;
+        modRead = 0;
+        block0 = 0;
+
+        var si = idx;
+        if (PackBits(si, 28, demodBits) == 0)
+            return false;
+
+        var safer = (byte)PackBits(si, 4, demodBits);
+        si += 4;
+        var resv = (byte)PackBits(si, 4, demodBits);
+        si += 4;
+        if (resv > 0)
+            return false;
+
+        var bitRate = (byte)PackBits(si, 6, demodBits);
+        si += 6;
+        var extend = (byte)PackBits(si, 1, demodBits);
+        si += 1;
+        modRead = (byte)PackBits(si, 5, demodBits);
+
+        var extMode = (safer is 0x6 or 0x9) && extend == 1;
+        if (!extMode)
+        {
+            if (bitRate > 7 || !TestBitRate(bitRate, clk))
+                return false;
+        }
+
+        block0 = PackBits(idx, 32, demodBits);
+        if (block0 == 0)
+            return false;
+
+        offset = idx;
+        bitrate = bitRate;
+        return true;
     }
 }

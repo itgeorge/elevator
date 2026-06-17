@@ -1,6 +1,8 @@
 using System.Text;
+using Pm3UsbApi;
 using Pm3UsbApi.Native.Demod;
 using Pm3UsbApi.Native.Protocol;
+using Pm3UsbApi.Native.T55;
 
 namespace Pm3UsbApi.Native;
 
@@ -58,6 +60,12 @@ internal static class Pm3NativeOutputBuilder
     public static IReadOnlyList<string> BuildDetectFailedLines() =>
     [
         "[!] Could not detect modulation automatically. Try setting it manually with 'lf t55xx config'",
+    ];
+
+    public static IReadOnlyList<string> BuildUnsupportedModulationLines(Pm3T55UnsupportedModulationInfo info) =>
+    [
+        "[!] Could not detect modulation automatically. Try setting it manually with 'lf t55xx config'",
+        $"[!] Native executor supports ASK/Manchester only (detected {Pm3T55ModulationNames.Name(info.Modulation)} / 0x{info.Modulation:X2}, block0=0x{info.Block0:X8}). Set PM3_EXECUTOR=process.",
     ];
 
     public static IReadOnlyList<string> BuildReadFailedLines(uint block) =>

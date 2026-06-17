@@ -85,6 +85,27 @@ public class Pm3CommandException : Pm3Exception
 }
 
 /// <summary>
+/// Thrown when native detect finds a T55 config block using an unsupported modulation.
+/// </summary>
+public class Pm3UnsupportedModulationException : Pm3CommandException
+{
+    public byte Modulation { get; }
+    public uint Block0 { get; }
+    public string ModulationName { get; }
+
+    public Pm3UnsupportedModulationException(byte modulation, uint block0, CommandResult? commandResult = null)
+        : base(
+            $"Native executor supports ASK/Manchester T55 tokens only (detected {Pm3T55ModulationNames.Name(modulation)} / 0x{modulation:X2}, block0=0x{block0:X8}). " +
+            "Set PM3_EXECUTOR=process and ensure the proxmark3 client is installed.",
+            commandResult)
+    {
+        Modulation = modulation;
+        Block0 = block0;
+        ModulationName = Pm3T55ModulationNames.Name(modulation);
+    }
+}
+
+/// <summary>
 /// Thrown when a command execution timed out.
 /// </summary>
 public class Pm3TimeoutException : Pm3Exception

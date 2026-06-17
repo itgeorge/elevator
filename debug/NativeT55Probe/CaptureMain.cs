@@ -59,8 +59,8 @@ internal static class CaptureMain
             var service = new Pm3T55NativeService(t);
             var cfg = new Pm3T55Config();
             sw.Restart();
-            var detected = service.Detect(cfg, CancellationToken.None);
-            Log($"detect={detected} block0=0x{cfg.Block0:X8} offset={cfg.Offset} ms={sw.ElapsedMilliseconds}");
+            var outcome = service.Detect(cfg, CancellationToken.None);
+            Log($"detect={outcome.IsFound} block0=0x{cfg.Block0:X8} offset={cfg.Offset} ms={sw.ElapsedMilliseconds}");
         });
 
         await RunStep("tune then detect", async () =>

@@ -28,7 +28,7 @@ internal sealed class Pm3T55NativeService
         _transport = transport;
     }
 
-    public bool Detect(Pm3T55Config config, CancellationToken ct)
+    public Pm3T55DetectOutcome Detect(Pm3T55Config config, CancellationToken ct)
     {
         config.Detected = false;
 
@@ -59,13 +59,16 @@ internal sealed class Pm3T55NativeService
                     downlinkMode,
                     candidate.Block0,
                     candidate.Clock);
-                return true;
+                return Pm3T55DetectOutcome.Found;
             }
+
+            if (TryScanUnsupportedModulation(out var unsupported))
+                return Pm3T55DetectOutcome.Unsupported(unsupported);
 
             WaitForRfSettle(ct);
         }
 
-        return false;
+        return Pm3T55DetectOutcome.NotFound;
     }
 
     public bool ReadBlock(Pm3T55Config config, byte block, out uint blockValue, CancellationToken ct)
@@ -275,6 +278,41 @@ internal sealed class Pm3T55NativeService
             ct.ThrowIfCancellationRequested();
             Thread.Sleep(Math.Min(10, Math.Max(1, (int)(deadline - Environment.TickCount64))));
         }
+    }
+
+    private bool TryScanUnsupportedModulation(out Pm3T55UnsupportedModulationInfo info)
+    {
+        info = default;
+        foreach (var invert in new[] { false, true })
+        {
+            var sampleLen = _graph.CopyToByteSamples(_sampleScratch);
+            if (sampleLen < 255)
+                continue;
+
+            _sampleScratch.AsSpan(0, sampleLen).CopyTo(_demodWork);
+            var bitLen = sampleLen;
+            var clk = 0;
+            var invertInt = invert ? 1 : 0;
+            var st = true;
+
+            var err = Pm3LfDemod.AskDemodExt(
+                _demodWork,
+                ref bitLen,
+                ref clk,
+                ref invertInt,
+                maxErr: 1,
+                askType: 1,
+                ref st,
+                _graph.Signal);
+
+            if (err < 0 || bitLen < 64)
+                continue;
+
+            if (Pm3T55ModulationScanner.TryDetectUnsupportedModulation(_demodWork.AsSpan(0, bitLen), clk, out info))
+                return true;
+        }
+
+        return false;
     }
 
     private bool TryAskDetect(bool invert, byte downlinkMode, out DetectCandidate candidate)

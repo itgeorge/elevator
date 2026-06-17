@@ -150,7 +150,24 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
     private CommandResult ExecuteT55Detect(IReadOnlyList<IPm3DeviceCommand> commands, CancellationToken ct)
     {
         var service = CreateT55Service();
-        if (!service.Detect(_t55Config, ct))
+        var outcome = service.Detect(_t55Config, ct);
+        if (outcome.IsUnsupported)
+        {
+            var failed = new CommandResult
+            {
+                Commands = commands,
+                OutputLines = Pm3NativeOutputBuilder.BuildUnsupportedModulationLines(outcome.UnsupportedInfo),
+                ExitCode = 1,
+                HasErrors = true,
+                ErrorSummary = "T55 unsupported modulation",
+            };
+            throw new Pm3UnsupportedModulationException(
+                outcome.UnsupportedInfo.Modulation,
+                outcome.UnsupportedInfo.Block0,
+                failed);
+        }
+
+        if (!outcome.IsFound)
         {
             var failed = new CommandResult
             {
