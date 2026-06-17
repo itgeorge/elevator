@@ -64,7 +64,7 @@ class RidesCliProgram
 
     static Pm3Options ParsePm3Options(string[] args)
     {
-        var options = new Pm3Options { ExecutorKind = Pm3Options.ReadExecutorKindFromEnvironment() };
+        var options = new Pm3Options { ExecutorKind = ReadExecutorKindFromEnvironment(defaultKind: Pm3ExecutorKind.Native) };
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];
@@ -83,6 +83,17 @@ class RidesCliProgram
             }
         }
         return options;
+    }
+
+    static Pm3ExecutorKind ReadExecutorKindFromEnvironment(Pm3ExecutorKind defaultKind)
+    {
+        var value = Environment.GetEnvironmentVariable("PM3_EXECUTOR");
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultKind;
+
+        return value.Trim().Equals("process", StringComparison.OrdinalIgnoreCase)
+            ? Pm3ExecutorKind.Process
+            : Pm3ExecutorKind.Native;
     }
 
     static string[] SplitArgs(string input)
