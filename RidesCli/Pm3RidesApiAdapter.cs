@@ -37,6 +37,9 @@ public sealed class Pm3RidesApiAdapter : IRidesPm3Api
     public async Task<string> DumpAsync(CancellationToken ct = default) =>
         await _pm3.DumpAsync(ct).ConfigureAwait(false);
 
+    public async Task<(string Block5Hex, string Block6Hex)> ReadRideMirrorBlocksAsync(CancellationToken ct = default) =>
+        await _pm3.ReadRideMirrorBlocksAsync(ct).ConfigureAwait(false);
+
     public async Task<bool> WriteRideMirrorBlocksAsync(T55Block data, CancellationToken ct = default) =>
         await _pm3.WriteRideMirrorBlocksAsync(data, ct).ConfigureAwait(false);
 

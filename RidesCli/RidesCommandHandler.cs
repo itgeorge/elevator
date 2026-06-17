@@ -208,8 +208,7 @@ public sealed class RidesCommandHandler
     {
         try
         {
-            var block5Hex = await _pm3.ReadPage0BlockAsync(5);
-            var block6Hex = await _pm3.ReadPage0BlockAsync(6);
+            var (block5Hex, block6Hex) = await _pm3.ReadRideMirrorBlocksAsync();
             var block5 = T55Block.FromHex(block5Hex);
             var block6 = T55Block.FromHex(block6Hex);
 
@@ -257,8 +256,7 @@ public sealed class RidesCommandHandler
 
         try
         {
-            var block5Hex = await _pm3.ReadPage0BlockAsync(5).ConfigureAwait(false);
-            var block6Hex = await _pm3.ReadPage0BlockAsync(6).ConfigureAwait(false);
+            var (block5Hex, block6Hex) = await _pm3.ReadRideMirrorBlocksAsync().ConfigureAwait(false);
             var describe = RideBlockResolver.Resolve(
                 T55Block.FromHex(block5Hex),
                 T55Block.FromHex(block6Hex));

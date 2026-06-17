@@ -19,6 +19,11 @@ public interface IRidesPm3Api
     /// <summary>Dump all page 0 blocks.</summary>
     Task<string> DumpAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Read mirrored ride blocks 5 and 6 in one batch (symmetry with write; minor perf gain only on cold cache).
+    /// </summary>
+    Task<(string Block5Hex, string Block6Hex)> ReadRideMirrorBlocksAsync(CancellationToken ct = default);
+
     /// <summary>Write mirrored ride blocks 5 and 6 with verify.</summary>
     Task<bool> WriteRideMirrorBlocksAsync(T55Block data, CancellationToken ct = default);
 

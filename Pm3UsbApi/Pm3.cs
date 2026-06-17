@@ -95,6 +95,28 @@ public sealed class Pm3 : IAsyncDisposable
     }
 
     /// <summary>
+    /// Read mirrored ride blocks 5 and 6 in one T55 batch.
+    /// Kept for symmetry with <see cref="WriteRideMirrorBlocksAsync"/>; in normal operation
+    /// (warm detect cache) this is flat vs two <see cref="ReadPage0BlockAsync"/> calls because the
+    /// second sequential read already skips detect. Minor gain only when the cache was invalidated.
+    /// </summary>
+    public async Task<(string Block5Hex, string Block6Hex)> ReadRideMirrorBlocksAsync(CancellationToken ct = default)
+    {
+        var result = await _session.ExecuteT55BatchAsync([
+            new T55ReadBlockCommand(5),
+            new T55ReadBlockCommand(6),
+        ], null, ct).ConfigureAwait(false);
+
+        var read5 = BlockReadParser.Parse(result, 5);
+        var read6 = BlockReadParser.Parse(result, 6);
+        if (!read5.Success || read5.HexData is null)
+            throw new Pm3CommandException("Failed to read block 5.", result);
+        if (!read6.Success || read6.HexData is null)
+            throw new Pm3CommandException("Failed to read block 6.", result);
+        return (read5.HexData, read6.HexData);
+    }
+
+    /// <summary>
     /// Write a block to page 0. Block 0 and 7 are forbidden for safety.
     /// </summary>
     /// <param name="block">Block number 1-6.</param>

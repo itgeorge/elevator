@@ -118,6 +118,12 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         return Task.FromResult(DumpResult);
     }
 
+    public Task<(string Block5Hex, string Block6Hex)> ReadRideMirrorBlocksAsync(CancellationToken ct = default)
+    {
+        EnsureTokenPresent();
+        return Task.FromResult((GetBlockHex(5), GetBlockHex(6)));
+    }
+
     public async Task<bool> WriteRideMirrorBlocksAsync(T55Block data, CancellationToken ct = default)
     {
         EnsureTokenPresent();
