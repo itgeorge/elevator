@@ -265,7 +265,7 @@ internal sealed class Pm3T55NativeService
             byte[] raw;
             try
             {
-                raw = _transport.DownloadBigBuf(0, Pm3CommandCodes.T55SampleCount, DownloadTimeout, ct);
+                raw = _transport.DownloadBigBuf(0, (uint)_transport.Capabilities.T55SampleCount, DownloadTimeout, ct);
             }
             catch (Exception)
             {

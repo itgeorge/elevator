@@ -18,6 +18,11 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
     private SerialPort? _port;
     private readonly object _lock = new();
     private readonly List<byte> _receiveBuffer = new(8192);
+    private Pm3Capabilities _capabilities = Pm3Capabilities.CreateDefault();
+
+    public Pm3Capabilities Capabilities => _capabilities;
+
+    public bool CapabilitiesFetched { get; private set; }
 
     public Pm3SerialTransport(string portName, int baudRate = 115200, Action<string>? nativeTrace = null)
     {
@@ -206,6 +211,26 @@ internal sealed class Pm3SerialTransport : IAsyncDisposable
         }
 
         throw new TimeoutException($"Timed out waiting for response command 0x{expectedCommand:X4}.");
+    }
+
+    public void FetchCapabilities(TimeSpan timeout, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var response = SendCommandAndWait(
+            Pm3CommandCodes.CmdCapabilities,
+            ReadOnlySpan<byte>.Empty,
+            Pm3CommandCodes.CmdCapabilities,
+            timeout,
+            ct);
+
+        if (response.Status != Pm3CommandCodes.Pm3Success)
+            throw new Pm3CapabilitiesException($"CMD_CAPABILITIES failed with status {response.Status}.");
+
+        _capabilities = Pm3Capabilities.Decode(response.Data);
+        CapabilitiesFetched = true;
+        Trace(
+            $"capabilities v{_capabilities.Version} bigbuf={_capabilities.BigBufSize} " +
+            $"lf={_capabilities.CompiledWithLf} rdv4={_capabilities.IsRdv4}");
     }
 
     public bool TryPing(TimeSpan timeout, CancellationToken ct)

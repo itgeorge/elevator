@@ -128,7 +128,19 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
 
     private void PrepareForT55Operation()
     {
-        _transport?.DiscardPendingInput();
+        if (_transport is null)
+            return;
+
+        try
+        {
+            _transport.Capabilities.EnsureLfSupported();
+        }
+        catch (Pm3CapabilitiesException ex)
+        {
+            throw new Pm3ConnectionException(ex.Message, ex);
+        }
+
+        _transport.DiscardPendingInput();
         if (_lfTuneRecentlyActive)
         {
             WaitForRfSettle(CancellationToken.None);
@@ -391,7 +403,9 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
                 throw new Pm3ConnectionException("No Proxmark3 device found via native port discovery.");
         }
 
-        if (_transport?.IsOpen == true && string.Equals(_connectedPort, port, StringComparison.OrdinalIgnoreCase))
+        if (_transport?.IsOpen == true &&
+            string.Equals(_connectedPort, port, StringComparison.OrdinalIgnoreCase) &&
+            _transport.CapabilitiesFetched)
             return;
 
         if (_transport is not null)
@@ -404,6 +418,15 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
                 ? msg => Pm3DiagnosticLog.Current.WriteNativeTrace(msg)
                 : null);
         _transport.Open();
+        try
+        {
+            _transport.FetchCapabilities(timeout, ct);
+        }
+        catch (Pm3CapabilitiesException ex)
+        {
+            throw new Pm3ConnectionException(ex.Message, ex);
+        }
+
         _connectedPort = port;
     }
 

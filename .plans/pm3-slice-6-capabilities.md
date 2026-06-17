@@ -1,6 +1,6 @@
 # Slice 6 — Capabilities on Connect (S4.7)
 
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete  
 **Depends on:** Slice 5 (native default)  
 **Branch:** `pm3-integration`
 
@@ -10,29 +10,33 @@ Fetch `CMD_CAPABILITIES` (0x0112) after native connect, parse `capabilities_t`, 
 
 ## Background
 
-Proxmark3 client calls this in `comms.c` immediately after opening the port. Response is a packed struct (`CAPABILITIES_VERSION = 7`):
+Proxmark3 client calls this in `comms.c` immediately after opening the port. Response is a packed 13-byte struct:
 
 - `bigbuf_size` — sample RAM size (we hardcode 12 000 today)
 - `baudrate`, `via_usb`, `via_fpc`
 - `compiled_with_lf` and other feature flags
 - `is_rdv4`, flash/smartcard availability
 
+**Firmware note:** Current client defines `CAPABILITIES_VERSION = 7`, but many devices still report **v6** with the same 13-byte layout (baudrate field zeroed; use 115200 default). Decoder accepts v6–v7.
+
 ## Tasks
 
-- [ ] Add `Pm3Capabilities` record + decoder from response bytes (mirror `pm3_cmd.h` `capabilities_t`)
-- [ ] Add `CmdCapabilities = 0x0112` to `Pm3CommandCodes`
-- [ ] Call capabilities during native connect (after version/ping), store on `Pm3NativeExecutor` or transport
-- [ ] Use `bigbuf_size` where acquisition/download sizes are chosen (clamp T55 sample count if needed)
-- [ ] Fail fast with clear error if `compiled_with_lf == false` before T55 ops
-- [ ] Unit tests: golden-byte decode for `capabilities_t` v7; version mismatch handling
-- [ ] Optional integration test: connect and assert `bigbuf_size > 0`
+- [x] Add `Pm3Capabilities` record + decoder from response bytes (mirror `pm3_cmd.h` `capabilities_t`)
+- [x] Add `CmdCapabilities = 0x0112` to `Pm3CommandCodes`
+- [x] Call capabilities during native connect (after version/ping), store on transport
+- [x] Use `bigbuf_size` where acquisition/download sizes are chosen (clamp T55 sample count if needed)
+- [x] Fail fast with clear error if `compiled_with_lf == false` before T55 ops
+- [x] Unit tests: golden-byte decode for v7 + device-captured v6; version mismatch handling
+- [x] Integration test: connect and exercise T55 read (LF guard + bigbuf sizing)
 
 ## Key files
 
 - `Pm3UsbApi/Native/Protocol/Pm3CommandCodes.cs`
 - `Pm3UsbApi/Native/Pm3NativeExecutor.cs` (connect path)
-- New: `Pm3UsbApi/Native/Protocol/Pm3Capabilities.cs`
+- `Pm3UsbApi/Native/Protocol/Pm3Capabilities.cs`
+- `Pm3UsbApi/Native/Transport/Pm3SerialTransport.cs`
 - `Pm3UsbApi.Tests/Native/Pm3CapabilitiesTests.cs`
+- `Pm3UsbApi.Tests/Integration/Pm3NativeCapabilitiesIntegrationTests.cs`
 
 ## References
 

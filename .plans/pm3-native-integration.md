@@ -19,7 +19,9 @@
 | **Slice 7** | Diagnostic logging (temp files) | ✅ Complete |
 | **Slice 11** | Debug tooling → `debug/` | ✅ Complete |
 | **Slice 9** | T55 detect cache (30s TTL) | ✅ Complete |
-| **Slices 6, 8, 10** | Capabilities, modulation, dump perf | 🔲 Planned — see handoff docs |
+| **Slice 6** | Capabilities on connect (`CMD_CAPABILITIES`) | ✅ Complete |
+| **Slice 8** | Unsupported modulation + chip type detection | ✅ Complete (`cd7e254`, `ae19cf5`) |
+| **Slice 10** | Dump performance tuning | 🔲 Planned — see handoff doc |
 
 **Recent commits on `pm3-integration`:**
 
@@ -236,7 +238,7 @@ Stage A is complete. All items checked for historical reference.
 
 | Item | Slice | Handoff doc |
 |------|-------|-------------|
-| S4.7 `CMD_CAPABILITIES` | 6 | [pm3-slice-6-capabilities.md](pm3-slice-6-capabilities.md) |
+| S4.7 `CMD_CAPABILITIES` | 6 | ✅ [pm3-slice-6-capabilities.md](pm3-slice-6-capabilities.md) |
 | S4.8 Dump performance (not RESET_READ) | 10 | [pm3-slice-10-dump-performance.md](pm3-slice-10-dump-performance.md) |
 | S4.9 Detect cache (30s TTL, test-first) | 9 | ✅ [pm3-slice-9-detect-cache.md](pm3-slice-9-detect-cache.md) |
 | S4.10 Unsupported modulation detection | 8 | ✅ [pm3-slice-8-unsupported-modulation.md](pm3-slice-8-unsupported-modulation.md) |
@@ -252,6 +254,14 @@ Broader demod beyond ASK/Manchester: **explicitly skipped**; use process executo
 - [x] **S5.3** `RidesCli` uses shared `Pm3Options.ReadExecutorKindFromEnvironment()`
 - [x] **S5.4** Unit tests: `Pm3OptionsTests`
 - [x] **S5.5** Mark S4.2 deferred, S4.4 done in this plan
+
+### Slice 6: Capabilities on Connect ✅
+
+- [x] **S4.7** `CMD_CAPABILITIES` (0x0112) fetched on native connect; stored on `Pm3SerialTransport`
+- [x] `Pm3Capabilities` decoder for firmware v6–v7 (13-byte struct; v6 baudrate defaults to 115200)
+- [x] `T55SampleCount` clamped from `bigbuf_size` (max 12 000)
+- [x] LF guard via `EnsureLfSupported()` before T55 operations
+- [x] Unit + integration tests (`Pm3CapabilitiesTests`, `Pm3NativeCapabilitiesIntegrationTests`)
 
 ---
 
@@ -299,10 +309,9 @@ Parameterized `[TestFixture(Process)]` + `[TestFixture(Native)]`. Native skips o
 
 **Suggested order (remaining):**
 
-1. [Slice 6](pm3-slice-6-capabilities.md) — capabilities on connect
-2. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
-3. **S4.6** — merge to `master` when ready
-4. **S4.2** — Linux validation when hardware available
+1. [Slice 10](pm3-slice-10-dump-performance.md) — dump perf tuning
+2. **S4.6** — merge to `master` when ready
+3. **S4.2** — Linux validation when hardware available
 
 ---
 

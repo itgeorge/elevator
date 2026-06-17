@@ -10,6 +10,7 @@ internal static class Pm3CommandCodes
     public const ushort CmdNack = 0x00FE;
     public const ushort CmdVersion = 0x0107;
     public const ushort CmdPing = 0x0109;
+    public const ushort CmdCapabilities = 0x0112;
     public const ushort CmdMeasureAntennaTuningLf = 0x0402;
 
     public const ushort CmdDownloadBigBuf = 0x0207;
@@ -32,6 +33,7 @@ internal static class Pm3CommandCodes
     /// <summary>LF_FREQ2DIV(125) from pm3_cmd.h.</summary>
     public const byte LfDivisor125 = 95;
 
-    public const int T55SampleCount = 12000;
+    /// <summary>Default T55 LF sample count used when capabilities are unavailable.</summary>
+    public const int DefaultT55SampleCount = 12000;
     public const int BigBufDownloadSize = 65536;
 }
