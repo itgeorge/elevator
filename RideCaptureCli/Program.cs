@@ -12,11 +12,12 @@ public static class Program
         paths.EnsureExists();
 
         var store = new CaptureCsvStore();
+        var otherStore = new OtherCaptureCsvStore();
         var sequenceService = new CaptureSequenceService();
         var sequenceLister = new CaptureSequenceLister();
 
         if (options.CommandArgs.Count > 0)
-            return await ExecuteSingleCommandAsync(options, config, paths, store, sequenceService, sequenceLister);
+            return await ExecuteSingleCommandAsync(options, config, paths, store, otherStore, sequenceService, sequenceLister);
 
         var pm3Options = BuildPm3Options(options, config);
         await using var pm3 = new Pm3(pm3Options);
@@ -36,7 +37,8 @@ public static class Program
         Console.WriteLine("RideCaptureCli - token sequence capture");
         Console.WriteLine($"Config: {Path.GetFullPath(options.ConfigPath)}");
         Console.WriteLine($"CSV:    {paths.CsvPath}");
-        Console.WriteLine("Commands: Enter=scan, zero=scan and anchor zero, exact <n> [sequenceId], list, help, exit");
+        Console.WriteLine($"Other:  {paths.OtherCsvPath}");
+        Console.WriteLine("Commands: Enter=scan, other=scan to other CSV only, zero=scan and anchor zero, exact <n> [sequenceId], list, help, exit");
         Console.WriteLine();
 
         while (true)
@@ -58,7 +60,7 @@ public static class Program
 
             try
             {
-                var result = await ExecuteCommandAsync(command, options, config, paths, store, sequenceService, sequenceLister, scanner);
+                var result = await ExecuteCommandAsync(command, options, config, paths, store, otherStore, sequenceService, sequenceLister, scanner);
                 if (result is not null)
                     ConsoleStatusWriter.WriteCaptureResult(result.AddedRecord, result.AutoNormalized, result.ManualAnchorRideCount, result.SequenceOnlyUpdate);
             }
@@ -76,6 +78,7 @@ public static class Program
         RideCaptureConfig config,
         CapturePaths paths,
         CaptureCsvStore store,
+        OtherCaptureCsvStore otherStore,
         CaptureSequenceService sequenceService,
         CaptureSequenceLister sequenceLister)
     {
@@ -90,11 +93,11 @@ public static class Program
                 await using var pm3 = new Pm3(pm3Options);
                 await pm3.ConnectAsync();
                 var scanner = new CaptureScanner(new Pm3RideCaptureApiAdapter(pm3), config, paths);
-                result = await ExecuteCommandAsync(command, options, config, paths, store, sequenceService, sequenceLister, scanner);
+                result = await ExecuteCommandAsync(command, options, config, paths, store, otherStore, sequenceService, sequenceLister, scanner);
             }
             else
             {
-                result = await ExecuteCommandAsync(command, options, config, paths, store, sequenceService, sequenceLister, scanner: null);
+                result = await ExecuteCommandAsync(command, options, config, paths, store, otherStore, sequenceService, sequenceLister, scanner: null);
             }
 
             if (result is not null)
@@ -125,7 +128,8 @@ public static class Program
             return parts.Length < 3;
         }
 
-        return trimmed.Equals("zero", StringComparison.OrdinalIgnoreCase);
+        return trimmed.Equals("zero", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("other", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<CaptureApplyResult?> ExecuteCommandAsync(
@@ -134,6 +138,7 @@ public static class Program
         RideCaptureConfig config,
         CapturePaths paths,
         CaptureCsvStore store,
+        OtherCaptureCsvStore otherStore,
         CaptureSequenceService sequenceService,
         CaptureSequenceLister sequenceLister,
         CaptureScanner? scanner)
@@ -148,6 +153,14 @@ public static class Program
         if (command.Equals("list", StringComparison.OrdinalIgnoreCase))
         {
             ExecuteList(paths, store, sequenceLister);
+            return null;
+        }
+
+        if (command.Equals("other", StringComparison.OrdinalIgnoreCase))
+        {
+            if (scanner is null)
+                throw new InvalidOperationException("A scanner is required for the other command.");
+            await ExecuteOtherCommandAsync(scanner, paths, otherStore);
             return null;
         }
 
@@ -175,7 +188,7 @@ public static class Program
             return await ExecuteScanCommandAsync(scanner, paths, store, sequenceService, exactRideCount);
         }
 
-        throw new InvalidOperationException("Unknown command. Use Enter, zero, exact <n> [sequenceId], list, help, or exit.");
+        throw new InvalidOperationException("Unknown command. Use Enter, other, zero, exact <n> [sequenceId], list, help, or exit.");
     }
 
     private static async Task<CaptureApplyResult> ExecuteScanCommandAsync(
@@ -190,6 +203,17 @@ public static class Program
         var result = sequenceService.ApplyScan(existing, scan, exactRideCount);
         store.Save(paths.CsvPath, result.Records);
         return result;
+    }
+
+    private static async Task ExecuteOtherCommandAsync(
+        CaptureScanner scanner,
+        CapturePaths paths,
+        OtherCaptureCsvStore otherStore)
+    {
+        var scan = await scanner.ScanAsync();
+        var record = otherStore.CreateRecord(scan);
+        otherStore.Append(paths.OtherCsvPath, record);
+        ConsoleStatusWriter.WriteOtherCaptureResult(record);
     }
 
     private static CaptureApplyResult ExecuteSequenceOnlyExact(
@@ -214,7 +238,8 @@ public static class Program
     private static void PrintHelp()
     {
         Console.WriteLine("Commands:");
-        Console.WriteLine("  <Enter>                 Scan current token and append to CSV");
+        Console.WriteLine("  <Enter>                 Scan current token and append to captures.csv");
+        Console.WriteLine("  other                   Scan current token into other-captures.csv only; do not update sequences");
         Console.WriteLine("  zero                    Scan current token and anchor the current sequence at zero rides");
         Console.WriteLine("  exact <n>               Scan current token and anchor the current sequence at exact ride count n");
         Console.WriteLine("  exact <n> <sequenceId>  Update the latest row in an existing sequence without scanning");

@@ -9,6 +9,7 @@ public sealed class CapturePaths
 
     public string OutputRootDirectory { get; }
     public string CsvPath => Path.Combine(OutputRootDirectory, "captures.csv");
+    public string OtherCsvPath => Path.Combine(OutputRootDirectory, "other-captures.csv");
     public string DumpsRootDirectory => Path.Combine(OutputRootDirectory, "dumps");
 
     public void EnsureExists()

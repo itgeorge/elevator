@@ -39,6 +39,26 @@ public static class ConsoleStatusWriter
         Console.WriteLine();
     }
 
+    public static void WriteOtherCaptureResult(OtherCaptureRecord record)
+    {
+        if (record.WeakSignal)
+            WriteBanner("----- WEAK SIGNAL -----", ConsoleColor.Yellow);
+
+        if (record.Warnings.Contains("MIRROR_MISMATCH", StringComparison.Ordinal))
+            WriteBanner("!!!!!! MIRROR MISMATCH !!!!!!", ConsoleColor.Red);
+
+        WriteBanner("++++++ OTHER TOKEN RECORDED ++++++", ConsoleColor.Blue);
+        Console.WriteLine($"time:      {record.Timestamp}");
+        Console.WriteLine($"token:     {record.TokenId}");
+        Console.WriteLine($"signal:    {record.SignalMv} mV");
+        Console.WriteLine($"state:     {record.Block5} / {record.Block6}");
+        Console.WriteLine($"dump:      {(string.IsNullOrWhiteSpace(record.CopiedDumpRelativePath) ? "<not found>" : record.CopiedDumpRelativePath)}");
+        if (!string.IsNullOrWhiteSpace(record.Warnings))
+            Console.WriteLine($"warnings:  {record.Warnings}");
+        Console.WriteLine("sequence:  <not updated>");
+        Console.WriteLine();
+    }
+
     public static void WriteError(string message)
     {
         WriteBanner("!!!!!! ERROR !!!!!!", ConsoleColor.Red);
