@@ -125,7 +125,7 @@ public class RideBlockResolverTests
     [Test]
     public void Resolve_matching_rides_above_500_returns_invalid()
     {
-        var block = TokenBlockUtils.EncodeByFamily(127, TokenBlockUtils.Families.Family384To500);
+        var block = TokenBlockUtils.EncodeByFamily(501, TokenBlockUtils.Families.Family384To500);
 
         var result = RideBlockResolver.Resolve(block, block);
 

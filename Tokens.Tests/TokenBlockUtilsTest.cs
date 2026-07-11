@@ -797,6 +797,26 @@ public class TokenBlockUtilsTest
 
 
     [Test]
+    public void EncodeByFamily_throws_when_value_below_family_range()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TokenBlockUtils.EncodeByFamily(0, TokenBlockUtils.Families.FamilyBBC7_128To255));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TokenBlockUtils.EncodeByFamily(127, TokenBlockUtils.Families.FamilyBBC7_128To255));
+    }
+
+    [Test]
+    public void EncodeByFamily_throws_when_value_above_family_range()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TokenBlockUtils.EncodeByFamily(128, TokenBlockUtils.Families.Family0To127));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TokenBlockUtils.EncodeByFamily(256, TokenBlockUtils.Families.FamilyBBC7_128To255));
+    }
+
+    [Test]
     [TestCase(Table0To127, (uint)0xCCC7, (uint)0x0000, (uint)0)]
     [TestCase(Table128To255, (uint)0x3FC7, (uint)0x8008, (uint)128)]
     [TestCase(Table256To383, (uint)0xCCC6, (uint)0x0010, (uint)256)]

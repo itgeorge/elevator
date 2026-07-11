@@ -106,7 +106,15 @@ public static class TokenBlockUtils
 
     public static T55Block EncodeByFamily(uint value, Family family)
     {
-        uint m = (value - family.BaseOffset) & 0x7Fu;
+        if (value < family.BaseOffset || value > family.BaseOffset + 127)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                value,
+                $"Value {value} is outside the valid range [{family.BaseOffset}, {family.BaseOffset + 127}] for family 0x{family.High16:X4}.");
+        }
+
+        uint m = value - family.BaseOffset;
         ushort base16 = EncodeBaseLow16Only(m);
         uint low16 = (uint)(base16 ^ (ushort)family.XorConst);
         return new T55Block((family.High16 << 16) | low16);
