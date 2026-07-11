@@ -912,6 +912,38 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void EncodingSequence_single_segment_supports_partially_known_range()
+    {
+        var sequence = new EncodingSequence(
+            "d3-partial",
+            "d3-partial.bin",
+            new EncodingSequenceSegment(0, 23, TokenBlockUtils.Families.Family48C7_0To127));
+
+        Assert.That(sequence.Segments, Has.Count.EqualTo(1));
+        Assert.That(sequence.GetFamilyForRides(0), Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
+        Assert.That(sequence.GetFamilyForRides(23), Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
+        Assert.That(sequence.Encode(10).Value, Is.EqualTo(TokenBlockUtils.EncodeByFamily(10, TokenBlockUtils.Families.Family48C7_0To127).Value));
+    }
+
+    [Test]
+    public void EncodingSequence_throws_when_no_segment_covers_rides()
+    {
+        var sequence = new EncodingSequence(
+            "d3-partial",
+            "d3-partial.bin",
+            new EncodingSequenceSegment(0, 23, TokenBlockUtils.Families.Family48C7_0To127));
+
+        Assert.Throws<ArgumentException>(() => sequence.GetFamilyForRides(24));
+        Assert.Throws<ArgumentException>(() => sequence.Encode(24));
+    }
+
+    [Test]
+    public void EncodingSequence_constructor_requires_at_least_one_segment()
+    {
+        Assert.Throws<ArgumentException>(() => new EncodingSequence("empty", "empty.bin"));
+    }
+
+    [Test]
     public void GetFamilyForRides_Venus_sequence_uses_48C7_for_low_range_and_BBC7_for_high_range()
     {
         var sequence = EncodingSequences.Venus;

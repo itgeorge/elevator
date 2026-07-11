@@ -1,63 +1,64 @@
 namespace Tokens;
 
 /// <summary>
+/// A ride-count range within an <see cref="EncodingSequence"/>, mapped to one encoding family.
+/// </summary>
+public sealed record EncodingSequenceSegment(uint MinRides, uint MaxRides, TokenBlockUtils.Family Family)
+{
+    public bool Contains(uint ridesRemaining) =>
+        ridesRemaining >= MinRides && ridesRemaining <= MaxRides;
+}
+
+/// <summary>
 /// A token ride-count encoding sequence: one or more families that cover ride ranges
 /// and handle transitions between them (e.g. 0..127 and 128..255).
 /// </summary>
 public sealed class EncodingSequence
 {
-    private readonly TokenBlockUtils.Family _family0To127;
-    private readonly TokenBlockUtils.Family _family128To255;
-    private readonly TokenBlockUtils.Family? _family256To383;
-    private readonly TokenBlockUtils.Family? _family384To500;
-
+    private readonly EncodingSequenceSegment[] _segments;
     private readonly string _resetImageFileName;
 
     internal EncodingSequence(
         string friendlyName,
         string resetImageFileName,
-        TokenBlockUtils.Family family0To127,
-        TokenBlockUtils.Family family128To255,
-        TokenBlockUtils.Family? family256To383 = null,
-        TokenBlockUtils.Family? family384To500 = null)
+        params EncodingSequenceSegment[] segments)
     {
         if (string.IsNullOrWhiteSpace(friendlyName))
             throw new ArgumentException("Friendly name is required.", nameof(friendlyName));
         if (string.IsNullOrWhiteSpace(resetImageFileName))
             throw new ArgumentException("Reset image file name is required.", nameof(resetImageFileName));
+        if (segments is null || segments.Length == 0)
+            throw new ArgumentException("At least one segment is required.", nameof(segments));
+
+        foreach (var segment in segments)
+        {
+            if (segment.MinRides > segment.MaxRides)
+            {
+                throw new ArgumentException(
+                    $"Segment min rides {segment.MinRides} exceeds max rides {segment.MaxRides}.",
+                    nameof(segments));
+            }
+        }
 
         FriendlyName = friendlyName.Trim().ToLowerInvariant();
         _resetImageFileName = resetImageFileName.Trim();
-        _family0To127 = family0To127;
-        _family128To255 = family128To255;
-        _family256To383 = family256To383;
-        _family384To500 = family384To500;
+        _segments = segments;
     }
 
     public string FriendlyName { get; }
 
     public string ResetImageFileName => _resetImageFileName;
 
+    public IReadOnlyList<EncodingSequenceSegment> Segments => _segments;
+
     public TokenBlockUtils.Family GetFamilyForRides(uint ridesRemaining)
     {
-        if (ridesRemaining <= 127)
+        foreach (var segment in _segments)
         {
-            return _family0To127;
-        }
-
-        if (ridesRemaining <= 255)
-        {
-            return _family128To255;
-        }
-
-        if (_family256To383 is not null && ridesRemaining <= 383)
-        {
-            return _family256To383;
-        }
-
-        if (_family384To500 is not null && ridesRemaining <= 500)
-        {
-            return _family384To500;
+            if (segment.Contains(ridesRemaining))
+            {
+                return segment.Family;
+            }
         }
 
         throw new ArgumentException(
@@ -69,16 +70,9 @@ public sealed class EncodingSequence
 
     internal IEnumerable<TokenBlockUtils.Family> EnumerateFamilies()
     {
-        yield return _family0To127;
-        yield return _family128To255;
-        if (_family256To383 is not null)
+        foreach (var segment in _segments)
         {
-            yield return _family256To383;
-        }
-
-        if (_family384To500 is not null)
-        {
-            yield return _family384To500;
+            yield return segment.Family;
         }
     }
 }
@@ -88,17 +82,17 @@ public static class EncodingSequences
     public static readonly EncodingSequence Mercury = new(
         "mercury",
         "default-500-rides.bin",
-        TokenBlockUtils.Families.Family0To127,
-        TokenBlockUtils.Families.Family128To255,
-        TokenBlockUtils.Families.Family256To383,
-        TokenBlockUtils.Families.Family384To500);
+        new EncodingSequenceSegment(0, 127, TokenBlockUtils.Families.Family0To127),
+        new EncodingSequenceSegment(128, 255, TokenBlockUtils.Families.Family128To255),
+        new EncodingSequenceSegment(256, 383, TokenBlockUtils.Families.Family256To383),
+        new EncodingSequenceSegment(384, 500, TokenBlockUtils.Families.Family384To500));
 
     // 43FE0062-5BA494A3-D6D1C733-D6D1C733 (captured 0..180)
     public static readonly EncodingSequence Venus = new(
         "venus",
         "venus-0-rides.bin",
-        TokenBlockUtils.Families.Family48C7_0To127,
-        TokenBlockUtils.Families.FamilyBBC7_128To255);
+        new EncodingSequenceSegment(0, 127, TokenBlockUtils.Families.Family48C7_0To127),
+        new EncodingSequenceSegment(128, 255, TokenBlockUtils.Families.FamilyBBC7_128To255));
 
     public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus];
 
