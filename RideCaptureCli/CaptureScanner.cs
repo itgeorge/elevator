@@ -41,19 +41,19 @@ public sealed class CaptureScanner
         };
 
         var dumpPath = _dumpLocator.LocateNewestMatchingBin(_config.ProxmarkDumpSearchDirectory, scan, dumpStartedAt);
-        if (dumpPath is not null)
+        var copiedRelativePath = dumpPath is not null
+            ? _dumpLocator.CopyIntoDataset(dumpPath, _paths, scan.Timestamp)
+            : _dumpLocator.WritePage0BinIntoDataset(_paths, scan);
+
+        scan = new CaptureScanData
         {
-            var copiedRelativePath = _dumpLocator.CopyIntoDataset(dumpPath, _paths, scan.Timestamp);
-            scan = new CaptureScanData
-            {
-                Timestamp = scan.Timestamp,
-                SignalMv = scan.SignalMv,
-                WeakSignal = scan.WeakSignal,
-                Blocks = scan.Blocks,
-                RawDumpOutput = scan.RawDumpOutput,
-                CopiedDumpRelativePath = copiedRelativePath
-            };
-        }
+            Timestamp = scan.Timestamp,
+            SignalMv = scan.SignalMv,
+            WeakSignal = scan.WeakSignal,
+            Blocks = scan.Blocks,
+            RawDumpOutput = scan.RawDumpOutput,
+            CopiedDumpRelativePath = copiedRelativePath
+        };
 
         return scan;
     }
