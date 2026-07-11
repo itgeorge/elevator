@@ -186,7 +186,10 @@ class Pm3CommandGenCliProgram
         }
         uint newRides = (uint)signedRides;
 
-        var encoded = TokenBlockUtils.Encode(newRides);
+        if (!EncodingSequences.TryGetSequenceFromBlock(currentBlock, out var sequence) || sequence is null)
+            throw new InvalidOperationException($"Unknown encoding sequence in block 5: {currentBlock.ToHex()}");
+
+        var encoded = TokenBlockUtils.Encode(newRides, sequence);
         _current.SetBlock(0, 5, encoded);
         _current.SetBlock(0, 6, encoded); // sync mirror
         Console.WriteLine($"Added {count} rides. New total: {newRides} (block: {encoded.ToHex()})");

@@ -526,30 +526,302 @@ public class TokenBlockUtilsTest
         384 3FC6C9D4
         """;
 
+    const string Table43FE_0To127 =
+        """
+        127 48C736BF
+        126 48C737AF
+        125 48C7349F
+        124 48C7358F
+        123 48C732FF
+        122 48C733EF
+        121 48C730DF
+        120 48C731CF
+        119 48C73E3F
+        118 48C73F2F
+        117 48C73C1F
+        116 48C73D0F
+        115 48C73A7F
+        114 48C73B6F
+        113 48C7385F
+        112 48C7394F
+        111 48C726BE
+        110 48C727AE
+        109 48C7249E
+        108 48C7258E
+        107 48C722FE
+        106 48C723EE
+        105 48C720DE
+        104 48C721CE
+        103 48C72E3E
+        102 48C72F2E
+        101 48C72C1E
+        100 48C72D0E
+         99 48C72A7E
+         98 48C72B6E
+         97 48C7285E
+         96 48C7294E
+         95 48C716BD
+         94 48C717AD
+         93 48C7149D
+         92 48C7158D
+         91 48C712FD
+         90 48C713ED
+         89 48C710DD
+         88 48C711CD
+         87 48C71E3D
+         86 48C71F2D
+         85 48C71C1D
+         84 48C71D0D
+         83 48C71A7D
+         82 48C71B6D
+         81 48C7185D
+         80 48C7194D
+         79 48C706BC
+         78 48C707AC
+         77 48C7049C
+         76 48C7058C
+         75 48C702FC
+         74 48C703EC
+         73 48C700DC
+         72 48C701CC
+         71 48C70E3C
+         70 48C70F2C
+         69 48C70C1C
+         68 48C70D0C
+         67 48C70A7C
+         66 48C70B6C
+         65 48C7085C
+         64 48C7094C
+         63 48C776BB
+         62 48C777AB
+         61 48C7749B
+         60 48C7758B
+         59 48C772FB
+         58 48C773EB
+         57 48C770DB
+         56 48C771CB
+         55 48C77E3B
+         54 48C77F2B
+         53 48C77C1B
+         52 48C77D0B
+         51 48C77A7B
+         50 48C77B6B
+         49 48C7785B
+         48 48C7794B
+         47 48C766BA
+         46 48C767AA
+         45 48C7649A
+         44 48C7658A
+         43 48C762FA
+         42 48C763EA
+         41 48C760DA
+         40 48C761CA
+         39 48C76E3A
+         38 48C76F2A
+         37 48C76C1A
+         36 48C76D0A
+         35 48C76A7A
+         34 48C76B6A
+         33 48C7685A
+         32 48C7694A
+         31 48C756B9
+         30 48C757A9
+         29 48C75499
+         28 48C75589
+         27 48C752F9
+         26 48C753E9
+         25 48C750D9
+         24 48C751C9
+         23 48C75E39
+         22 48C75F29
+         21 48C75C19
+         20 48C75D09
+         19 48C75A79
+         18 48C75B69
+         17 48C75859
+         16 48C75949
+         15 48C746B8
+         14 48C747A8
+         13 48C74498
+         12 48C74588
+         11 48C742F8
+         10 48C743E8
+          9 48C740D8
+          8 48C741C8
+          7 48C74E38
+          6 48C74F28
+          5 48C74C18
+          4 48C74D08
+          3 48C74A78
+          2 48C74B68
+          1 48C74858
+          0 48C74948
+        """;
+
+    const string Table43FE_128To180 =
+        """
+        180 BBC7FD03
+        179 BBC7FA73
+        178 BBC7FB63
+        177 BBC7F853
+        176 BBC7F943
+        175 BBC7E6B2
+        174 BBC7E7A2
+        173 BBC7E492
+        172 BBC7E582
+        171 BBC7E2F2
+        170 BBC7E3E2
+        169 BBC7E0D2
+        168 BBC7E1C2
+        167 BBC7EE32
+        166 BBC7EF22
+        165 BBC7EC12
+        164 BBC7ED02
+        163 BBC7EA72
+        162 BBC7EB62
+        161 BBC7E852
+        160 BBC7E942
+        159 BBC7D6B1
+        158 BBC7D7A1
+        157 BBC7D491
+        156 BBC7D581
+        155 BBC7D2F1
+        154 BBC7D3E1
+        153 BBC7D0D1
+        152 BBC7D1C1
+        151 BBC7DE31
+        150 BBC7DF21
+        149 BBC7DC11
+        148 BBC7DD01
+        147 BBC7DA71
+        146 BBC7DB61
+        145 BBC7D851
+        144 BBC7D941
+        143 BBC7C6B0
+        142 BBC7C7A0
+        141 BBC7C490
+        140 BBC7C580
+        139 BBC7C2F0
+        138 BBC7C3E0
+        137 BBC7C0D0
+        136 BBC7C1C0
+        135 BBC7CE30
+        134 BBC7CF20
+        133 BBC7CC10
+        132 BBC7CD00
+        131 BBC7CA70
+        130 BBC7CB60
+        129 BBC7C850
+        128 BBC7C940
+        """;
+
+    const string Table43FE_181To255_Predicted =
+        """
+        255 BBC7B6B7
+        254 BBC7B7A7
+        253 BBC7B497
+        252 BBC7B587
+        251 BBC7B2F7
+        250 BBC7B3E7
+        249 BBC7B0D7
+        248 BBC7B1C7
+        247 BBC7BE37
+        246 BBC7BF27
+        245 BBC7BC17
+        244 BBC7BD07
+        243 BBC7BA77
+        242 BBC7BB67
+        241 BBC7B857
+        240 BBC7B947
+        239 BBC7A6B6
+        238 BBC7A7A6
+        237 BBC7A496
+        236 BBC7A586
+        235 BBC7A2F6
+        234 BBC7A3E6
+        233 BBC7A0D6
+        232 BBC7A1C6
+        231 BBC7AE36
+        230 BBC7AF26
+        229 BBC7AC16
+        228 BBC7AD06
+        227 BBC7AA76
+        226 BBC7AB66
+        225 BBC7A856
+        224 BBC7A946
+        223 BBC796B5
+        222 BBC797A5
+        221 BBC79495
+        220 BBC79585
+        219 BBC792F5
+        218 BBC793E5
+        217 BBC790D5
+        216 BBC791C5
+        215 BBC79E35
+        214 BBC79F25
+        213 BBC79C15
+        212 BBC79D05
+        211 BBC79A75
+        210 BBC79B65
+        209 BBC79855
+        208 BBC79945
+        207 BBC786B4
+        206 BBC787A4
+        205 BBC78494
+        204 BBC78584
+        203 BBC782F4
+        202 BBC783E4
+        201 BBC780D4
+        200 BBC781C4
+        199 BBC78E34
+        198 BBC78F24
+        197 BBC78C14
+        196 BBC78D04
+        195 BBC78A74
+        194 BBC78B64
+        193 BBC78854
+        192 BBC78944
+        191 BBC7F6B3
+        190 BBC7F7A3
+        189 BBC7F493
+        188 BBC7F583
+        187 BBC7F2F3
+        186 BBC7F3E3
+        185 BBC7F0D3
+        184 BBC7F1C3
+        183 BBC7FE33
+        182 BBC7FF23
+        181 BBC7FC13
+        """;
+
+
+
     [Test]
-    [TestCase(Table0To127, (uint)0xCCC7, (uint)0x0000)]
-    [TestCase(Table128To255, (uint)0x3FC7, (uint)0x8008)]
-    [TestCase(Table256To383, (uint)0xCCC6, (uint)0x0010)]
-    [TestCase(Table384To500, (uint)0x3FC6, (uint)0x8018)]
-    public void EncodeByFamily_MatchesKnownValues(string countAndBlockTable, uint high16, uint xorConst)
+    [TestCase(Table0To127, (uint)0xCCC7, (uint)0x0000, (uint)0)]
+    [TestCase(Table128To255, (uint)0x3FC7, (uint)0x8008, (uint)128)]
+    [TestCase(Table256To383, (uint)0xCCC6, (uint)0x0010, (uint)256)]
+    [TestCase(Table384To500, (uint)0x3FC6, (uint)0x8018, (uint)384)]
+    [TestCase(Table43FE_0To127, (uint)0x48C7, (uint)0x0084, (uint)0)]
+    [TestCase(Table43FE_128To180, (uint)0xBBC7, (uint)0x808C, (uint)128)]
+    public void EncodeByFamily_MatchesKnownValues(string countAndBlockTable, uint high16, uint xorConst, uint baseOffset)
     {
         var rows = ParseTable(countAndBlockTable);
 
         foreach (var (v, expected) in rows)
         {
-            var got = TokenBlockUtils.EncodeByFamily((uint)v, new TokenBlockUtils.Family(high16, xorConst));
+            var got = TokenBlockUtils.EncodeByFamily((uint)v, new TokenBlockUtils.Family(high16, xorConst, baseOffset));
             Assert.That(got.Value, Is.EqualTo(expected), $"Value {v}: expected {expected:X8}, got {got.Value:X8}");
         }
     }
 
     [Test]
-    public void Encode_MatchesKnownValues()
+    public void Encode_MercurySequence_MatchesKnownValues()
     {
         var rows = ParseTable(string.Join("\n", Table0To127, Table128To255, Table256To383, Table384To500));
 
         foreach (var (ridesRemaining, block) in rows)
         {
-            var got = TokenBlockUtils.Encode((uint)ridesRemaining);
+            var got = TokenBlockUtils.Encode((uint)ridesRemaining, EncodingSequences.Mercury);
             Assert.That(got.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {got.Value:X8}");
         }
     }
@@ -578,7 +850,7 @@ public class TokenBlockUtilsTest
     [Test]
     public void TryDecode_valid_block_returns_true()
     {
-        var block = TokenBlockUtils.Encode(73);
+        var block = EncodingSequences.Mercury.Encode(73);
 
         Assert.That(TokenBlockUtils.TryDecode(block, out var rides), Is.True);
         Assert.That(rides, Is.EqualTo(73u));
@@ -605,11 +877,89 @@ public class TokenBlockUtilsTest
     {
         for (uint value = 0; value <= 500; value++)
         {
-            var encoded = TokenBlockUtils.Encode(value);
+            var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Mercury);
             uint decoded = TokenBlockUtils.Decode(encoded);
             Assert.That(decoded, Is.EqualTo(value),
                 $"Round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
         }
+    }
+
+    [Test]
+    public void GetFamilyForRides_Venus_sequence_uses_48C7_for_low_range_and_BBC7_for_high_range()
+    {
+        var sequence = EncodingSequences.Venus;
+
+        Assert.That(sequence.GetFamilyForRides(0), Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
+        Assert.That(sequence.GetFamilyForRides(127), Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
+        Assert.That(sequence.GetFamilyForRides(128), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
+        Assert.That(sequence.GetFamilyForRides(255), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
+    }
+
+    [Test]
+    public void TryGetByFriendlyName_finds_mercury_and_venus_case_insensitively()
+    {
+        Assert.That(EncodingSequences.TryGetByFriendlyName("mercury", out var mercury), Is.True);
+        Assert.That(mercury, Is.EqualTo(EncodingSequences.Mercury));
+
+        Assert.That(EncodingSequences.TryGetByFriendlyName("VENUS", out var venus), Is.True);
+        Assert.That(venus, Is.EqualTo(EncodingSequences.Venus));
+
+        Assert.That(EncodingSequences.TryGetByFriendlyName("pluto", out _), Is.False);
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_48C7_block_returns_venus_sequence()
+    {
+        var ok = EncodingSequences.TryGetSequenceFromBlock(
+            new T55Block(0x48C74948),
+            out var sequence);
+
+        Assert.That(ok, Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Venus));
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_BBC7_block_returns_venus_sequence()
+    {
+        var ok = EncodingSequences.TryGetSequenceFromBlock(
+            new T55Block(0xBBC7C940),
+            out var sequence);
+
+        Assert.That(ok, Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Venus));
+    }
+
+    [Test]
+    public void EncodePreservingSequence_venus_token_at_zero_writes_48C7_not_CCC7()
+    {
+        var reference = new T55Block(0x48C74948);
+        var encoded = TokenBlockUtils.EncodePreservingSequence(50, reference);
+
+        Assert.That(encoded.Value, Is.EqualTo(TokenBlockUtils.EncodeByFamily(50, TokenBlockUtils.Families.Family48C7_0To127).Value));
+        Assert.That(encoded.Value >> 16, Is.EqualTo(0x48C7u));
+        Assert.That(encoded.Value, Is.Not.EqualTo(EncodingSequences.Mercury.Encode(50).Value));
+    }
+
+    [Test]
+    public void EncodePreservingSequence_venus_token_crossing_128_uses_BBC7_not_3FC7()
+    {
+        var reference = new T55Block(0x48C736BF); // 127 rides, 48C7 family
+        var encoded = TokenBlockUtils.EncodePreservingSequence(130, reference);
+
+        Assert.That(encoded.Value, Is.EqualTo(TokenBlockUtils.EncodeByFamily(130, TokenBlockUtils.Families.FamilyBBC7_128To255).Value));
+        Assert.That(encoded.Value >> 16, Is.EqualTo(0xBBC7u));
+        Assert.That(encoded.Value, Is.Not.EqualTo(EncodingSequences.Mercury.Encode(130).Value));
+    }
+
+    [Test]
+    public void EncodePreservingSequence_mercury_token_still_uses_CCC7_and_3FC7()
+    {
+        var reference = EncodingSequences.Mercury.Encode(73);
+        var low = TokenBlockUtils.EncodePreservingSequence(50, reference);
+        var high = TokenBlockUtils.EncodePreservingSequence(130, reference);
+
+        Assert.That(low.Value, Is.EqualTo(EncodingSequences.Mercury.Encode(50).Value));
+        Assert.That(high.Value, Is.EqualTo(EncodingSequences.Mercury.Encode(130).Value));
     }
 
     [Test]
@@ -629,6 +979,73 @@ public class TokenBlockUtilsTest
         var bin = block.ToBin();
         Assert.That(bin.Length, Is.EqualTo(32));
         Assert.That(T55Block.FromBin(bin).Value, Is.EqualTo(0xCCC7363B));
+    }
+
+
+    [Test]
+    public void Decode_MatchesVenusSequenceCapture()
+    {
+        var rows = ParseTable(string.Join("\n", Table43FE_0To127, Table43FE_128To180));
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            uint got = TokenBlockUtils.Decode(new T55Block(block));
+            Assert.That(got, Is.EqualTo(ridesRemaining), $"Block {block:X8}: expected {ridesRemaining}, got {got}");
+        }
+    }
+
+    [Test]
+    public void EncodeByFamily_MatchesVenusSequencePredicted181To255()
+    {
+        var rows = ParseTable(Table43FE_181To255_Predicted);
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            var got = TokenBlockUtils.EncodeByFamily((uint)ridesRemaining, TokenBlockUtils.Families.FamilyBBC7_128To255);
+            Assert.That(got.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {got.Value:X8}");
+        }
+    }
+
+    [Test]
+    public void Decode_MatchesVenusSequencePredicted181To255()
+    {
+        var rows = ParseTable(Table43FE_181To255_Predicted);
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            uint got = TokenBlockUtils.Decode(new T55Block(block));
+            Assert.That(got, Is.EqualTo(ridesRemaining), $"Block {block:X8}: expected {ridesRemaining}, got {got}");
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_RoundTrip_VenusSequence_0To255()
+    {
+        for (uint value = 0; value <= 127; value++)
+        {
+            var encoded = TokenBlockUtils.EncodeByFamily(value, TokenBlockUtils.Families.Family48C7_0To127);
+            uint decoded = TokenBlockUtils.Decode(encoded);
+            Assert.That(decoded, Is.EqualTo(value),
+                $"48C7 round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
+        }
+
+        for (uint value = 128; value <= 255; value++)
+        {
+            var encoded = TokenBlockUtils.EncodeByFamily(value, TokenBlockUtils.Families.FamilyBBC7_128To255);
+            uint decoded = TokenBlockUtils.Decode(encoded);
+            Assert.That(decoded, Is.EqualTo(value),
+                $"BBC7 round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
+        }
+    }
+
+    [Test]
+    public void TryGetFamilyFromBlock_RecognizesVenusSequenceFamilies()
+    {
+        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0x48C74948), out var lowFamily), Is.True);
+        Assert.That(lowFamily, Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
+
+        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0xBBC7C940), out var highFamily), Is.True);
+        Assert.That(highFamily, Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
     }
 
     static List<(int v, uint expected)> ParseTable(string table)

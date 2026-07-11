@@ -148,7 +148,7 @@ public static class NativeRideLoadTestRunner
 
     private static async Task WriteRidesAsync(Pm3 pm3, uint rides, CancellationToken ct)
     {
-        var block = TokenBlockUtils.Encode(rides);
+        var block = TokenBlockUtils.Encode(rides, EncodingSequences.Mercury);
         await pm3.WritePage0BlockAsync(5, block, ct);
         await pm3.WritePage0BlockAsync(6, block, ct);
     }
@@ -157,7 +157,7 @@ public static class NativeRideLoadTestRunner
     {
         var bytes = await File.ReadAllBytesAsync(resetImagePath, ct);
         var blocks = LoadBlocks(bytes);
-        var zero = TokenBlockUtils.Encode(0);
+        var zero = EncodingSequences.Mercury.Encode(0);
         blocks[5] = zero;
         blocks[6] = zero;
 

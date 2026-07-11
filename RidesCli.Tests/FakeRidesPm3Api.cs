@@ -31,11 +31,20 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
     public int DumpCallCount { get; private set; }
     public int TuneCallCount { get; private set; }
 
+    public static FakeRidesPm3Api WithRidesEncodedByFamily(uint rides, TokenBlockUtils.Family family)
+    {
+        var blocks = CreatePage0Blocks(0);
+        var encoded = TokenBlockUtils.EncodeByFamily(rides, family);
+        blocks[5] = encoded;
+        blocks[6] = encoded;
+        return new FakeRidesPm3Api(new T55xxImage(blocks));
+    }
+
     public static FakeRidesPm3Api WithMismatchedRides(uint rides5, uint rides6)
     {
         var blocks = CreatePage0Blocks(0);
-        blocks[5] = TokenBlockUtils.Encode(rides5);
-        blocks[6] = TokenBlockUtils.Encode(rides6);
+        blocks[5] = TokenBlockUtils.Encode(rides5, EncodingSequences.Mercury);
+        blocks[6] = TokenBlockUtils.Encode(rides6, EncodingSequences.Mercury);
         return new FakeRidesPm3Api(new T55xxImage(blocks));
     }
 
@@ -69,7 +78,7 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     private static List<T55Block> CreatePage0Blocks(uint rides)
     {
-        var encoded = TokenBlockUtils.Encode(rides);
+        var encoded = TokenBlockUtils.Encode(rides, EncodingSequences.Mercury);
         var blocks = new List<T55Block>();
         for (var i = 0; i < 8; i++)
             blocks.Add(i == 5 || i == 6 ? encoded : new T55Block(0));

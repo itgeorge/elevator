@@ -10,7 +10,7 @@ public class RideBlockResolverTests
     [Test]
     public void Resolve_matching_valid_returns_rides()
     {
-        var block = TokenBlockUtils.Encode(73);
+        var block = TokenBlockUtils.Encode(73, EncodingSequences.Mercury);
 
         var result = RideBlockResolver.Resolve(block, block);
 
@@ -48,7 +48,7 @@ public class RideBlockResolverTests
     [Test]
     public void Resolve_mismatch_only_block5_valid_uses_block5()
     {
-        var block5 = TokenBlockUtils.Encode(73);
+        var block5 = TokenBlockUtils.Encode(73, EncodingSequences.Mercury);
         var block6 = new T55Block(0xCCC70000);
 
         var result = RideBlockResolver.Resolve(block5, block6);
@@ -63,7 +63,7 @@ public class RideBlockResolverTests
     public void Resolve_mismatch_only_block6_valid_uses_block6()
     {
         var block5 = new T55Block(0xCCC70000);
-        var block6 = TokenBlockUtils.Encode(42);
+        var block6 = TokenBlockUtils.Encode(42, EncodingSequences.Mercury);
 
         var result = RideBlockResolver.Resolve(block5, block6);
 
@@ -76,8 +76,8 @@ public class RideBlockResolverTests
     [Test]
     public void Resolve_mismatch_both_valid_prefers_block5()
     {
-        var block5 = TokenBlockUtils.Encode(73);
-        var block6 = TokenBlockUtils.Encode(80);
+        var block5 = TokenBlockUtils.Encode(73, EncodingSequences.Mercury);
+        var block6 = TokenBlockUtils.Encode(80, EncodingSequences.Mercury);
 
         var result = RideBlockResolver.Resolve(block5, block6);
 
@@ -108,6 +108,18 @@ public class RideBlockResolverTests
 
         Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
         Assert.That(result.SourceBlockNumber, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void Resolve_matching_43fe_sequence_family_returns_rides()
+    {
+        var block = TokenBlockUtils.EncodeByFamily(0, TokenBlockUtils.Families.Family48C7_0To127);
+
+        var result = RideBlockResolver.Resolve(block, block);
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(0u));
+        Assert.That(result.BlocksMatched, Is.True);
     }
 
     [Test]

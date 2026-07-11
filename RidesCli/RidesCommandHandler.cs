@@ -17,6 +17,7 @@ public sealed class RidesCommandHandler
 
     private uint? _rides;
     private string? _lastDumpRaw;
+    private EncodingSequence? _encodingSequence;
 
     public RidesCommandHandler(IRidesPm3Api pm3, IRidesOutput output, RidesConfig config, IRidesInput? input = null)
     {
@@ -188,14 +189,50 @@ public sealed class RidesCommandHandler
 
     private bool ExecuteReset(string[] args)
     {
-        if (args.Length > 0)
+        if (!TryParseResetArgs(args, out var sequence, out var error))
         {
-            _output.WriteLine("Usage: reset");
+            _output.WriteLine(error);
             return true;
         }
 
-        return ExecuteResetCore().GetAwaiter().GetResult();
+        return ExecuteResetCore(sequence!).GetAwaiter().GetResult();
     }
+
+    private static bool TryParseResetArgs(string[] args, out EncodingSequence? sequence, out string error)
+    {
+        sequence = null;
+        error = string.Empty;
+        string? sequenceName = null;
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--sequence" && i + 1 < args.Length)
+            {
+                sequenceName = args[++i];
+                continue;
+            }
+
+            error = FormatResetUsage();
+            return false;
+        }
+
+        if (sequenceName is null)
+        {
+            error = FormatResetUsage();
+            return false;
+        }
+
+        if (!EncodingSequences.TryGetByFriendlyName(sequenceName, out sequence))
+        {
+            error = $"Error: unknown encoding sequence '{sequenceName}'. Known sequences: {EncodingSequences.FormatKnownFriendlyNames()}";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string FormatResetUsage() =>
+        $"Usage: reset --sequence <name>   (known: {EncodingSequences.FormatKnownFriendlyNames()})";
 
     private async Task<bool> ExecuteTuneCore()
     {
@@ -228,14 +265,20 @@ public sealed class RidesCommandHandler
             {
                 case RideReadStatus.Success:
                     _rides = result.Rides!.Value;
+                    _encodingSequence = result.SourceBlock is T55Block sourceBlock
+                        && EncodingSequences.TryGetSequenceFromBlock(sourceBlock, out var sequence)
+                        ? sequence
+                        : null;
                     _output.WriteLine($"rides remaining: {_rides.Value}");
                     return true;
                 case RideReadStatus.UnknownEncodingFamily:
                     _rides = null;
+                    _encodingSequence = null;
                     await HandleUnknownEncodingFamilyAsync(block5).ConfigureAwait(false);
                     return true;
                 default:
                     _rides = null;
+                    _encodingSequence = null;
                     _lastDumpRaw = null;
                     _output.WriteLine("Error: could not decode rides from token (invalid block format).");
                     return true;
@@ -244,15 +287,17 @@ public sealed class RidesCommandHandler
         catch (Exception ex)
         {
             _rides = null;
+            _encodingSequence = null;
             _lastDumpRaw = null;
             _output.WriteLine($"Error: {ex.Message}");
             return true;
         }
     }
 
-    private async Task<bool> ExecuteResetCore()
+    private async Task<bool> ExecuteResetCore(EncodingSequence sequence)
     {
         _rides = null;
+        _encodingSequence = null;
 
         try
         {
@@ -280,14 +325,14 @@ public sealed class RidesCommandHandler
             return true;
         }
 
-        if (!PromptForYesNo("Overwrite token with reset image and set rides to 0? [y/N]"))
+        if (!PromptForYesNo($"Overwrite token with reset image and set rides to 0 using sequence '{sequence.FriendlyName}'? [y/N]"))
         {
             _output.WriteLine("Cancelled.");
             return true;
         }
 
         var resetBlocks = LoadDefaultResetPage0Blocks();
-        var zeroBlock = TokenBlockUtils.Encode(0);
+        var zeroBlock = sequence.Encode(0);
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
@@ -297,6 +342,7 @@ public sealed class RidesCommandHandler
         if (success)
         {
             _rides = 0;
+            _encodingSequence = sequence;
             _output.WriteLine("rides remaining: 0");
         }
 
@@ -479,6 +525,12 @@ public sealed class RidesCommandHandler
             return true;
         }
 
+        if (_encodingSequence is null)
+        {
+            _output.WriteLine("Error: no encoding sequence in memory. Run 'read' first.");
+            return true;
+        }
+
         if (dryRun)
         {
             var rideDiff = number - (int)previousRides;
@@ -491,7 +543,7 @@ public sealed class RidesCommandHandler
         }
 
         _rides = (uint)number;
-        var block = TokenBlockUtils.Encode(_rides.Value);
+        var block = TokenBlockUtils.Encode(_rides.Value, _encodingSequence);
 
         var success = await _pm3.WriteRideMirrorBlocksAsync(block).ConfigureAwait(false);
 
@@ -585,7 +637,7 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
-        _output.WriteLine("  reset         Reset token using default image and set rides to 0");
+        _output.WriteLine($"  reset --sequence <name>   Reset token using default image and set rides to 0 (known: {EncodingSequences.FormatKnownFriendlyNames()})");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token");
         _output.WriteLine("  price set <number>   Preview cost for set");

@@ -92,7 +92,10 @@ public class Pm3NativeDetectCacheIntegrationTests
         Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 read -b 5"));
 
         // 7) Write — keeps detect cache (writes do not change chip presence/modulation)
-        var ridesBlock = TokenBlockUtils.Encode(TokenBlockUtils.Decode(T55Block.FromHex(_snapshotBlock5Hex)));
+        var snapshotBlock = T55Block.FromHex(_snapshotBlock5Hex);
+        var ridesBlock = TokenBlockUtils.EncodePreservingSequence(
+            TokenBlockUtils.Decode(snapshotBlock),
+            snapshotBlock);
         await pm3.WritePage0BlockAsync(5, ridesBlock);
         await pm3.WritePage0BlockAsync(6, ridesBlock);
         LogStep("after write");

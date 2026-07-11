@@ -84,6 +84,33 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_without_sequence_prints_usage()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("Usage: reset --sequence"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.GetRides(), Is.EqualTo(73u));
+    }
+
+    [Test]
+    public void Reset_with_unknown_sequence_prints_error()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "pluto"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("unknown encoding sequence 'pluto'"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+    }
+
+    [Test]
     public void Reset_without_read_prompts_and_writes_default_image_with_zero_rides()
     {
         var output = new StringBuilderRidesOutput();
@@ -91,7 +118,7 @@ public class RidesCommandHandlerTests
         var input = new ScriptedRidesInput("y");
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), input);
 
-        handler.Execute(["reset"]);
+        handler.Execute(["reset", "--sequence", "mercury"]);
 
         Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
         Assert.That(output.Lines, Has.Some.EqualTo("current token rides: 73"));
@@ -102,8 +129,8 @@ public class RidesCommandHandlerTests
         Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA4A3DE"));
         Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D5D1D713"));
         Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D5D1D713"));
-        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
-        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
     }
 
     [Test]
@@ -114,7 +141,7 @@ public class RidesCommandHandlerTests
         pm3.RemoveToken();
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
 
-        handler.Execute(["reset"]);
+        handler.Execute(["reset", "--sequence", "mercury"]);
 
         Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
         Assert.That(output.Lines, Has.Some.Contains("no token detected"));
@@ -128,12 +155,12 @@ public class RidesCommandHandlerTests
         var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
 
-        handler.Execute(["reset"]);
+        handler.Execute(["reset", "--sequence", "mercury"]);
 
         Assert.That(output.Lines, Has.Some.Contains("unknown encoding family"));
         Assert.That(output.Lines, Has.Some.EqualTo("Success."));
-        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
-        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
     }
 
     [Test]
@@ -143,7 +170,7 @@ public class RidesCommandHandlerTests
         var pm3 = FakeRidesPm3Api.WithRides(73);
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("n"));
 
-        handler.Execute(["reset"]);
+        handler.Execute(["reset", "--sequence", "mercury"]);
 
         Assert.That(output.Lines, Has.Some.EqualTo("Cancelled."));
         Assert.That(pm3.GetRides(), Is.EqualTo(73u));
@@ -364,7 +391,7 @@ public class RidesCommandHandlerTests
     public void Read_mismatch_only_block6_valid_loads_rides_from_block6()
     {
         var output = new StringBuilderRidesOutput();
-        var pm3 = FakeRidesPm3Api.WithBlocks5And6(new T55Block(0xCCC70000), TokenBlockUtils.Encode(42));
+        var pm3 = FakeRidesPm3Api.WithBlocks5And6(new T55Block(0xCCC70000), TokenBlockUtils.Encode(42, EncodingSequences.Mercury));
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
 
         handler.Execute(["read"]);
@@ -585,6 +612,53 @@ public class RidesCommandHandlerTests
         handler.Execute(["money", "4.00"]);
 
         Assert.That(output.Lines, Has.Some.Contains("pricePer100"));
+    }
+
+    [Test]
+    public void Set_preserves_43FE_profile_instead_of_switching_to_legacy_family()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(73, TokenBlockUtils.Families.Family48C7_0To127);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["set", "100"]);
+
+        var expected = TokenBlockUtils.EncodeByFamily(100, TokenBlockUtils.Families.Family48C7_0To127);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(TokenBlockUtils.Encode(100, EncodingSequences.Mercury).ToHex()));
+    }
+
+    [Test]
+    public void Add_preserves_43FE_profile_when_crossing_to_high_range()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(120, TokenBlockUtils.Families.Family48C7_0To127);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["add", "10"]); // 120 + 10 = 130
+
+        var expected = TokenBlockUtils.EncodeByFamily(130, TokenBlockUtils.Families.FamilyBBC7_128To255);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(TokenBlockUtils.Encode(130, EncodingSequences.Mercury).ToHex()));
+    }
+
+    [Test]
+    public void Reset_preserves_43FE_profile_for_zero_rides()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(180, TokenBlockUtils.Families.FamilyBBC7_128To255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "venus"]);
+
+        var expected = TokenBlockUtils.EncodeByFamily(0, TokenBlockUtils.Families.Family48C7_0To127);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
     }
 
     [Test]

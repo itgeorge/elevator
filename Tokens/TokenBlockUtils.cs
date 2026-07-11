@@ -2,44 +2,48 @@ namespace Tokens;
 
 public static class TokenBlockUtils
 {
-    public record Family(uint High16, uint XorConst);
+    public record Family(uint High16, uint XorConst, uint BaseOffset);
 
     public static class Families
     {
-        public static readonly Family Family0To127 = new(0xCCC7, 0x0000);
-        public static readonly Family Family128To255 = new(0x3FC7, 0x8008);
-        public static readonly Family Family256To383 = new(0xCCC6, 0x0010);
-        public static readonly Family Family384To500 = new(0x3FC6, 0x8018);
+        public static readonly Family Family0To127 = new(0xCCC7, 0x0000, 0);
+        public static readonly Family Family128To255 = new(0x3FC7, 0x8008, 128);
+        public static readonly Family Family256To383 = new(0xCCC6, 0x0010, 256);
+        public static readonly Family Family384To500 = new(0x3FC6, 0x8018, 384);
 
-        private static uint GetHigh16FromBlock(uint block)
+        // 43FE0062-5BA494A3-D6D1C733-D6D1C733 sequence families (captured 0..180)
+        public static readonly Family Family48C7_0To127 = new(0x48C7, 0x0084, 0);
+        public static readonly Family FamilyBBC7_128To255 = new(0xBBC7, 0x808C, 128);
+
+        private static readonly Family[] AllFamilies =
+        [
+            Family0To127,
+            Family128To255,
+            Family256To383,
+            Family384To500,
+            Family48C7_0To127,
+            FamilyBBC7_128To255,
+        ];
+
+        private static readonly Dictionary<uint, Family> FamilyByHigh16 = BuildFamilyByHigh16();
+
+        private static Dictionary<uint, Family> BuildFamilyByHigh16()
         {
-            return block >> 16;
+            var map = new Dictionary<uint, Family>();
+            foreach (var family in AllFamilies)
+            {
+                map[family.High16] = family;
+            }
+
+            return map;
         }
 
         public static bool TryGetFamilyFromBlock(T55Block block, out Family? family)
         {
-            uint high16 = GetHigh16FromBlock(block.Value);
-            if (high16 == Family0To127.High16)
+            uint high16 = block.Value >> 16;
+            if (FamilyByHigh16.TryGetValue(high16, out var found))
             {
-                family = Family0To127;
-                return true;
-            }
-
-            if (high16 == Family128To255.High16)
-            {
-                family = Family128To255;
-                return true;
-            }
-
-            if (high16 == Family256To383.High16)
-            {
-                family = Family256To383;
-                return true;
-            }
-
-            if (high16 == Family384To500.High16)
-            {
-                family = Family384To500;
+                family = found;
                 return true;
             }
 
@@ -54,33 +58,8 @@ public static class TokenBlockUtils
                 return family;
             }
 
-            uint high16 = GetHigh16FromBlock(block.Value);
+            uint high16 = block.Value >> 16;
             throw new ArgumentException($"Block {block.Value:X8} uses an unknown encoding family (high 16 {high16:X4})");
-        }
-
-        public static Family GetFamilyFromRides(uint ridesRemaining)
-        {
-            if (ridesRemaining <= 127)
-            {
-                return Family0To127;
-            }
-
-            if (ridesRemaining <= 255)
-            {
-                return Family128To255;
-            }
-
-            if (ridesRemaining <= 383)
-            {
-                return Family256To383;
-            }
-
-            if (ridesRemaining <= 500)
-            {
-                return Family384To500;
-            }
-
-            throw new ArgumentException($"Rides remaining {ridesRemaining} is out of range");
         }
     }
 
@@ -97,58 +76,49 @@ public static class TokenBlockUtils
 
     private static uint DecodeFromBaseBlock(uint block)
     {
-        // Extract low 16 bits
         uint low16 = block & 0xFFFF;
 
-        // Extract hb (high byte) and lb (low byte)
         uint hb = low16 >> 8;
         uint lb = low16 & 0xFF;
 
-        // Extract o from hb: hb = (((g + 4) & 7) << 4) | (o ^ 9)
-        // So o = (hb & 0xF) ^ 9
         uint o = (hb & 0xF) ^ 0x9;
 
-        // Extract g info from lb: lb = ((o ^ 12) << 4) | (g + offset)
-        // where offset = g < 4 ? 12 : 4
-        uint lb_high = lb >> 4; // (o ^ 12)
-        uint lb_low = lb & 0xF;  // (g + offset)
+        uint lb_high = lb >> 4;
+        uint lb_low = lb & 0xF;
 
-        // Verify o: lb_high should equal (o ^ 12)
         if (lb_high != ((o ^ 0xC) & 0xF))
         {
             throw new ArgumentException($"Invalid block format: {block:X8}");
         }
 
-        // Now solve for g. We have: lb_low = g + offset
-        // where offset = g < 4 ? 12 : 4
-        // We also have g info from hb: ((g + 4) & 7) = hb >> 4
-        uint g_from_hb = ((hb >> 4) + 4) & 7; // Reverse of ((g + 4) & 7)
+        uint g_from_hb = ((hb >> 4) + 4) & 7;
 
-        // Use g from hb to determine offset and solve for g
         uint offset = g_from_hb < 4 ? 12u : 4u;
-        uint g = (lb_low + 16 - offset) & 0xF; // Add 16 to handle wraparound
+        uint g = (lb_low + 16 - offset) & 0xF;
 
-        // Verify g matches what we got from hb
         if (g != g_from_hb)
         {
             throw new ArgumentException($"Invalid block format: {block:X8}");
         }
 
-        // Combine g and o to get rides remaining
         return (g << 4) | o;
     }
-    
+
     public static T55Block EncodeByFamily(uint value, Family family)
     {
-        uint m = value & 0x7Fu;
+        uint m = (value - family.BaseOffset) & 0x7Fu;
         ushort base16 = EncodeBaseLow16Only(m);
         uint low16 = (uint)(base16 ^ (ushort)family.XorConst);
         return new T55Block((family.High16 << 16) | low16);
     }
 
-    public static T55Block Encode(uint ridesRemaining) 
+    public static T55Block Encode(uint ridesRemaining, EncodingSequence sequence) =>
+        sequence.Encode(ridesRemaining);
+
+    public static T55Block EncodePreservingSequence(uint ridesRemaining, T55Block referenceBlock)
     {
-        return EncodeByFamily(ridesRemaining, Families.GetFamilyFromRides(ridesRemaining));
+        var sequence = EncodingSequences.GetSequenceFromBlock(referenceBlock);
+        return Encode(ridesRemaining, sequence);
     }
 
     public static bool TryDecode(T55Block block, out uint ridesRemaining)
@@ -169,25 +139,12 @@ public static class TokenBlockUtils
     {
         var family = Families.GetFamilyFromBlock(block);
 
-        // 1) Unmask the payload (XOR is on low16, not on the decoded number)
         uint low16Masked = block.Value & 0xFFFFu;
         uint low16Base = low16Masked ^ family.XorConst;
 
-        // 2) Build a "base-format" block and decode m in [0..127]
-        // DecodeFromBlock only relies on low16, but we keep the header consistent.
         uint baseBlock = 0xCCC70000u | (low16Base & 0xFFFFu);
-        uint m = DecodeFromBaseBlock(baseBlock); // 0..127
+        uint m = DecodeFromBaseBlock(baseBlock);
 
-        // 3) Expand to full range based on which family we're in
-        uint baseOffset =
-            family == Families.Family0To127 ? 0u :
-            family == Families.Family128To255 ? 128u :
-            family == Families.Family256To383 ? 256u :
-            family == Families.Family384To500 ? 384u :
-            throw new ArgumentException($"Unknown family for block {block.Value:X8}");
-
-        uint ridesRemaining = baseOffset + m;
-
-        return ridesRemaining;
+        return family.BaseOffset + m;
     }
 }

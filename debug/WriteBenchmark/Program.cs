@@ -47,7 +47,7 @@ static async Task<uint> ReadRidesAsync(Pm3 pm3)
 
 static async Task SetAsync(Pm3 pm3, uint rides)
 {
-    if (!await pm3.WriteRideMirrorBlocksAsync(TokenBlockUtils.Encode(rides)))
+    if (!await pm3.WriteRideMirrorBlocksAsync(TokenBlockUtils.Encode(rides, EncodingSequences.Mercury)))
         throw new InvalidOperationException("Set verify failed.");
 }
 
@@ -57,7 +57,7 @@ static async Task ResetAsync(Pm3 pm3)
     _ = await pm3.ReadPage0BlockAsync(6);
 
     var resetBlocks = LoadDefaultResetPage0Blocks();
-    var zeroBlock = TokenBlockUtils.Encode(0);
+    var zeroBlock = EncodingSequences.Mercury.Encode(0);
     resetBlocks[5] = zeroBlock;
     resetBlocks[6] = zeroBlock;
 

@@ -266,7 +266,13 @@ public class CommandProcessor
     private void SetRides(int remaining)
     {
         if (_current!.BlockCount < 7) { Console.WriteLine("Not enough blocks to set rides."); return; }
-        var block = TokenBlockUtils.Encode((uint)remaining);
+        var referenceBlock = _current!.GetBlock(0, 5);
+        if (!EncodingSequences.TryGetSequenceFromBlock(referenceBlock, out var sequence) || sequence is null)
+        {
+            Console.WriteLine("Unknown encoding sequence in block 5.");
+            return;
+        }
+        var block = TokenBlockUtils.Encode((uint)remaining, sequence);
         _current!.SetBlock(0, 5, block);
         SyncMirrors(5); // Copy from block 5 to block 6
         Console.WriteLine($"Set rides to {remaining} (block: {block.ToHex()})");
