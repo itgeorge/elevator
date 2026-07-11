@@ -11,8 +11,11 @@ public sealed class EncodingSequence
     private readonly TokenBlockUtils.Family? _family256To383;
     private readonly TokenBlockUtils.Family? _family384To500;
 
+    private readonly string _resetImageFileName;
+
     internal EncodingSequence(
         string friendlyName,
+        string resetImageFileName,
         TokenBlockUtils.Family family0To127,
         TokenBlockUtils.Family family128To255,
         TokenBlockUtils.Family? family256To383 = null,
@@ -20,8 +23,11 @@ public sealed class EncodingSequence
     {
         if (string.IsNullOrWhiteSpace(friendlyName))
             throw new ArgumentException("Friendly name is required.", nameof(friendlyName));
+        if (string.IsNullOrWhiteSpace(resetImageFileName))
+            throw new ArgumentException("Reset image file name is required.", nameof(resetImageFileName));
 
         FriendlyName = friendlyName.Trim().ToLowerInvariant();
+        _resetImageFileName = resetImageFileName.Trim();
         _family0To127 = family0To127;
         _family128To255 = family128To255;
         _family256To383 = family256To383;
@@ -29,6 +35,8 @@ public sealed class EncodingSequence
     }
 
     public string FriendlyName { get; }
+
+    public string ResetImageFileName => _resetImageFileName;
 
     public TokenBlockUtils.Family GetFamilyForRides(uint ridesRemaining)
     {
@@ -79,6 +87,7 @@ public static class EncodingSequences
 {
     public static readonly EncodingSequence Mercury = new(
         "mercury",
+        "default-500-rides.bin",
         TokenBlockUtils.Families.Family0To127,
         TokenBlockUtils.Families.Family128To255,
         TokenBlockUtils.Families.Family256To383,
@@ -87,6 +96,7 @@ public static class EncodingSequences
     // 43FE0062-5BA494A3-D6D1C733-D6D1C733 (captured 0..180)
     public static readonly EncodingSequence Venus = new(
         "venus",
+        "venus-0-rides.bin",
         TokenBlockUtils.Families.Family48C7_0To127,
         TokenBlockUtils.Families.FamilyBBC7_128To255);
 

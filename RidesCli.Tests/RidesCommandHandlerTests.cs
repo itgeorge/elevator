@@ -647,7 +647,7 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
-    public void Reset_preserves_43FE_profile_for_zero_rides()
+    public void Reset_venus_writes_venus_identity_blocks_and_zero_ride_encoding()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(180, TokenBlockUtils.Families.FamilyBBC7_128To255);
@@ -655,10 +655,17 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["reset", "--sequence", "venus"]);
 
-        var expected = TokenBlockUtils.EncodeByFamily(0, TokenBlockUtils.Families.Family48C7_0To127);
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("43FE0062"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA494A3"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D6D1C733"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D6D1C733"));
+        Assert.That(pm3.GetBlockHex(1), Is.Not.EqualTo("9BFE0062"));
+        Assert.That(pm3.GetBlockHex(3), Is.Not.EqualTo("D5D1D713"));
+
+        var expected = EncodingSequences.Venus.Encode(0);
         Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
         Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
-        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
     }
 
     [Test]

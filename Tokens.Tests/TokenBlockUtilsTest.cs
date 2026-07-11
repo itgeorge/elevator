@@ -885,6 +885,13 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void EncodingSequences_expose_reset_image_file_names()
+    {
+        Assert.That(EncodingSequences.Mercury.ResetImageFileName, Is.EqualTo("default-500-rides.bin"));
+        Assert.That(EncodingSequences.Venus.ResetImageFileName, Is.EqualTo("venus-0-rides.bin"));
+    }
+
+    [Test]
     public void GetFamilyForRides_Venus_sequence_uses_48C7_for_low_range_and_BBC7_for_high_range()
     {
         var sequence = EncodingSequences.Venus;
