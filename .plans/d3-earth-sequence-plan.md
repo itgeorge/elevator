@@ -324,3 +324,49 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 
 - Notes: The successful `128 -> 127` transition confirms both second-family starting value and transition down into the low family. The successful `255 -> 254` confirms second-family in-range decrement near its top.
 - Notes: The earlier `256` failure should be treated as inconclusive because the later read showed an unexpected token/identity state; do not use it alone to reject predicted family 3.
+
+## Extrapolation notes for family 3
+
+Known registered/confirmed sequence patterns:
+
+```text
+Mercury: 0..127 CCC7/0000, 128..255 3FC7/8008, 256..383 CCC6/0010, 384..500 3FC6/8018
+Venus:   0..127 48C7/0084, 128..255 BBC7/808C, 256..383 48C6/0094, 384..500 BBC6/809C
+Earth:   0..127 1812/5BD4, 128..255 EB12/DBDC
+```
+
+Across Mercury and Venus, the family-to-family step pattern is stable:
+
+```text
+high16 step 0->1: XOR F300
+high16 step 1->2: XOR F301
+high16 step 2->3: XOR F300
+xor step each segment: +8008 modulo 10000
+base step each segment: +128
+```
+
+Applying that to confirmed Earth families gives:
+
+```text
+Earth 256..383: high16 1813, xor 5BE4, base 256
+Earth 384..500: high16 EB13, xor DBEC, base 384
+```
+
+The third-family prediction is especially strong because both independent derivations agree:
+
+```text
+EB12 XOR F301 = 1813
+DBDC + 8008 = 5BE4 (mod 10000)
+```
+
+Recommended next hardware check remains:
+
+```text
+start 256 -> write 18131228; after ride expect 255 -> EB12EDE7
+```
+
+If this succeeds, test the top of family 3:
+
+```text
+start 383 -> write 18136DDF; after ride expect 382 -> 18136CCF
+```
