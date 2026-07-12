@@ -780,6 +780,39 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_earth_writes_d3_identity_blocks_and_zero_ride_encoding()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "earth"]);
+
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("D3FE005D"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("522BC69D"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("650432F5"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("650432F5"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("18121218"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("18121218"));
+    }
+
+    [Test]
+    public void Set_preserves_earth_profile_within_confirmed_second_family()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Earth, 128);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["set", "255"]);
+
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EB12EDE7"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EB12EDE7"));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Venus.Encode(255).ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Mercury.Encode(255).ToHex()));
+    }
+
+    [Test]
     public void Set_after_read_writes_blocks_5_and_6()
     {
         var output = new StringBuilderRidesOutput();

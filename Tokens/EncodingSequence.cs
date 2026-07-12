@@ -15,6 +15,10 @@ internal static class EncodingFamilyDefinitions
     internal static readonly TokenBlockUtils.Family Venus128To255 = new(0xBBC7, 0x808C, 128);
     internal static readonly TokenBlockUtils.Family Venus256To383 = new(0x48C6, 0x0094, 256);
     internal static readonly TokenBlockUtils.Family Venus384To500 = new(0xBBC6, 0x809C, 384);
+
+    // D3FE005D-522BC69D-650432F5-650432F5 (Earth): low range captured 0..23; 128 and 255 boundary starts elevator-validated 2026-07-12.
+    internal static readonly TokenBlockUtils.Family Earth0To127 = new(0x1812, 0x5BD4, 0);
+    internal static readonly TokenBlockUtils.Family Earth128To255 = new(0xEB12, 0xDBDC, 128);
 }
 
 /// <summary>
@@ -112,7 +116,13 @@ public static class EncodingSequences
         new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Venus256To383),
         new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Venus384To500));
 
-    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus];
+    public static readonly EncodingSequence Earth = new(
+        "earth",
+        "earth-0-rides.bin",
+        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Earth0To127),
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255));
+
+    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus, Earth];
 
     private static readonly Dictionary<uint, EncodingSequence> SequenceByHigh16 = BuildSequenceByHigh16();
 

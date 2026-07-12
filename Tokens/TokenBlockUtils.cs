@@ -16,6 +16,9 @@ public static class TokenBlockUtils
         public static Family Family48C6_256To383 => EncodingFamilyDefinitions.Venus256To383;
         public static Family FamilyBBC6_384To500 => EncodingFamilyDefinitions.Venus384To500;
 
+        public static Family Family1812_0To127 => EncodingFamilyDefinitions.Earth0To127;
+        public static Family FamilyEB12_128To255 => EncodingFamilyDefinitions.Earth128To255;
+
         public static IReadOnlyList<Family> All => AllFamilies;
 
         private static readonly Family[] AllFamilies = BuildAllFamilies();
