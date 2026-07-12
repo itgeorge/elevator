@@ -15,9 +15,23 @@ public sealed class RidesCommandHandler
     private readonly RidesConfig _config;
     private readonly IRidesInput _input;
 
+    private const int ResetFirstWritableBlock = 1;
+    private const int ResetLastWritableBlock = 6;
+    private static readonly TimeSpan ResetRetryDelay = TimeSpan.FromMilliseconds(500);
+
     private uint? _rides;
     private string? _lastDumpRaw;
     private EncodingSequence? _encodingSequence;
+
+    private sealed record ResetWriteAttemptResult(bool Success, uint Block, string? ErrorMessage = null);
+
+    private sealed record ResetWriteResult(
+        bool Success,
+        uint? FailedBlock = null,
+        string? ErrorMessage = null,
+        bool RollbackAttempted = false,
+        bool RollbackSucceeded = false,
+        IReadOnlyList<string>? RollbackErrors = null);
 
     public RidesCommandHandler(IRidesPm3Api pm3, IRidesOutput output, RidesConfig config, IRidesInput? input = null)
     {
@@ -299,12 +313,13 @@ public sealed class RidesCommandHandler
         _rides = null;
         _encodingSequence = null;
 
+        IReadOnlyList<T55Block> currentBlocks;
         try
         {
-            var (block5Hex, block6Hex) = await _pm3.ReadRideMirrorBlocksAsync().ConfigureAwait(false);
-            var describe = RideBlockResolver.Resolve(
-                T55Block.FromHex(block5Hex),
-                T55Block.FromHex(block6Hex));
+            currentBlocks = await ReadResetWritableBlocksAsync().ConfigureAwait(false);
+            var block5Hex = currentBlocks[5].ToHex();
+            var block6Hex = currentBlocks[6].ToHex();
+            var describe = RideBlockResolver.Resolve(currentBlocks[5], currentBlocks[6]);
 
             switch (describe.Status)
             {
@@ -336,17 +351,172 @@ public sealed class RidesCommandHandler
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var success = await _pm3.WriteAndVerifyPage0BlocksAsync(resetBlocks, 1, 6).ConfigureAwait(false);
+        var targetBlockNumbers = IsSameResetSequence(currentBlocks, resetBlocks, sequence)
+            ? new[] { 5u, 6u }
+            : Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
+                .Select(static block => (uint)block)
+                .ToArray();
 
-        _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
-        if (success)
+        if (targetBlockNumbers.Length == 2 && targetBlockNumbers[0] == 5 && targetBlockNumbers[1] == 6)
+            _output.WriteLine("Token already matches requested reset identity; resetting ride blocks only.");
+
+        var result = await WriteResetBlocksSafelyAsync(currentBlocks, resetBlocks, targetBlockNumbers).ConfigureAwait(false);
+
+        if (result.Success)
         {
+            _output.WriteLine("Success.");
             _rides = 0;
             _encodingSequence = sequence;
             _output.WriteLine("rides remaining: 0");
+            return true;
+        }
+
+        _output.WriteLine($"Error: block {result.FailedBlock} write/verify failed. {result.ErrorMessage}");
+        if (result.RollbackAttempted)
+        {
+            if (result.RollbackSucceeded)
+            {
+                _output.WriteLine("Rollback to previous block values succeeded.");
+            }
+            else
+            {
+                _output.WriteLine("Warning: rollback to previous block values was incomplete.");
+                foreach (var rollbackError in result.RollbackErrors ?? [])
+                    _output.WriteLine($"  {rollbackError}");
+            }
         }
 
         return true;
+    }
+
+    private async Task<IReadOnlyList<T55Block>> ReadResetWritableBlocksAsync(CancellationToken ct = default)
+    {
+        var blocks = Enumerable.Repeat(new T55Block(0), 8).ToList();
+        for (uint block = ResetFirstWritableBlock; block <= ResetLastWritableBlock; block++)
+            blocks[(int)block] = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(block, ct).ConfigureAwait(false));
+        return blocks;
+    }
+
+    private static bool IsSameResetSequence(
+        IReadOnlyList<T55Block> currentBlocks,
+        IReadOnlyList<T55Block> resetBlocks,
+        EncodingSequence sequence)
+    {
+        for (var block = 1; block <= 4; block++)
+        {
+            if (currentBlocks[block].Value != resetBlocks[block].Value)
+                return false;
+        }
+
+        return IsBlockFromSequence(currentBlocks[5], sequence)
+            && IsBlockFromSequence(currentBlocks[6], sequence);
+    }
+
+    private static bool IsBlockFromSequence(T55Block block, EncodingSequence sequence) =>
+        EncodingSequences.TryGetSequenceFromBlock(block, out var found) && ReferenceEquals(found, sequence);
+
+    private async Task<ResetWriteResult> WriteResetBlocksSafelyAsync(
+        IReadOnlyList<T55Block> originalBlocks,
+        IReadOnlyList<T55Block> targetBlocks,
+        IReadOnlyList<uint> targetBlockNumbers,
+        CancellationToken ct = default)
+    {
+        foreach (var block in targetBlockNumbers)
+        {
+            ValidateResetWritableBlock(block);
+            var target = targetBlocks[(int)block];
+            if (originalBlocks[(int)block].Value == target.Value)
+                continue;
+
+            var write = await WriteAndVerifyBlockWithRetryAsync(block, target, ct).ConfigureAwait(false);
+            if (write.Success)
+                continue;
+
+            var rollback = await RollBackResetBlocksAsync(originalBlocks, ct).ConfigureAwait(false);
+            return new ResetWriteResult(
+                Success: false,
+                FailedBlock: block,
+                ErrorMessage: write.ErrorMessage,
+                RollbackAttempted: true,
+                RollbackSucceeded: rollback.Count == 0,
+                RollbackErrors: rollback);
+        }
+
+        return new ResetWriteResult(Success: true);
+    }
+
+    private async Task<IReadOnlyList<string>> RollBackResetBlocksAsync(
+        IReadOnlyList<T55Block> originalBlocks,
+        CancellationToken ct = default)
+    {
+        var errors = new List<string>();
+        for (uint block = ResetFirstWritableBlock; block <= ResetLastWritableBlock; block++)
+        {
+            ValidateResetWritableBlock(block);
+            try
+            {
+                var current = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(block, ct).ConfigureAwait(false));
+                var original = originalBlocks[(int)block];
+                if (current.Value == original.Value)
+                    continue;
+
+                var rollback = await WriteAndVerifyBlockWithRetryAsync(block, original, ct).ConfigureAwait(false);
+                if (!rollback.Success)
+                    errors.Add($"block {block}: {rollback.ErrorMessage}");
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"block {block}: {ex.Message}");
+            }
+        }
+
+        return errors;
+    }
+
+    private async Task<ResetWriteAttemptResult> WriteAndVerifyBlockWithRetryAsync(
+        uint block,
+        T55Block target,
+        CancellationToken ct = default)
+    {
+        ValidateResetWritableBlock(block);
+        string? lastError = null;
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(ResetRetryDelay, ct).ConfigureAwait(false);
+
+            try
+            {
+                await _pm3.WritePage0BlockAsync(block, target, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                lastError = $"write attempt {attempt + 1} threw: {ex.Message}";
+                continue;
+            }
+
+            try
+            {
+                var readBack = await _pm3.ReadPage0BlockAsync(block, ct).ConfigureAwait(false);
+                if (string.Equals(readBack, target.ToHex(), StringComparison.OrdinalIgnoreCase))
+                    return new ResetWriteAttemptResult(true, block);
+
+                lastError = $"verify attempt {attempt + 1} read {readBack}, expected {target.ToHex()}";
+            }
+            catch (Exception ex)
+            {
+                lastError = $"verify attempt {attempt + 1} threw: {ex.Message}";
+            }
+        }
+
+        return new ResetWriteAttemptResult(false, block, lastError ?? "unknown write/verify failure");
+    }
+
+    private static void ValidateResetWritableBlock(uint block)
+    {
+        if (block is < ResetFirstWritableBlock or > ResetLastWritableBlock)
+            throw new ArgumentOutOfRangeException(nameof(block), "Reset writes are only allowed for page 0 blocks 1..6.");
     }
 
     private bool PromptForYesNo(string prompt)

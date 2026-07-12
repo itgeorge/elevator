@@ -30,11 +30,23 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     public int DumpCallCount { get; private set; }
     public int TuneCallCount { get; private set; }
+    public int WriteAndVerifyPage0BlocksCallCount { get; private set; }
+    public List<uint> WrittenBlocks { get; } = [];
+    public Dictionary<uint, int> RemainingWriteFailuresByBlock { get; } = new();
 
     public static FakeRidesPm3Api WithRidesEncodedByFamily(uint rides, TokenBlockUtils.Family family)
     {
         var blocks = CreatePage0Blocks(0);
         var encoded = TokenBlockUtils.EncodeByFamily(rides, family);
+        blocks[5] = encoded;
+        blocks[6] = encoded;
+        return new FakeRidesPm3Api(new T55xxImage(blocks));
+    }
+
+    public static FakeRidesPm3Api WithSequenceRides(EncodingSequence sequence, uint rides)
+    {
+        var blocks = ResetPage0BlocksLoader.Load(sequence);
+        var encoded = sequence.Encode(rides);
         blocks[5] = encoded;
         blocks[6] = encoded;
         return new FakeRidesPm3Api(new T55xxImage(blocks));
@@ -109,6 +121,13 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
     public Task WritePage0BlockAsync(uint block, T55Block data, CancellationToken ct = default)
     {
         EnsureTokenPresent();
+        WrittenBlocks.Add(block);
+        if (RemainingWriteFailuresByBlock.TryGetValue(block, out var remainingFailures) && remainingFailures > 0)
+        {
+            RemainingWriteFailuresByBlock[block] = remainingFailures - 1;
+            throw new InvalidOperationException($"Injected write failure for block {block}.");
+        }
+
         _image.SetBlock(0, (int)block, data);
         return Task.CompletedTask;
     }
@@ -156,6 +175,7 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         int lastBlock,
         CancellationToken ct = default)
     {
+        WriteAndVerifyPage0BlocksCallCount++;
         EnsureTokenPresent();
         var confirmed = new bool[lastBlock - firstBlock + 1];
 

@@ -134,6 +134,69 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_same_sequence_only_writes_ride_blocks_to_zero()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "mercury"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("resetting ride blocks only"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 5, 6 }));
+        Assert.That(pm3.WriteAndVerifyPage0BlocksCallCount, Is.EqualTo(0));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("9BFE0062"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA4A3DE"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
+    }
+
+    [Test]
+    public void Reset_cross_sequence_writes_blocks_individually_without_batch_writer()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "venus"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
+        Assert.That(pm3.WriteAndVerifyPage0BlocksCallCount, Is.EqualTo(0));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("43FE0062"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA494A3"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D6D1C733"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D6D1C733"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+    }
+
+    [Test]
+    public void Reset_failure_retries_once_then_rolls_back_previous_values()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        pm3.RemainingWriteFailuresByBlock[2] = 2;
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "venus"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("block 2 write/verify failed"));
+        Assert.That(output.Lines, Has.Some.Contains("Rollback to previous block values succeeded"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("9BFE0062"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA4A3DE"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mercury.Encode(73).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Mercury.Encode(73).ToHex()));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 2, 1 }));
+    }
+
+    [Test]
     public void Reset_when_no_token_detected_prints_error_and_signal_strength()
     {
         var output = new StringBuilderRidesOutput();
