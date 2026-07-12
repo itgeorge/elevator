@@ -6,26 +6,27 @@ public static class TokenBlockUtils
 
     public static class Families
     {
-        public static readonly Family Family0To127 = new(0xCCC7, 0x0000, 0);
-        public static readonly Family Family128To255 = new(0x3FC7, 0x8008, 128);
-        public static readonly Family Family256To383 = new(0xCCC6, 0x0010, 256);
-        public static readonly Family Family384To500 = new(0x3FC6, 0x8018, 384);
+        public static Family Family0To127 => EncodingFamilyDefinitions.Mercury0To127;
+        public static Family Family128To255 => EncodingFamilyDefinitions.Mercury128To255;
+        public static Family Family256To383 => EncodingFamilyDefinitions.Mercury256To383;
+        public static Family Family384To500 => EncodingFamilyDefinitions.Mercury384To500;
 
-        // 43FE0062-5BA494A3-D6D1C733-D6D1C733 sequence families (captured 0..180)
-        public static readonly Family Family48C7_0To127 = new(0x48C7, 0x0084, 0);
-        public static readonly Family FamilyBBC7_128To255 = new(0xBBC7, 0x808C, 128);
+        public static Family Family48C7_0To127 => EncodingFamilyDefinitions.Venus0To127;
+        public static Family FamilyBBC7_128To255 => EncodingFamilyDefinitions.Venus128To255;
+        public static Family Family48C6_256To383 => EncodingFamilyDefinitions.Venus256To383;
+        public static Family FamilyBBC6_384To500 => EncodingFamilyDefinitions.Venus384To500;
 
-        private static readonly Family[] AllFamilies =
-        [
-            Family0To127,
-            Family128To255,
-            Family256To383,
-            Family384To500,
-            Family48C7_0To127,
-            FamilyBBC7_128To255,
-        ];
+        public static IReadOnlyList<Family> All => AllFamilies;
 
+        private static readonly Family[] AllFamilies = BuildAllFamilies();
         private static readonly Dictionary<uint, Family> FamilyByHigh16 = BuildFamilyByHigh16();
+
+        private static Family[] BuildAllFamilies() =>
+            EncodingSequences.All
+                .SelectMany(sequence => sequence.Segments)
+                .Select(segment => segment.Family)
+                .Distinct()
+                .ToArray();
 
         private static Dictionary<uint, Family> BuildFamilyByHigh16()
         {

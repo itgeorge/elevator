@@ -123,6 +123,30 @@ public class RideBlockResolverTests
     }
 
     [Test]
+    public void Resolve_matching_venus_high_range_block_returns_rides()
+    {
+        var block = EncodingSequences.Venus.Encode(500);
+
+        var result = RideBlockResolver.Resolve(block, block);
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(500u));
+        Assert.That(result.BlocksMatched, Is.True);
+    }
+
+    [Test]
+    public void Resolve_matching_venus_48C6_block_returns_rides()
+    {
+        var block = EncodingSequences.Venus.Encode(383);
+
+        var result = RideBlockResolver.Resolve(block, block);
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(383u));
+        Assert.That(result.BlocksMatched, Is.True);
+    }
+
+    [Test]
     public void Resolve_matching_rides_above_500_returns_invalid()
     {
         var block = TokenBlockUtils.EncodeByFamily(501, TokenBlockUtils.Families.Family384To500);

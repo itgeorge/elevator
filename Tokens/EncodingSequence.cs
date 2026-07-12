@@ -1,6 +1,23 @@
 namespace Tokens;
 
 /// <summary>
+/// Canonical family instances. <see cref="EncodingSequences"/> is the source of truth for which families are registered.
+/// </summary>
+internal static class EncodingFamilyDefinitions
+{
+    internal static readonly TokenBlockUtils.Family Mercury0To127 = new(0xCCC7, 0x0000, 0);
+    internal static readonly TokenBlockUtils.Family Mercury128To255 = new(0x3FC7, 0x8008, 128);
+    internal static readonly TokenBlockUtils.Family Mercury256To383 = new(0xCCC6, 0x0010, 256);
+    internal static readonly TokenBlockUtils.Family Mercury384To500 = new(0x3FC6, 0x8018, 384);
+
+    // 43FE0062-5BA494A3-D6D1C733-D6D1C733 (Venus): captured 0..180, high range elevator-validated 2026-07-12
+    internal static readonly TokenBlockUtils.Family Venus0To127 = new(0x48C7, 0x0084, 0);
+    internal static readonly TokenBlockUtils.Family Venus128To255 = new(0xBBC7, 0x808C, 128);
+    internal static readonly TokenBlockUtils.Family Venus256To383 = new(0x48C6, 0x0094, 256);
+    internal static readonly TokenBlockUtils.Family Venus384To500 = new(0xBBC6, 0x809C, 384);
+}
+
+/// <summary>
 /// A ride-count range within an <see cref="EncodingSequence"/>, mapped to one encoding family.
 /// </summary>
 public sealed record EncodingSequenceSegment(uint MinRides, uint MaxRides, TokenBlockUtils.Family Family)
@@ -82,17 +99,18 @@ public static class EncodingSequences
     public static readonly EncodingSequence Mercury = new(
         "mercury",
         "default-500-rides.bin",
-        new EncodingSequenceSegment(0, 127, TokenBlockUtils.Families.Family0To127),
-        new EncodingSequenceSegment(128, 255, TokenBlockUtils.Families.Family128To255),
-        new EncodingSequenceSegment(256, 383, TokenBlockUtils.Families.Family256To383),
-        new EncodingSequenceSegment(384, 500, TokenBlockUtils.Families.Family384To500));
+        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mercury0To127),
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Mercury128To255),
+        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mercury256To383),
+        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Mercury384To500));
 
-    // 43FE0062-5BA494A3-D6D1C733-D6D1C733 (captured 0..180)
     public static readonly EncodingSequence Venus = new(
         "venus",
         "venus-0-rides.bin",
-        new EncodingSequenceSegment(0, 127, TokenBlockUtils.Families.Family48C7_0To127),
-        new EncodingSequenceSegment(128, 255, TokenBlockUtils.Families.FamilyBBC7_128To255));
+        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Venus0To127),
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Venus128To255),
+        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Venus256To383),
+        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Venus384To500));
 
     public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus];
 

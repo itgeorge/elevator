@@ -952,6 +952,53 @@ public class TokenBlockUtilsTest
         Assert.That(sequence.GetFamilyForRides(127), Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
         Assert.That(sequence.GetFamilyForRides(128), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
         Assert.That(sequence.GetFamilyForRides(255), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
+        Assert.That(sequence.GetFamilyForRides(256), Is.EqualTo(TokenBlockUtils.Families.Family48C6_256To383));
+        Assert.That(sequence.GetFamilyForRides(383), Is.EqualTo(TokenBlockUtils.Families.Family48C6_256To383));
+        Assert.That(sequence.GetFamilyForRides(384), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC6_384To500));
+        Assert.That(sequence.GetFamilyForRides(500), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC6_384To500));
+    }
+
+    [Test]
+    public void Families_registry_contains_all_sequence_families_with_unique_high16()
+    {
+        var familiesByHigh16 = new Dictionary<uint, TokenBlockUtils.Family>();
+        foreach (var sequence in EncodingSequences.All)
+        {
+            foreach (var segment in sequence.Segments)
+            {
+                Assert.That(
+                    TokenBlockUtils.Families.All,
+                    Does.Contain(segment.Family),
+                    $"Sequence '{sequence.FriendlyName}' segment family 0x{segment.Family.High16:X4} missing from Families.All");
+
+                Assert.That(
+                    familiesByHigh16.TryAdd(segment.Family.High16, segment.Family),
+                    Is.True,
+                    $"Duplicate high16 0x{segment.Family.High16:X4} across encoding sequences");
+
+                Assert.That(
+                    TokenBlockUtils.Families.TryGetFamilyFromBlock(
+                        new T55Block(segment.Family.High16 << 16),
+                        out var found),
+                    Is.True);
+                Assert.That(found, Is.EqualTo(segment.Family));
+            }
+        }
+    }
+
+    [TestCase(127u, 0x48C736BFu)]
+    [TestCase(128u, 0xBBC7C940u)]
+    [TestCase(255u, 0xBBC7B6B7u)]
+    [TestCase(256u, 0x48C64958u)]
+    [TestCase(383u, 0x48C636AFu)]
+    [TestCase(384u, 0xBBC6C950u)]
+    [TestCase(499u, 0xBBC6BA67u)]
+    [TestCase(500u, 0xBBC6BD17u)]
+    public void Encode_VenusSequence_MatchesElevatorValidatedBlocks(uint rides, uint expectedBlock)
+    {
+        var got = EncodingSequences.Venus.Encode(rides);
+        Assert.That(got.Value, Is.EqualTo(expectedBlock), $"Rides {rides}: expected {expectedBlock:X8}, got {got.Value:X8}");
+        Assert.That(TokenBlockUtils.Decode(got), Is.EqualTo(rides));
     }
 
     [Test]
@@ -1082,7 +1129,7 @@ public class TokenBlockUtilsTest
     {
         for (uint value = 0; value <= 127; value++)
         {
-            var encoded = TokenBlockUtils.EncodeByFamily(value, TokenBlockUtils.Families.Family48C7_0To127);
+            var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Venus);
             uint decoded = TokenBlockUtils.Decode(encoded);
             Assert.That(decoded, Is.EqualTo(value),
                 $"48C7 round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
@@ -1090,10 +1137,22 @@ public class TokenBlockUtilsTest
 
         for (uint value = 128; value <= 255; value++)
         {
-            var encoded = TokenBlockUtils.EncodeByFamily(value, TokenBlockUtils.Families.FamilyBBC7_128To255);
+            var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Venus);
             uint decoded = TokenBlockUtils.Decode(encoded);
             Assert.That(decoded, Is.EqualTo(value),
                 $"BBC7 round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_RoundTrip_VenusSequence_256To500()
+    {
+        for (uint value = 256; value <= 500; value++)
+        {
+            var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Venus);
+            uint decoded = TokenBlockUtils.Decode(encoded);
+            Assert.That(decoded, Is.EqualTo(value),
+                $"Venus high-range round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
         }
     }
 
@@ -1103,8 +1162,24 @@ public class TokenBlockUtilsTest
         Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0x48C74948), out var lowFamily), Is.True);
         Assert.That(lowFamily, Is.EqualTo(TokenBlockUtils.Families.Family48C7_0To127));
 
-        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0xBBC7C940), out var highFamily), Is.True);
-        Assert.That(highFamily, Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
+        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0xBBC7C940), out var midFamily), Is.True);
+        Assert.That(midFamily, Is.EqualTo(TokenBlockUtils.Families.FamilyBBC7_128To255));
+
+        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0x48C64958), out var highMidFamily), Is.True);
+        Assert.That(highMidFamily, Is.EqualTo(TokenBlockUtils.Families.Family48C6_256To383));
+
+        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(new T55Block(0xBBC6C950), out var highFamily), Is.True);
+        Assert.That(highFamily, Is.EqualTo(TokenBlockUtils.Families.FamilyBBC6_384To500));
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_48C6_and_BBC6_blocks_return_venus_sequence()
+    {
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0x48C64958), out var from48C6), Is.True);
+        Assert.That(from48C6, Is.EqualTo(EncodingSequences.Venus));
+
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0xBBC6BD17), out var fromBBC6), Is.True);
+        Assert.That(fromBBC6, Is.EqualTo(EncodingSequences.Venus));
     }
 
     static List<(int v, uint expected)> ParseTable(string table)

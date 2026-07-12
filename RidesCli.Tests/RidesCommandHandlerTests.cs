@@ -647,6 +647,54 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Set_preserves_venus_profile_at_256()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(255, TokenBlockUtils.Families.FamilyBBC7_128To255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["set", "256"]);
+
+        var expected = EncodingSequences.Venus.Encode(256);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Mercury.Encode(256).ToHex()));
+    }
+
+    [Test]
+    public void Set_preserves_venus_profile_at_500()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(499, TokenBlockUtils.Families.FamilyBBC6_384To500);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["set", "500"]);
+
+        var expected = EncodingSequences.Venus.Encode(500);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Mercury.Encode(500).ToHex()));
+    }
+
+    [Test]
+    public void Add_preserves_venus_profile_when_crossing_to_48C6_range()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRidesEncodedByFamily(250, TokenBlockUtils.Families.FamilyBBC7_128To255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["add", "10"]); // 260
+
+        var expected = EncodingSequences.Venus.Encode(260);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(expected.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Mercury.Encode(260).ToHex()));
+    }
+
+    [Test]
     public void Reset_venus_writes_venus_identity_blocks_and_zero_ride_encoding()
     {
         var output = new StringBuilderRidesOutput();
