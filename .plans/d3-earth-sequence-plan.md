@@ -344,7 +344,7 @@ Earth 384..500: high16 EB13, xor DBEC, base 384
 
 Hardware rejected/no-changed those old predicted `256` and `383` starts.
 
-A second visual extrapolation noticed Mercury/Venus can also be described as alternating prefixes with the last high16 nibble decrementing for the high ranges:
+A second visual extrapolation noticed Mercury/Venus can also be described as alternating prefixes with the last high16 nibble decrementing for the high ranges. Unlike the first extrapolation, this visual alternative is not applying the XOR-step high16 rule; it treats the third/fourth Earth high16 values as the visible prior prefixes minus one (`1812 -> 1811`, `EB12 -> EB11`):
 
 ```text
 Mercury: CCC7, 3FC7, CCC6, 3FC6
@@ -359,6 +359,6 @@ Earth 256..383: high16 1811, xor 5BE4, base 256
 Earth 384..500: high16 EB11, xor DBEC, base 384
 ```
 
-Hardware accepted/processed visual alternative `256` (`18111228`) and `384` (`EB119220`) as low/empty: elevator gave a low-rides double beep and readback was Earth zero (`18121218`).
+Hardware accepted/processed visual alternative `256` (`18111228`) and `384` (`EB119220`), but not as true high ride counts: instead of decrementing by one, the elevator treated them as low/empty, gave a low-rides double beep, and the token read back as Earth zero (`18121218`).
 
 Current conclusion: no tested high-family extrapolation behaves as true `256+`; Earth should remain capped at `255` in production code.

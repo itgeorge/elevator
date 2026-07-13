@@ -16,6 +16,11 @@ internal static class EncodingFamilyDefinitions
     internal static readonly TokenBlockUtils.Family Venus256To383 = new(0x48C6, 0x0094, 256);
     internal static readonly TokenBlockUtils.Family Venus384To500 = new(0xBBC6, 0x809C, 384);
 
+    // Current high-family hypothesis:
+    // - Mercury/Venus support the XOR-step model for segments 256+ (high16 toggles by XOR F301/F300; xor += 0x8008 per segment).
+    // - Earth matched the first two segments, but the XOR-step 256+ candidates did not validate.
+    // - A visual minus-one alternative (1812/EB12 -> 1811/EB11) was accepted by the elevator for tested 256/384 values,
+    //   but it reset the token to Earth zero instead of decrementing by one, so it is either not valid or Earth is special/capped.
     // D3FE005D-522BC69D-650432F5-650432F5 (Earth): low range captured 0..23; 128 and 255 boundary starts elevator-validated 2026-07-12.
     internal static readonly TokenBlockUtils.Family Earth0To127 = new(0x1812, 0x5BD4, 0);
     internal static readonly TokenBlockUtils.Family Earth128To255 = new(0xEB12, 0xDBDC, 128);
