@@ -661,15 +661,17 @@ public sealed class RidesCommandHandler
         }
 
         var previousRides = _rides.Value;
-        if (number < 0 || number > 500)
-        {
-            _output.WriteLine("Error: number must be in range [0, 500]");
-            return true;
-        }
 
         if (_encodingSequence is null)
         {
             _output.WriteLine("Error: no encoding sequence in memory. Run 'read' first.");
+            return true;
+        }
+
+        if (number < _encodingSequence.MinRides || number > _encodingSequence.MaxRides)
+        {
+            _output.WriteLine(
+                $"Error: number must be in range [{_encodingSequence.MinRides}, {_encodingSequence.MaxRides}] for sequence '{_encodingSequence.FriendlyName}'");
             return true;
         }
 
@@ -684,19 +686,23 @@ public sealed class RidesCommandHandler
             return true;
         }
 
-        _rides = (uint)number;
-        var block = TokenBlockUtils.Encode(_rides.Value, _encodingSequence);
+        var targetRides = (uint)number;
+        var block = TokenBlockUtils.Encode(targetRides, _encodingSequence);
 
         var success = await _pm3.WriteRideMirrorBlocksAsync(block).ConfigureAwait(false);
 
         _output.WriteLine(success ? "Success." : "Error: block write/verify failed.");
         if (success)
-            _output.WriteLine($"rides remaining: {_rides.Value}");
-        var rideDiff2 = (int)_rides.Value - (int)previousRides;
-        if (_config.PricePer100.HasValue && rideDiff2 > 0)
         {
-            var price = Math.Ceiling((rideDiff2 / 100m) * _config.PricePer100.Value * 100) / 100;
-            _output.WriteLine($"cost: {FormatInvariant2(price)} EUR");
+            _rides = targetRides;
+            _output.WriteLine($"rides remaining: {_rides.Value}");
+
+            var rideDiff2 = (int)targetRides - (int)previousRides;
+            if (_config.PricePer100.HasValue && rideDiff2 > 0)
+            {
+                var price = Math.Ceiling((rideDiff2 / 100m) * _config.PricePer100.Value * 100) / 100;
+                _output.WriteLine($"cost: {FormatInvariant2(price)} EUR");
+            }
         }
         return true;
     }

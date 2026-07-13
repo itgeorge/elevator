@@ -2,15 +2,16 @@
 # Write predicted Earth (D3) boundary ride mirror blocks for hardware validation.
 #
 # Usage:
-#   ./debug/write-earth-boundary.sh [--dry-run] <127|128|255|256|383|384|500>
+#   ./debug/write-earth-boundary.sh [--dry-run] <127|128|255>
 #
 # WARNING: This writes only page 0 blocks 5 and 6. It never writes blocks 0, 1, 2, 3, 4, or 7.
+# Earth values above 255 are intentionally unsupported: candidate 256/383/384 encodings failed hardware tests.
 # Run the read-only preflight from the handoff before using this script.
 
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 [--dry-run] <127|128|255|256|383|384|500>" >&2
+  echo "Usage: $0 [--dry-run] <127|128|255>" >&2
 }
 
 dry_run=0
@@ -29,10 +30,6 @@ case "$rides" in
   127) hex="18126DEF" ;;
   128) hex="EB129210" ;;
   255) hex="EB12EDE7" ;;
-  256) hex="18131228" ;;
-  383) hex="18136DDF" ;;
-  384) hex="EB139220" ;;
-  500) hex="EB13E667" ;;
   *)
     echo "Error: unsupported Earth boundary start '$rides'." >&2
     usage

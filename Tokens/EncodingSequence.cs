@@ -64,11 +64,17 @@ public sealed class EncodingSequence
         FriendlyName = friendlyName.Trim().ToLowerInvariant();
         _resetImageFileName = resetImageFileName.Trim();
         _segments = segments;
+        MinRides = _segments.Min(segment => segment.MinRides);
+        MaxRides = _segments.Max(segment => segment.MaxRides);
     }
 
     public string FriendlyName { get; }
 
     public string ResetImageFileName => _resetImageFileName;
+
+    public uint MinRides { get; }
+
+    public uint MaxRides { get; }
 
     public IReadOnlyList<EncodingSequenceSegment> Segments => _segments;
 

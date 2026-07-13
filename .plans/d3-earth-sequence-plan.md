@@ -31,14 +31,14 @@ block7 00000000
 
 ## Current status (2026-07-12)
 
-Earth is now implemented for confirmed rides `0..255`:
+Earth is now implemented and intentionally capped for confirmed rides `0..255`:
 
 | Range | Family | Evidence | Code status |
 |---|---|---|---|
 | `0..127` | `1812` / xor `5BD4` / base `0` | Captured `0..23`; reset zero verified; `128 -> 127` elevator transition verified | Registered |
 | `128..255` | `EB12` / xor `DBDC` / base `128` | `128 -> 127` transition verified; `255 -> 254` in-family decrement verified | Registered |
-| `256..383` | predicted `1813` / xor `5BE4` / base `256` | One `256` write was attempted, but user reported elevator failure and later token identity/state was ambiguous; not confirmed | Not registered |
-| `384..500` | predicted `EB13` / xor `DBEC` / base `384` | Not tested | Not registered |
+| `256..383` | old predicted `1813` / xor `5BE4` / base `256`; visual alternative `1811` / xor `5BE4` / base `256` | Old prediction was rejected/no-change; visual alternative was accepted as low/empty and reset to zero | Not registered; treated as unsupported |
+| `384..500` | old predicted `EB13` / xor `DBEC` / base `384`; visual alternative `EB11` / xor `DBEC` / base `384` | Visual alternative `384` was accepted as low/empty and reset to zero | Not registered; treated as unsupported |
 
 Confirmed hardware reads after elevator use:
 
@@ -53,9 +53,9 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 
 - Keep Earth reset safe via `RidesCli reset --sequence earth`.
 - Register only families with enough supporting evidence.
-- Continue using `debug/write-earth-boundary.sh` for unregistered predicted families.
-- Investigate/extrapolate the third family (`256..383`) from Mercury/Venus/Earth patterns and then test it carefully.
-- Do not register full Earth `0..500` until boundary evidence supports all remaining families.
+- Treat Earth as capped at `255` in application code until contradictory evidence appears.
+- Keep `debug/write-earth-boundary.sh` limited to confirmed starts (`127`, `128`, `255`) so known-bad high candidates are not accidentally reused.
+- Do not register full Earth `0..500` unless future evidence identifies valid higher families.
 
 ## Key working assumptions
 
@@ -113,11 +113,13 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 
 - [x] Add a public second-family alias: `TokenBlockUtils.Families.FamilyEB12_128To255`.
 - [x] Extend `EncodingSequences.Earth` to `0..255` only.
-- [ ] Do not add predicted Earth `256..500` families until confirmed.
+- [x] Do not add predicted Earth `256..500` families.
+- [x] Expose sequence-supported ride ranges via `EncodingSequence.MinRides` / `MaxRides`.
+- [x] Enforce Earth's confirmed cap (`0..255`) in `RidesCli set/add/price`.
 
 ## Agent notes / assumptions
 
-- Notes: `RidesCli set/add` may now preserve and write Earth values within `0..255`. Predicted higher Earth values still require the boundary writer script.
+- Notes: `RidesCli set/add` may now preserve and write Earth values within `0..255`. Values above `255` are rejected for Earth instead of attempting unsupported high-family encodings.
 
 ---
 
@@ -191,16 +193,12 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 ## Todos
 
 - [x] Add `debug/write-earth-boundary.sh` using `dotnet run --project Pm3Cli`.
-- [x] Validate that the argument is one of the supported starts:
+- [x] Validate that the argument is one of the supported confirmed starts:
 
   ```text
   127 -> 18126DEF
   128 -> EB129210
   255 -> EB12EDE7
-  256 -> 18131228
-  383 -> 18136DDF
-  384 -> EB139220
-  500 -> EB13E667
   ```
 
 - [x] Print a warning that only blocks 5 and 6 are written.
@@ -226,7 +224,7 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 
 ## Agent notes / assumptions
 
-- Notes: Keep this script for predicted/unregistered high-family tests; do not use `RidesCli set` for unregistered `256..500` Earth values.
+- Notes: The script no longer includes known-bad high-family candidates. Any future experimental high-family writes should be one-off/manual or added under a clearly named experimental script.
 
 ---
 
@@ -283,47 +281,39 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
   ```
 
 - [x] Register confirmed Earth families `0..127` and `128..255`.
-- [ ] Investigate/extrapolate the third Earth family from Mercury/Venus/Earth patterns before another hardware attempt.
-- [ ] Re-test predicted `256 -> 255` with careful token identity/readback tracking:
+- [x] Investigate/extrapolate the third Earth family from Mercury/Venus/Earth patterns before another hardware attempt.
+- [x] Re-test old predicted `256 -> 255` with careful token identity/readback tracking:
 
   ```text
-  start 256 -> write 18131228; after ride expect 255 -> EB12EDE7
+  start 256 -> write 18131228; expected 255 -> EB12EDE7; observed unchanged/rejected
   ```
 
-- [ ] If `256 -> 255` succeeds, consider registering only Earth `256..383`:
+- [x] Test old predicted `383 -> 382`:
 
   ```text
-  256..383 1813 / 5BE4 / 256
+  start 383 -> write 18136DDF; expected 382 -> 18136CCF; observed unchanged/rejected
   ```
 
-- [ ] Test `383 -> 382` before fully trusting family 3:
+- [x] Test visual alternative `256 -> 255`:
 
   ```text
-  start 383 -> write 18136DDF; after ride expect 382 -> 18136CCF
+  start 256 -> write 18111228; expected 255 -> EB12EDE7; observed elevator double-beep/low indication and readback Earth zero
   ```
 
-- [ ] Test family 4 separately before registering `384..500`:
+- [x] Test visual alternative `384 -> 383`:
 
   ```text
-  384 -> EB139220; after ride expect 383 -> 18136DDF
-  500 -> EB13E667; after ride expect 499 -> EB13E117
+  start 384 -> write EB119220; expected 383 -> 18116DDF; observed elevator double-beep/low indication and readback Earth zero
   ```
 
-- [ ] Only after remaining boundary tests work, register full Earth sequence:
-
-  ```text
-  0..127   1812 / 5BD4 / 0
-  128..255 EB12 / DBDC / 128
-  256..383 1813 / 5BE4 / 256
-  384..500 EB13 / DBEC / 384
-  ```
-
-- [ ] Add full encode/decode/border tests similar to Venus only after boundary confirmation.
+- [x] Formalize current conclusion: Earth appears capped at `255`; do not register `256..500`.
+- [x] Add sequence-specific range checks/tests so Earth `set/add` above `255` errors without writing.
+- [ ] If future evidence identifies valid high Earth families, reopen this plan and add a new experimental phase before changing production registration.
 
 ## Agent notes / assumptions
 
 - Notes: The successful `128 -> 127` transition confirms both second-family starting value and transition down into the low family. The successful `255 -> 254` confirms second-family in-range decrement near its top.
-- Notes: The earlier `256` failure should be treated as inconclusive because the later read showed an unexpected token/identity state; do not use it alone to reject predicted family 3.
+- Notes: The earlier single `256` failure was initially inconclusive, but subsequent controlled tests of old predicted `256`/`383` stayed unchanged and visual alternative `256`/`384` reset to zero/low. Combined evidence supports treating Earth as capped at `255`.
 
 ## Extrapolation notes for family 3
 
@@ -335,7 +325,7 @@ Venus:   0..127 48C7/0084, 128..255 BBC7/808C, 256..383 48C6/0094, 384..500 BBC6
 Earth:   0..127 1812/5BD4, 128..255 EB12/DBDC
 ```
 
-Across Mercury and Venus, the family-to-family step pattern is stable:
+The first extrapolation used the Mercury/Venus XOR-step pattern:
 
 ```text
 high16 step 0->1: XOR F300
@@ -345,28 +335,30 @@ xor step each segment: +8008 modulo 10000
 base step each segment: +128
 ```
 
-Applying that to confirmed Earth families gives:
+That predicted:
 
 ```text
 Earth 256..383: high16 1813, xor 5BE4, base 256
 Earth 384..500: high16 EB13, xor DBEC, base 384
 ```
 
-The third-family prediction is especially strong because both independent derivations agree:
+Hardware rejected/no-changed those old predicted `256` and `383` starts.
+
+A second visual extrapolation noticed Mercury/Venus can also be described as alternating prefixes with the last high16 nibble decrementing for the high ranges:
 
 ```text
-EB12 XOR F301 = 1813
-DBDC + 8008 = 5BE4 (mod 10000)
+Mercury: CCC7, 3FC7, CCC6, 3FC6
+Venus:   48C7, BBC7, 48C6, BBC6
+Earth?:  1812, EB12, 1811, EB11
 ```
 
-Recommended next hardware check remains:
+That predicted:
 
 ```text
-start 256 -> write 18131228; after ride expect 255 -> EB12EDE7
+Earth 256..383: high16 1811, xor 5BE4, base 256
+Earth 384..500: high16 EB11, xor DBEC, base 384
 ```
 
-If this succeeds, test the top of family 3:
+Hardware accepted/processed visual alternative `256` (`18111228`) and `384` (`EB119220`) as low/empty: elevator gave a low-rides double beep and readback was Earth zero (`18121218`).
 
-```text
-start 383 -> write 18136DDF; after ride expect 382 -> 18136CCF
-```
+Current conclusion: no tested high-family extrapolation behaves as true `256+`; Earth should remain capped at `255` in production code.

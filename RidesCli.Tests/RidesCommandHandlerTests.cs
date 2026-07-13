@@ -813,6 +813,42 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Set_above_earth_confirmed_range_prints_sequence_range_and_does_not_write()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Earth, 255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+        output.Clear();
+
+        handler.Execute(["set", "256"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("range [0, 255] for sequence 'earth'"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EB12EDE7"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EB12EDE7"));
+        Assert.That(pm3.WrittenBlocks, Is.Empty);
+    }
+
+    [Test]
+    public void Add_above_earth_confirmed_range_prints_sequence_range_and_does_not_write()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Earth, 255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+        output.Clear();
+
+        handler.Execute(["add", "1"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("range [0, 255] for sequence 'earth'"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EB12EDE7"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EB12EDE7"));
+        Assert.That(pm3.WrittenBlocks, Is.Empty);
+    }
+
+    [Test]
     public void Set_after_read_writes_blocks_5_and_6()
     {
         var output = new StringBuilderRidesOutput();

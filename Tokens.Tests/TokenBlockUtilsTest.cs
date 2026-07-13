@@ -950,6 +950,17 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void EncodingSequences_expose_supported_ride_ranges()
+    {
+        Assert.That(EncodingSequences.Mercury.MinRides, Is.EqualTo(0u));
+        Assert.That(EncodingSequences.Mercury.MaxRides, Is.EqualTo(500u));
+        Assert.That(EncodingSequences.Venus.MinRides, Is.EqualTo(0u));
+        Assert.That(EncodingSequences.Venus.MaxRides, Is.EqualTo(500u));
+        Assert.That(EncodingSequences.Earth.MinRides, Is.EqualTo(0u));
+        Assert.That(EncodingSequences.Earth.MaxRides, Is.EqualTo(255u));
+    }
+
+    [Test]
     public void EncodingSequence_single_segment_supports_partially_known_range()
     {
         var sequence = new EncodingSequence(
