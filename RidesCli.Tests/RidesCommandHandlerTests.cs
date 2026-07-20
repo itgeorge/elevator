@@ -106,8 +106,40 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["reset", "--sequence", "pluto"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("unknown encoding sequence 'pluto'"));
+        Assert.That(output.Lines, Has.Some.Contains("unknown identity profile 'pluto'"));
         Assert.That(output.Lines, Has.None.EqualTo("Success."));
+    }
+
+    [Test]
+    public void Reset_recognition_only_profile_prints_error_without_writing()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "venus21ff"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("has no reset image and is not resettable"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.GetRides(), Is.EqualTo(73u));
+    }
+
+    [Test]
+    public void Reset_mars_writes_mars_identity_blocks_and_zero_ride_encoding()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "mars"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("C3FE0031"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("20C60722"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("B6D14924"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("B6D14924"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mars.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Mars.Encode(0).ToHex()));
     }
 
     [Test]

@@ -203,26 +203,26 @@ public sealed class RidesCommandHandler
 
     private bool ExecuteReset(string[] args)
     {
-        if (!TryParseResetArgs(args, out var sequence, out var error))
+        if (!TryParseResetArgs(args, out var profile, out var error))
         {
             _output.WriteLine(error);
             return true;
         }
 
-        return ExecuteResetCore(sequence!).GetAwaiter().GetResult();
+        return ExecuteResetCore(profile!).GetAwaiter().GetResult();
     }
 
-    private static bool TryParseResetArgs(string[] args, out EncodingSequence? sequence, out string error)
+    private static bool TryParseResetArgs(string[] args, out TokenIdentityProfile? profile, out string error)
     {
-        sequence = null;
+        profile = null;
         error = string.Empty;
-        string? sequenceName = null;
+        string? profileName = null;
 
         for (var i = 0; i < args.Length; i++)
         {
-            if (args[i] == "--sequence" && i + 1 < args.Length)
+            if ((args[i] == "--sequence" || args[i] == "--profile") && i + 1 < args.Length)
             {
-                sequenceName = args[++i];
+                profileName = args[++i];
                 continue;
             }
 
@@ -230,15 +230,21 @@ public sealed class RidesCommandHandler
             return false;
         }
 
-        if (sequenceName is null)
+        if (profileName is null)
         {
             error = FormatResetUsage();
             return false;
         }
 
-        if (!EncodingSequences.TryGetByFriendlyName(sequenceName, out sequence))
+        if (!TokenIdentityProfiles.TryGetByFriendlyName(profileName, out profile) || profile is null)
         {
-            error = $"Error: unknown encoding sequence '{sequenceName}'. Known sequences: {EncodingSequences.FormatKnownFriendlyNames()}";
+            error = $"Error: unknown identity profile '{profileName}'. Known resettable profiles: {TokenIdentityProfiles.FormatResettableFriendlyNames()}";
+            return false;
+        }
+
+        if (!profile.CanReset)
+        {
+            error = $"Error: identity profile '{profileName}' has no reset image and is not resettable.";
             return false;
         }
 
@@ -246,7 +252,7 @@ public sealed class RidesCommandHandler
     }
 
     private static string FormatResetUsage() =>
-        $"Usage: reset --sequence <name>   (known: {EncodingSequences.FormatKnownFriendlyNames()})";
+        $"Usage: reset --sequence <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
 
     private async Task<bool> ExecuteTuneCore()
     {
@@ -310,7 +316,7 @@ public sealed class RidesCommandHandler
         }
     }
 
-    private async Task<bool> ExecuteResetCore(EncodingSequence sequence)
+    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile)
     {
         _rides = null;
         _encodingSequence = null;
@@ -342,18 +348,18 @@ public sealed class RidesCommandHandler
             return true;
         }
 
-        if (!PromptForYesNo($"Overwrite token with reset image and set rides to 0 using sequence '{sequence.FriendlyName}'? [y/N]"))
+        if (!PromptForYesNo($"Overwrite token with reset image and set rides to 0 using profile '{profile.FriendlyName}'? [y/N]"))
         {
             _output.WriteLine("Cancelled.");
             return true;
         }
 
-        var resetBlocks = ResetPage0BlocksLoader.Load(sequence);
-        var zeroBlock = sequence.Encode(0);
+        var resetBlocks = ResetPage0BlocksLoader.Load(profile);
+        var zeroBlock = profile.RideSequence.Encode(0);
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var targetBlockNumbers = IsSameResetSequence(currentBlocks, resetBlocks, sequence)
+        var targetBlockNumbers = IsSameResetProfile(currentBlocks, resetBlocks, profile)
             ? new[] { 5u, 6u }
             : Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
                 .Select(static block => (uint)block)
@@ -368,7 +374,7 @@ public sealed class RidesCommandHandler
         {
             _output.WriteLine("Success.");
             _rides = 0;
-            _encodingSequence = sequence;
+            _encodingSequence = profile.RideSequence;
             _output.WriteLine("rides remaining: 0");
             return true;
         }
@@ -399,10 +405,10 @@ public sealed class RidesCommandHandler
         return blocks;
     }
 
-    private static bool IsSameResetSequence(
+    private static bool IsSameResetProfile(
         IReadOnlyList<T55Block> currentBlocks,
         IReadOnlyList<T55Block> resetBlocks,
-        EncodingSequence sequence)
+        TokenIdentityProfile profile)
     {
         for (var block = 1; block <= 4; block++)
         {
@@ -410,8 +416,8 @@ public sealed class RidesCommandHandler
                 return false;
         }
 
-        return IsBlockFromSequence(currentBlocks[5], sequence)
-            && IsBlockFromSequence(currentBlocks[6], sequence);
+        return IsBlockFromSequence(currentBlocks[5], profile.RideSequence)
+            && IsBlockFromSequence(currentBlocks[6], profile.RideSequence);
     }
 
     private static bool IsBlockFromSequence(T55Block block, EncodingSequence sequence) =>
@@ -799,7 +805,7 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
-        _output.WriteLine($"  reset --sequence <name>   Reset token using default image and set rides to 0 (known: {EncodingSequences.FormatKnownFriendlyNames()})");
+        _output.WriteLine($"  reset --sequence <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token");
         _output.WriteLine("  price set <number>   Preview cost for set");

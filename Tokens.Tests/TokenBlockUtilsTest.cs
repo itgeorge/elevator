@@ -942,15 +942,6 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void EncodingSequences_expose_reset_image_file_names()
-    {
-        Assert.That(EncodingSequences.Mercury.ResetImageFileName, Is.EqualTo("default-500-rides.bin"));
-        Assert.That(EncodingSequences.Venus.ResetImageFileName, Is.EqualTo("venus-0-rides.bin"));
-        Assert.That(EncodingSequences.Earth.ResetImageFileName, Is.EqualTo("earth-0-rides.bin"));
-        Assert.That(EncodingSequences.Mars.ResetImageFileName, Is.EqualTo("mars-0-rides.bin"));
-    }
-
-    [Test]
     public void EncodingSequences_expose_supported_ride_ranges()
     {
         Assert.That(EncodingSequences.Mercury.MinRides, Is.EqualTo(0u));
@@ -968,7 +959,6 @@ public class TokenBlockUtilsTest
     {
         var sequence = new EncodingSequence(
             "d3-partial",
-            "d3-partial.bin",
             new EncodingSequenceSegment(0, 23, TokenBlockUtils.Families.Family48C7_0To127));
 
         Assert.That(sequence.Segments, Has.Count.EqualTo(1));
@@ -982,7 +972,6 @@ public class TokenBlockUtilsTest
     {
         var sequence = new EncodingSequence(
             "d3-partial",
-            "d3-partial.bin",
             new EncodingSequenceSegment(0, 23, TokenBlockUtils.Families.Family48C7_0To127));
 
         Assert.Throws<ArgumentException>(() => sequence.GetFamilyForRides(24));
@@ -992,7 +981,7 @@ public class TokenBlockUtilsTest
     [Test]
     public void EncodingSequence_constructor_requires_at_least_one_segment()
     {
-        Assert.Throws<ArgumentException>(() => new EncodingSequence("empty", "empty.bin"));
+        Assert.Throws<ArgumentException>(() => new EncodingSequence("empty"));
     }
 
     [Test]

@@ -1,3 +1,5 @@
+using Tokens;
+
 namespace RideCaptureCli;
 
 public static class SeededTokenCatalog
@@ -15,7 +17,7 @@ public static class SeededTokenCatalog
         new("C3FE0031-20C60722-B6D14924-B6D14924", "4EC747AE", "4EC747AE", 14),
     ];
 
-    private static readonly HashSet<string> KnownTokenIds = SeededStartingStates
+    private static readonly HashSet<string> SeededTokenIds = SeededStartingStates
         .Select(state => state.TokenId)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -37,5 +39,6 @@ public static class SeededTokenCatalog
     }
 
     public static bool IsKnownTokenId(string tokenId) =>
-        KnownTokenIds.Contains(tokenId);
+        TokenIdentityProfiles.TryGetByTokenId(tokenId, out _)
+        || SeededTokenIds.Contains(tokenId);
 }

@@ -6,22 +6,29 @@ namespace RidesCli;
 
 public static class ResetPage0BlocksLoader
 {
-    public static List<T55Block> Load(EncodingSequence sequence)
+    public static List<T55Block> Load(TokenIdentityProfile profile)
     {
+        if (!profile.CanReset || string.IsNullOrWhiteSpace(profile.ResetImageFileName))
+        {
+            throw new InvalidOperationException(
+                $"Identity profile '{profile.FriendlyName}' has no reset image and cannot be loaded.");
+        }
+
+        var resetImageFileName = profile.ResetImageFileName;
         var assembly = Assembly.GetExecutingAssembly();
         var resourceName = assembly.GetManifestResourceNames()
-            .FirstOrDefault(name => name.EndsWith(sequence.ResetImageFileName, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(name => name.EndsWith(resetImageFileName, StringComparison.OrdinalIgnoreCase));
         if (resourceName is null)
         {
             throw new InvalidOperationException(
-                $"Embedded reset image '{sequence.ResetImageFileName}' not found for sequence '{sequence.FriendlyName}'.");
+                $"Embedded reset image '{resetImageFileName}' not found for profile '{profile.FriendlyName}'.");
         }
 
         using var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream is null)
         {
             throw new InvalidOperationException(
-                $"Failed to load embedded reset image '{sequence.ResetImageFileName}'.");
+                $"Failed to load embedded reset image '{resetImageFileName}'.");
         }
 
         using var ms = new MemoryStream();
@@ -30,7 +37,7 @@ public static class ResetPage0BlocksLoader
         if (bytes.Length < 32 || bytes.Length % 4 != 0)
         {
             throw new InvalidDataException(
-                $"{sequence.ResetImageFileName} must contain at least 8 blocks and be a multiple of 4 bytes.");
+                $"{resetImageFileName} must contain at least 8 blocks and be a multiple of 4 bytes.");
         }
 
         var blocks = new List<T55Block>(8);

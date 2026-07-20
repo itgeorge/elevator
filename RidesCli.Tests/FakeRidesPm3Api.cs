@@ -45,7 +45,16 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     public static FakeRidesPm3Api WithSequenceRides(EncodingSequence sequence, uint rides)
     {
-        var blocks = ResetPage0BlocksLoader.Load(sequence);
+        if (!TokenIdentityProfiles.TryGetByFriendlyName(sequence.FriendlyName, out var profile)
+            || profile is null
+            || !profile.CanReset)
+        {
+            throw new ArgumentException(
+                $"No resettable identity profile is registered for ride sequence '{sequence.FriendlyName}'.",
+                nameof(sequence));
+        }
+
+        var blocks = ResetPage0BlocksLoader.Load(profile);
         var encoded = sequence.Encode(rides);
         blocks[5] = encoded;
         blocks[6] = encoded;

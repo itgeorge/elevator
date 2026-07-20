@@ -38,6 +38,32 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
+    public void First_variant_venus_identity_with_venus_ride_blocks_is_known_and_decodes_ride_count()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("21FF0031", "5BA494A3", "D6D1C733", "D6D1C733", "BBC7C940", "BBC7C940");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(128));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(128));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void First_variant_earth_identity_with_earth_ride_blocks_is_known_and_decodes_ride_count()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("D3FE005D", "A4578D3A", "650432F5", "650432F5", "18121218", "18121218");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
     public void First_seeded_undecoded_token_scan_uses_matching_seeded_state_count()
     {
         var service = new CaptureSequenceService();

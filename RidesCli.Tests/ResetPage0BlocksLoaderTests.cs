@@ -7,14 +7,14 @@ namespace RidesCli.Tests;
 public class ResetPage0BlocksLoaderTests
 {
     [Test]
-    public void All_encoding_sequences_have_embedded_reset_images()
+    public void All_resettable_profiles_have_embedded_reset_images()
     {
-        foreach (var sequence in EncodingSequences.All)
+        foreach (var profile in TokenIdentityProfiles.Resettable)
         {
-            var blocks = ResetPage0BlocksLoader.Load(sequence);
+            var blocks = ResetPage0BlocksLoader.Load(profile);
 
             Assert.That(blocks, Has.Count.EqualTo(8),
-                $"Sequence '{sequence.FriendlyName}' reset image '{sequence.ResetImageFileName}' must contain 8 page-0 blocks.");
+                $"Profile '{profile.FriendlyName}' reset image '{profile.ResetImageFileName}' must contain 8 page-0 blocks.");
         }
     }
 }

@@ -48,17 +48,13 @@ public sealed record EncodingSequenceSegment(uint MinRides, uint MaxRides, Token
 public sealed class EncodingSequence
 {
     private readonly EncodingSequenceSegment[] _segments;
-    private readonly string _resetImageFileName;
 
     internal EncodingSequence(
         string friendlyName,
-        string resetImageFileName,
         params EncodingSequenceSegment[] segments)
     {
         if (string.IsNullOrWhiteSpace(friendlyName))
             throw new ArgumentException("Friendly name is required.", nameof(friendlyName));
-        if (string.IsNullOrWhiteSpace(resetImageFileName))
-            throw new ArgumentException("Reset image file name is required.", nameof(resetImageFileName));
         if (segments is null || segments.Length == 0)
             throw new ArgumentException("At least one segment is required.", nameof(segments));
 
@@ -73,15 +69,12 @@ public sealed class EncodingSequence
         }
 
         FriendlyName = friendlyName.Trim().ToLowerInvariant();
-        _resetImageFileName = resetImageFileName.Trim();
         _segments = segments;
         MinRides = _segments.Min(segment => segment.MinRides);
         MaxRides = _segments.Max(segment => segment.MaxRides);
     }
 
     public string FriendlyName { get; }
-
-    public string ResetImageFileName => _resetImageFileName;
 
     public uint MinRides { get; }
 
@@ -119,7 +112,6 @@ public static class EncodingSequences
 {
     public static readonly EncodingSequence Mercury = new(
         "mercury",
-        "default-500-rides.bin",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mercury0To127),
         new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Mercury128To255),
         new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mercury256To383),
@@ -127,7 +119,6 @@ public static class EncodingSequences
 
     public static readonly EncodingSequence Venus = new(
         "venus",
-        "venus-0-rides.bin",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Venus0To127),
         new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Venus128To255),
         new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Venus256To383),
@@ -135,13 +126,11 @@ public static class EncodingSequences
 
     public static readonly EncodingSequence Earth = new(
         "earth",
-        "earth-0-rides.bin",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Earth0To127),
         new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255));
 
     public static readonly EncodingSequence Mars = new(
         "mars",
-        "mars-0-rides.bin",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mars0To127),
         new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Mars128To255),
         new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mars256To383),

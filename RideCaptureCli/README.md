@@ -83,4 +83,6 @@ Important columns:
 
 On a first scan for a token, `RideCaptureCli` first tries to decode mirrored blocks `5/6` with `TokenBlockUtils`. If decoding succeeds, the decoded value becomes both `tracked_count` and `real_ride_count`.
 
+Known token identities include canonical reset profiles and validated identity variants registered in `TokenIdentityProfiles` (for example `venus21ff` and `earth-a457`). These recognized identities do not produce `UNKNOWN_TOKEN`, even though variant profiles do not yet have production reset images.
+
 `SeededTokenCatalog.cs` is only a fallback for historical/undecoded bootstrap states. A seed applies only when the token id and mirrored state blocks match the catalog entry exactly, so a reset-zero token is not mislabeled with an old historical start value.
