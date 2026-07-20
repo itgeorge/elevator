@@ -253,6 +253,7 @@ public class RidesCommandHandlerTests
         handler.Execute(["read"]);
 
         Assert.That(output.Lines, Has.Some.Matches(@"rides remaining: 73"));
+        Assert.That(output.Lines, Has.Some.EqualTo("sequence: mercury"));
         Assert.That(output.Lines, Has.None.Matches(@"signal strength:"));
         Assert.That(pm3.TuneCallCount, Is.EqualTo(0));
         Assert.That(pm3.DumpCallCount, Is.EqualTo(0));

@@ -284,6 +284,8 @@ public sealed class RidesCommandHandler
                         ? sequence
                         : null;
                     _output.WriteLine($"rides remaining: {_rides.Value}");
+                    if (_encodingSequence is not null)
+                        _output.WriteLine($"sequence: {_encodingSequence.FriendlyName}");
                     return true;
                 case RideReadStatus.UnknownEncodingFamily:
                     _rides = null;
