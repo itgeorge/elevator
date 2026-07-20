@@ -1,3 +1,5 @@
+using Tokens;
+
 namespace RideCaptureCli;
 
 public sealed class CaptureSequenceService
@@ -34,7 +36,11 @@ public sealed class CaptureSequenceService
         else if (shouldStartNewSequence)
         {
             var sequenceId = _sequenceIdGenerator.CreateNext(scan.TokenId, records, scan.Timestamp);
-            if (tokenHistory.Count == 0 && SeededTokenCatalog.TryGetStartingRides(scan.TokenId, out var seededRides))
+            if (tokenHistory.Count == 0 && TryDecodeScan(scan, out var decodedRides))
+            {
+                added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, decodedRides, decodedRides);
+            }
+            else if (tokenHistory.Count == 0 && SeededTokenCatalog.TryGetStartingRides(scan.TokenId, scan.Blocks[5], scan.Blocks[6], out var seededRides))
             {
                 added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, seededRides, seededRides);
             }
@@ -127,7 +133,7 @@ public sealed class CaptureSequenceService
         if (scan.WeakSignal)
             warnings.Add("WEAK_SIGNAL");
 
-        var tokenAlreadyKnown = SeededTokenCatalog.TryGetStartingRides(scan.TokenId, out _)
+        var tokenAlreadyKnown = SeededTokenCatalog.IsKnownTokenId(scan.TokenId)
             || tokenHistory.Any(r => r.RealRideCount.HasValue);
         if (!tokenAlreadyKnown)
             warnings.Add("UNKNOWN_TOKEN");
@@ -137,6 +143,29 @@ public sealed class CaptureSequenceService
         if (string.IsNullOrWhiteSpace(scan.CopiedDumpRelativePath))
             warnings.Add("MISSING_DUMP");
         return string.Join('|', warnings);
+    }
+
+    private static bool TryDecodeScan(CaptureScanData scan, out int rides)
+    {
+        rides = 0;
+        if (!scan.MirrorMatches)
+            return false;
+
+        try
+        {
+            if (!TokenBlockUtils.TryDecode(T55Block.FromHex(scan.Blocks[5]), out var decoded))
+                return false;
+
+            if (decoded > int.MaxValue)
+                return false;
+
+            rides = (int)decoded;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static CaptureRecord CreateRecord(CaptureScanData scan, string sequenceId, CaptureStatus status, string warnings, int trackedCount, int? realRideCount) => new()

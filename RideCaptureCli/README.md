@@ -79,11 +79,8 @@ Important columns:
 
 `other-captures.csv` stores timestamp, token id, warnings, signal strength, blocks `0..7`, and copied dump path, but no sequence id/tracked count/real ride count.
 
-## Seeded starting tokens
+## Known starting tokens
 
-These are defined in `SeededTokenCatalog.cs`:
+On a first scan for a token, `RideCaptureCli` first tries to decode mirrored blocks `5/6` with `TokenBlockUtils`. If decoding succeeds, the decoded value becomes both `tracked_count` and `real_ride_count`.
 
-- `D3FE005D-522BC69D-650432F5-650432F5` → `24`
-- `43FE0062-5BA494A3-D6D1C733-D6D1C733` → `181`
-- `EBFE002A-F100CC5B-A5045936-A5045936` → `262`
-- `C3FE0031-20C60722-B6D14924-B6D14924` → `14`
+`SeededTokenCatalog.cs` is only a fallback for historical/undecoded bootstrap states. A seed applies only when the token id and mirrored state blocks match the catalog entry exactly, so a reset-zero token is not mislabeled with an old historical start value.

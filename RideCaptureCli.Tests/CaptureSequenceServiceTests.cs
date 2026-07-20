@@ -25,15 +25,41 @@ public class CaptureSequenceServiceTests
         };
 
     [Test]
-    public void First_seeded_token_scan_uses_seeded_real_count()
+    public void First_decodable_token_scan_uses_decoded_real_count()
     {
         var service = new CaptureSequenceService();
-        var scan = CreateScan("D3FE005D", "522BC69D", "650432F5", "650432F5", "18120A99", "18120A99");
+        var scan = CreateScan("C3FE0031", "20C60722", "B6D14924", "B6D14924", "4EC7494E", "4EC7494E");
 
         var result = service.ApplyScan([], scan);
 
-        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(24));
-        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(24));
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void First_seeded_undecoded_token_scan_uses_matching_seeded_state_count()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "8C134C84", "8C134C84");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(262));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(262));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void First_known_token_with_unseeded_undecodable_state_does_not_use_historical_seed()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "DEAD1234", "DEAD1234");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(10000));
+        Assert.That(result.AddedRecord.RealRideCount, Is.Null);
         Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
     }
 
@@ -47,6 +73,19 @@ public class CaptureSequenceServiceTests
 
         Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(10000));
         Assert.That(result.AddedRecord.RealRideCount, Is.Null);
+        Assert.That(result.AddedRecord.Warnings, Does.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void First_unknown_identity_with_decodable_state_gets_count_but_keeps_unknown_token_warning()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("AAAAAAAA", "BBBBBBBB", "CCCCCCCC", "DDDDDDDD", "4EC7494E", "4EC7494E");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(0));
         Assert.That(result.AddedRecord.Warnings, Does.Contain("UNKNOWN_TOKEN"));
     }
 
