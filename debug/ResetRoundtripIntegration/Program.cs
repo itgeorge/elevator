@@ -29,19 +29,19 @@ handler.Execute(["read"]);
 Console.WriteLine("\n== Reset mercury -> venus ==");
 handler.Execute(["reset", "--sequence", "venus"]);
 handler.Execute(["read"]);
-AssertFinal(pm3, EncodingSequences.Venus, "venus");
+AssertFinal(pm3, TokenIdentityProfiles.Venus, "venus");
 
 Console.WriteLine("\n== Reset venus -> mercury ==");
 handler.Execute(["reset", "--sequence", "mercury"]);
 handler.Execute(["read"]);
-AssertFinal(pm3, EncodingSequences.Mercury, "mercury");
+AssertFinal(pm3, TokenIdentityProfiles.Mercury, "mercury");
 
 Console.WriteLine("\nRoundtrip reset integration succeeded.");
 
-static void AssertFinal(Pm3 pm3, EncodingSequence sequence, string name)
+static void AssertFinal(Pm3 pm3, TokenIdentityProfile profile, string name)
 {
-    var reset = ResetPage0BlocksLoader.Load(sequence);
-    var zero = sequence.Encode(0);
+    var reset = ResetPage0BlocksLoader.Load(profile);
+    var zero = profile.RideSequence.Encode(0);
     reset[5] = zero;
     reset[6] = zero;
 
