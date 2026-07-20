@@ -24,6 +24,12 @@ internal static class EncodingFamilyDefinitions
     // D3FE005D-522BC69D-650432F5-650432F5 (Earth): low range captured 0..23; 128 and 255 boundary starts elevator-validated 2026-07-12.
     internal static readonly TokenBlockUtils.Family Earth0To127 = new(0x1812, 0x5BD4, 0);
     internal static readonly TokenBlockUtils.Family Earth128To255 = new(0xEB12, 0xDBDC, 128);
+
+    // C3FE0031-20C60722-B6D14924-B6D14924 (Mars): low range and family boundaries elevator-validated 2026-07-20.
+    internal static readonly TokenBlockUtils.Family Mars0To127 = new(0x4EC7, 0x0082, 0);
+    internal static readonly TokenBlockUtils.Family Mars128To255 = new(0xBDC7, 0x808A, 128);
+    internal static readonly TokenBlockUtils.Family Mars256To383 = new(0x4EC6, 0x0092, 256);
+    internal static readonly TokenBlockUtils.Family Mars384To500 = new(0xBDC6, 0x809A, 384);
 }
 
 /// <summary>
@@ -133,7 +139,15 @@ public static class EncodingSequences
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Earth0To127),
         new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255));
 
-    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus, Earth];
+    public static readonly EncodingSequence Mars = new(
+        "mars",
+        "mars-0-rides.bin",
+        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mars0To127),
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Mars128To255),
+        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mars256To383),
+        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Mars384To500));
+
+    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus, Earth, Mars];
 
     private static readonly Dictionary<uint, EncodingSequence> SequenceByHigh16 = BuildSequenceByHigh16();
 

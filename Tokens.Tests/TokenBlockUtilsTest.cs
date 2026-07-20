@@ -947,6 +947,7 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.Mercury.ResetImageFileName, Is.EqualTo("default-500-rides.bin"));
         Assert.That(EncodingSequences.Venus.ResetImageFileName, Is.EqualTo("venus-0-rides.bin"));
         Assert.That(EncodingSequences.Earth.ResetImageFileName, Is.EqualTo("earth-0-rides.bin"));
+        Assert.That(EncodingSequences.Mars.ResetImageFileName, Is.EqualTo("mars-0-rides.bin"));
     }
 
     [Test]
@@ -958,6 +959,8 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.Venus.MaxRides, Is.EqualTo(500u));
         Assert.That(EncodingSequences.Earth.MinRides, Is.EqualTo(0u));
         Assert.That(EncodingSequences.Earth.MaxRides, Is.EqualTo(255u));
+        Assert.That(EncodingSequences.Mars.MinRides, Is.EqualTo(0u));
+        Assert.That(EncodingSequences.Mars.MaxRides, Is.EqualTo(500u));
     }
 
     [Test]
@@ -1008,6 +1011,21 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void GetFamilyForRides_Mars_sequence_uses_confirmed_C3_families()
+    {
+        var sequence = EncodingSequences.Mars;
+
+        Assert.That(sequence.GetFamilyForRides(0), Is.EqualTo(TokenBlockUtils.Families.Family4EC7_0To127));
+        Assert.That(sequence.GetFamilyForRides(127), Is.EqualTo(TokenBlockUtils.Families.Family4EC7_0To127));
+        Assert.That(sequence.GetFamilyForRides(128), Is.EqualTo(TokenBlockUtils.Families.FamilyBDC7_128To255));
+        Assert.That(sequence.GetFamilyForRides(255), Is.EqualTo(TokenBlockUtils.Families.FamilyBDC7_128To255));
+        Assert.That(sequence.GetFamilyForRides(256), Is.EqualTo(TokenBlockUtils.Families.Family4EC6_256To383));
+        Assert.That(sequence.GetFamilyForRides(383), Is.EqualTo(TokenBlockUtils.Families.Family4EC6_256To383));
+        Assert.That(sequence.GetFamilyForRides(384), Is.EqualTo(TokenBlockUtils.Families.FamilyBDC6_384To500));
+        Assert.That(sequence.GetFamilyForRides(500), Is.EqualTo(TokenBlockUtils.Families.FamilyBDC6_384To500));
+    }
+
+    [Test]
     public void Families_registry_contains_all_sequence_families_with_unique_high16()
     {
         var familiesByHigh16 = new Dictionary<uint, TokenBlockUtils.Family>();
@@ -1033,6 +1051,25 @@ public class TokenBlockUtilsTest
                 Assert.That(found, Is.EqualTo(segment.Family));
             }
         }
+    }
+
+    [TestCase(0u, 0x4EC7494Eu)]
+    [TestCase(1u, 0x4EC7485Eu)]
+    [TestCase(13u, 0x4EC7449Eu)]
+    [TestCase(14u, 0x4EC747AEu)]
+    [TestCase(127u, 0x4EC736B9u)]
+    [TestCase(128u, 0xBDC7C946u)]
+    [TestCase(255u, 0xBDC7B6B1u)]
+    [TestCase(256u, 0x4EC6495Eu)]
+    [TestCase(383u, 0x4EC636A9u)]
+    [TestCase(384u, 0xBDC6C956u)]
+    [TestCase(499u, 0xBDC6BA61u)]
+    [TestCase(500u, 0xBDC6BD11u)]
+    public void Encode_MarsSequence_MatchesCapturedAndElevatorValidatedBlocks(uint rides, uint expectedBlock)
+    {
+        var got = EncodingSequences.Mars.Encode(rides);
+        Assert.That(got.Value, Is.EqualTo(expectedBlock), $"Rides {rides}: expected {expectedBlock:X8}, got {got.Value:X8}");
+        Assert.That(TokenBlockUtils.Decode(got), Is.EqualTo(rides));
     }
 
     [TestCase(127u, 0x48C736BFu)]
@@ -1101,7 +1138,7 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void TryGetByFriendlyName_finds_mercury_venus_and_earth_case_insensitively()
+    public void TryGetByFriendlyName_finds_mercury_venus_earth_and_mars_case_insensitively()
     {
         Assert.That(EncodingSequences.TryGetByFriendlyName("mercury", out var mercury), Is.True);
         Assert.That(mercury, Is.EqualTo(EncodingSequences.Mercury));
@@ -1111,6 +1148,9 @@ public class TokenBlockUtilsTest
 
         Assert.That(EncodingSequences.TryGetByFriendlyName("Earth", out var earth), Is.True);
         Assert.That(earth, Is.EqualTo(EncodingSequences.Earth));
+
+        Assert.That(EncodingSequences.TryGetByFriendlyName("mArS", out var mars), Is.True);
+        Assert.That(mars, Is.EqualTo(EncodingSequences.Mars));
 
         Assert.That(EncodingSequences.TryGetByFriendlyName("pluto", out _), Is.False);
     }
@@ -1157,6 +1197,22 @@ public class TokenBlockUtilsTest
 
         Assert.That(ok, Is.True);
         Assert.That(sequence, Is.EqualTo(EncodingSequences.Earth));
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_Mars_family_blocks_return_mars_sequence()
+    {
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0x4EC747AE), out var from4EC7), Is.True);
+        Assert.That(from4EC7, Is.EqualTo(EncodingSequences.Mars));
+
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0xBDC7C946), out var fromBDC7), Is.True);
+        Assert.That(fromBDC7, Is.EqualTo(EncodingSequences.Mars));
+
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0x4EC6495E), out var from4EC6), Is.True);
+        Assert.That(from4EC6, Is.EqualTo(EncodingSequences.Mars));
+
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0xBDC6C956), out var fromBDC6), Is.True);
+        Assert.That(fromBDC6, Is.EqualTo(EncodingSequences.Mars));
     }
 
     [Test]
@@ -1277,6 +1333,18 @@ public class TokenBlockUtilsTest
             uint decoded = TokenBlockUtils.Decode(encoded);
             Assert.That(decoded, Is.EqualTo(value),
                 $"Venus high-range round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_RoundTrip_MarsSequence_0To500()
+    {
+        for (uint value = 0; value <= 500; value++)
+        {
+            var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Mars);
+            uint decoded = TokenBlockUtils.Decode(encoded);
+            Assert.That(decoded, Is.EqualTo(value),
+                $"Mars round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
         }
     }
 
