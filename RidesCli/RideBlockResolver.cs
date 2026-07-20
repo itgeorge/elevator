@@ -19,6 +19,7 @@ public sealed record RideReadResult(
 
 /// <summary>
 /// Resolves ride count from mirrored page-0 blocks 5 and 6.
+/// When both blocks decode but differ, block 6 is preferred — confirmed elevator behavior (2026-07-20 hardware test).
 /// </summary>
 public static class RideBlockResolver
 {
@@ -36,13 +37,13 @@ public static class RideBlockResolver
         {
             return new RideReadResult(
                 RideReadStatus.Success,
-                rides5,
-                block5,
-                5,
+                rides6,
+                block6,
+                6,
                 BlocksMatched: false,
                 WarningMessage: rides5 == rides6
-                    ? "Warning: blocks 5 and 6 differ; using block 5."
-                    : $"Warning: blocks 5 and 6 differ; using block 5 ({rides5} rides).");
+                    ? "Warning: blocks 5 and 6 differ; using block 6."
+                    : $"Warning: blocks 5 and 6 differ; using block 6 ({rides6} rides).");
         }
 
         if (valid5)

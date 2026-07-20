@@ -74,7 +74,7 @@ public class RideBlockResolverTests
     }
 
     [Test]
-    public void Resolve_mismatch_both_valid_prefers_block5()
+    public void Resolve_mismatch_both_valid_prefers_block6()
     {
         var block5 = TokenBlockUtils.Encode(73, EncodingSequences.Mercury);
         var block6 = TokenBlockUtils.Encode(80, EncodingSequences.Mercury);
@@ -82,9 +82,24 @@ public class RideBlockResolverTests
         var result = RideBlockResolver.Resolve(block5, block6);
 
         Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
-        Assert.That(result.Rides, Is.EqualTo(73u));
-        Assert.That(result.SourceBlockNumber, Is.EqualTo(5));
-        Assert.That(result.WarningMessage, Is.EqualTo("Warning: blocks 5 and 6 differ; using block 5 (73 rides)."));
+        Assert.That(result.Rides, Is.EqualTo(80u));
+        Assert.That(result.SourceBlockNumber, Is.EqualTo(6));
+        Assert.That(result.WarningMessage, Is.EqualTo("Warning: blocks 5 and 6 differ; using block 6 (80 rides)."));
+    }
+
+    [Test]
+    public void Resolve_mismatch_both_valid_elevator_confirmed_venus_prefers_block6()
+    {
+        // Hardware experiment (2026-07-20): elevator decrements from block 6 when mirrors disagree.
+        var block5 = EncodingSequences.Venus.Encode(256);
+        var block6 = EncodingSequences.Venus.Encode(255);
+
+        var result = RideBlockResolver.Resolve(block5, block6);
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(255u));
+        Assert.That(result.SourceBlockNumber, Is.EqualTo(6));
+        Assert.That(result.WarningMessage, Is.EqualTo("Warning: blocks 5 and 6 differ; using block 6 (255 rides)."));
     }
 
     [Test]

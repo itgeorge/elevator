@@ -487,7 +487,7 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
-    public void Read_mismatch_both_valid_prefers_block5()
+    public void Read_mismatch_both_valid_prefers_block6()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithMismatchedRides(73, 80);
@@ -495,8 +495,8 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["read"]);
 
-        Assert.That(output.Lines, Has.Some.EqualTo("Warning: blocks 5 and 6 differ; using block 5 (73 rides)."));
-        Assert.That(output.Lines, Has.Some.Matches(@"rides remaining: 73"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Warning: blocks 5 and 6 differ; using block 6 (80 rides)."));
+        Assert.That(output.Lines, Has.Some.Matches(@"rides remaining: 80"));
         Assert.That(pm3.DumpCallCount, Is.EqualTo(0));
     }
 
