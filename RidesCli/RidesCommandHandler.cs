@@ -294,7 +294,7 @@ public sealed class RidesCommandHandler
                     _rides = null;
                     _encodingSequence = null;
                     _lastDumpRaw = null;
-                    _output.WriteLine("Error: could not decode rides from token (invalid block format).");
+                    await HandleInvalidBlockFormatAsync(block5).ConfigureAwait(false);
                     return true;
             }
         }
@@ -537,7 +537,19 @@ public sealed class RidesCommandHandler
     private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
     {
         _output.WriteLine($"Unknown encoding family detected in page 0 block 5: {block5.ToHex()}");
+        await SaveUndecodableTokenDumpAsync(
+            "Error: could not decode rides because the token uses an unknown encoding family.").ConfigureAwait(false);
+    }
 
+    private async Task HandleInvalidBlockFormatAsync(T55Block block5)
+    {
+        _output.WriteLine($"Invalid ride block format detected in page 0 block 5: {block5.ToHex()}");
+        await SaveUndecodableTokenDumpAsync(
+            "Error: could not decode rides because the token uses an invalid block format.").ConfigureAwait(false);
+    }
+
+    private async Task SaveUndecodableTokenDumpAsync(string finalErrorMessage)
+    {
         var blocks = await ReadPage0BlocksAsync();
         var dumpPath = SaveTokenDump(blocks, "UNKNOWN");
 
@@ -545,7 +557,7 @@ public sealed class RidesCommandHandler
         dumpPath = UpdateSavedTokenDumpPath(dumpPath, blocks, ridesLabel);
 
         _output.WriteLine($"Saved token dump to '{Path.GetFullPath(dumpPath)}'.");
-        _output.WriteLine("Error: could not decode rides because the token uses an unknown encoding family.");
+        _output.WriteLine(finalErrorMessage);
     }
 
     private string PromptForKnownRideCountLabel()

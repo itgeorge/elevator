@@ -259,18 +259,40 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
-    public void Read_when_decode_fails_unloads_and_prints_error()
+    public void Read_when_decode_fails_saves_dump_and_unloads()
     {
-        var output = new StringBuilderRidesOutput();
-        var pm3 = FakeRidesPm3Api.WithInvalidBlock5();
-        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithInvalidBlock5();
+            var config = new RidesConfig { DumpDirectory = tempDir };
+            var input = new ScriptedRidesInput(string.Empty);
+            var handler = new RidesCommandHandler(pm3, output, config, input);
 
-        handler.Execute(["read"]);
+            handler.Execute(["read"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("invalid block format"));
-        // Subsequent set should fail with "no rides in memory"
-        handler.Execute(["set", "50"]);
-        Assert.That(output.Lines, Has.Some.Contains("no rides in memory"));
+            var files = Directory.GetFiles(tempDir, "*.bin");
+            Assert.That(files, Has.Length.EqualTo(1));
+            Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-UNKNOWN.bin"));
+            Assert.That(new FileInfo(files[0]).Length, Is.EqualTo(32));
+            Assert.That(output.Lines, Has.Some.Contains("Invalid ride block format"));
+            Assert.That(output.Lines, Has.Some.Contains("Saved token dump to"));
+
+            var bytes = File.ReadAllBytes(files[0]);
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4)), Is.EqualTo(0xCCC70000u));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(24, 4)), Is.EqualTo(0xCCC70000u));
+
+            // Subsequent set should fail with "no rides in memory"
+            handler.Execute(["set", "50"]);
+            Assert.That(output.Lines, Has.Some.Contains("no rides in memory"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
     }
 
     [Test]
