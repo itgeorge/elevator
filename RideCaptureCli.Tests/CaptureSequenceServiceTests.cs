@@ -64,6 +64,19 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
+    public void First_pluto_identity_with_pluto_ride_blocks_is_known_and_decodes_ride_count()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("83FE002A", "F100C064", "A3045930", "A3045930", "1F12121F", "1F12121F");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
     public void First_seeded_undecoded_token_scan_uses_matching_seeded_state_count()
     {
         var service = new CaptureSequenceService();

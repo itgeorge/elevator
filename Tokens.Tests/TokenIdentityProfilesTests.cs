@@ -19,6 +19,9 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.Earth.RideSequence, Is.EqualTo(EncodingSequences.Earth));
         Assert.That(TokenIdentityProfiles.Earth.TokenId, Is.EqualTo("D3FE005D-522BC69D-650432F5-650432F5"));
 
+        Assert.That(TokenIdentityProfiles.Pluto.RideSequence, Is.EqualTo(EncodingSequences.Pluto));
+        Assert.That(TokenIdentityProfiles.Pluto.TokenId, Is.EqualTo("83FE002A-F100C064-A3045930-A3045930"));
+
         Assert.That(TokenIdentityProfiles.Mars.RideSequence, Is.EqualTo(EncodingSequences.Mars));
         Assert.That(TokenIdentityProfiles.Mars.TokenId, Is.EqualTo("C3FE0031-20C60722-B6D14924-B6D14924"));
     }
@@ -29,10 +32,12 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.Mercury.ResetImageFileName, Is.EqualTo("default-500-rides.bin"));
         Assert.That(TokenIdentityProfiles.Venus.ResetImageFileName, Is.EqualTo("venus-0-rides.bin"));
         Assert.That(TokenIdentityProfiles.Earth.ResetImageFileName, Is.EqualTo("earth-0-rides.bin"));
+        Assert.That(TokenIdentityProfiles.Pluto.ResetImageFileName, Is.EqualTo("pluto-0-rides.bin"));
         Assert.That(TokenIdentityProfiles.Mars.ResetImageFileName, Is.EqualTo("mars-0-rides.bin"));
         Assert.That(TokenIdentityProfiles.Mercury.CanReset, Is.True);
         Assert.That(TokenIdentityProfiles.Venus.CanReset, Is.True);
         Assert.That(TokenIdentityProfiles.Earth.CanReset, Is.True);
+        Assert.That(TokenIdentityProfiles.Pluto.CanReset, Is.True);
         Assert.That(TokenIdentityProfiles.Mars.CanReset, Is.True);
     }
 
@@ -64,7 +69,10 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("EARTH-A457", out var earthA457), Is.True);
         Assert.That(earthA457, Is.EqualTo(TokenIdentityProfiles.EarthA457));
 
-        Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("pluto", out _), Is.False);
+        Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("pluto", out var pluto), Is.True);
+        Assert.That(pluto, Is.EqualTo(TokenIdentityProfiles.Pluto));
+
+        Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("neptune", out _), Is.False);
     }
 
     [Test]
@@ -84,10 +92,11 @@ public class TokenIdentityProfilesTests
     [Test]
     public void Resettable_contains_only_profiles_with_reset_images()
     {
-        Assert.That(TokenIdentityProfiles.Resettable, Has.Count.EqualTo(4));
+        Assert.That(TokenIdentityProfiles.Resettable, Has.Count.EqualTo(5));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Mercury));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Venus));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Earth));
+        Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Pluto));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Mars));
         Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.Venus21Ff));
         Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.EarthA457));

@@ -806,8 +806,8 @@ public sealed class RidesCommandHandler
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
         _output.WriteLine($"  reset --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
-        _output.WriteLine("  set <number>  Set rides to token [0-500, except Earth 0-255]");
-        _output.WriteLine("  add <addnum>  Add rides to token [0-500, except Earth 0-255]");
+        _output.WriteLine("  set <number>  Set rides to token [0-500, except Earth/Pluto 0-255]");
+        _output.WriteLine("  add <addnum>  Add rides to token [0-500, except Earth/Pluto 0-255]");
         _output.WriteLine("  price set <number>   Preview cost for set");
         _output.WriteLine("  price add <addnum>   Preview cost for add");
         _output.WriteLine("  money <amount>       Rides purchasable for amount (e.g. 4.00)");

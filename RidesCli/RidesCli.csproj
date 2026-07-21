@@ -16,6 +16,7 @@
     <EmbeddedResource Include="..\TokenDumpsCli\Data\default-500-rides.bin" Link="Data\default-500-rides.bin" />
     <EmbeddedResource Include="Data\venus-0-rides.bin" />
     <EmbeddedResource Include="Data\earth-0-rides.bin" />
+    <EmbeddedResource Include="Data\pluto-0-rides.bin" />
     <EmbeddedResource Include="Data\mars-0-rides.bin" />
   </ItemGroup>
 

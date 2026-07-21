@@ -25,6 +25,11 @@ internal static class EncodingFamilyDefinitions
     internal static readonly TokenBlockUtils.Family Earth0To127 = new(0x1812, 0x5BD4, 0);
     internal static readonly TokenBlockUtils.Family Earth128To255 = new(0xEB12, 0xDBDC, 128);
 
+    // 83FE002A-F100C064-A3045930-A3045930 (Pluto): 0..255 elevator-validated 2026-07-21.
+    // Matches Earth-style first two families; XOR-step and minus-one 256+ candidates reset to zero like Earth.
+    internal static readonly TokenBlockUtils.Family Pluto0To127 = new(0x1F12, 0x5BD3, 0);
+    internal static readonly TokenBlockUtils.Family Pluto128To255 = new(0xEC12, 0xDBDB, 128);
+
     // C3FE0031-20C60722-B6D14924-B6D14924 (Mars): low range and family boundaries elevator-validated 2026-07-20.
     internal static readonly TokenBlockUtils.Family Mars0To127 = new(0x4EC7, 0x0082, 0);
     internal static readonly TokenBlockUtils.Family Mars128To255 = new(0xBDC7, 0x808A, 128);
@@ -129,6 +134,11 @@ public static class EncodingSequences
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Earth0To127),
         new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255));
 
+    public static readonly EncodingSequence Pluto = new(
+        "pluto",
+        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Pluto0To127),
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Pluto128To255));
+
     public static readonly EncodingSequence Mars = new(
         "mars",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mars0To127),
@@ -136,7 +146,7 @@ public static class EncodingSequences
         new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mars256To383),
         new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Mars384To500));
 
-    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus, Earth, Mars];
+    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus, Earth, Pluto, Mars];
 
     private static readonly Dictionary<uint, EncodingSequence> SequenceByHigh16 = BuildSequenceByHigh16();
 

@@ -829,6 +829,20 @@ public class TokenBlockUtilsTest
         128 EB129210
         """;
 
+    const string Table83FE_ValidatedLowSamples =
+        """
+        50 1F12203C
+        49 1F12230C
+         1 1F12130F
+         0 1F12121F
+        """;
+
+    const string Table83FE_128To255_ValidatedBoundaries =
+        """
+        255 EC12EDE0
+        254 EC12ECF0
+        128 EC129217
+        """;
 
 
     [Test]
@@ -860,6 +874,8 @@ public class TokenBlockUtilsTest
     [TestCase(Table43FE_128To180, (uint)0xBBC7, (uint)0x808C, (uint)128)]
     [TestCase(TableD3FE_0To23, (uint)0x1812, (uint)0x5BD4, (uint)0)]
     [TestCase(TableD3FE_128To255_ValidatedBoundaries, (uint)0xEB12, (uint)0xDBDC, (uint)128)]
+    [TestCase(Table83FE_ValidatedLowSamples, (uint)0x1F12, (uint)0x5BD3, (uint)0)]
+    [TestCase(Table83FE_128To255_ValidatedBoundaries, (uint)0xEC12, (uint)0xDBDB, (uint)128)]
     public void EncodeByFamily_MatchesKnownValues(string countAndBlockTable, uint high16, uint xorConst, uint baseOffset)
     {
         var rows = ParseTable(countAndBlockTable);
@@ -950,6 +966,8 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.Venus.MaxRides, Is.EqualTo(500u));
         Assert.That(EncodingSequences.Earth.MinRides, Is.EqualTo(0u));
         Assert.That(EncodingSequences.Earth.MaxRides, Is.EqualTo(255u));
+        Assert.That(EncodingSequences.Pluto.MinRides, Is.EqualTo(0u));
+        Assert.That(EncodingSequences.Pluto.MaxRides, Is.EqualTo(255u));
         Assert.That(EncodingSequences.Mars.MinRides, Is.EqualTo(0u));
         Assert.That(EncodingSequences.Mars.MaxRides, Is.EqualTo(500u));
     }
@@ -1127,7 +1145,57 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void TryGetByFriendlyName_finds_mercury_venus_earth_and_mars_case_insensitively()
+    public void Decode_PlutoZeroBlock_returns_zero()
+    {
+        Assert.That(TokenBlockUtils.Decode(new T55Block(0x1F12121F)), Is.EqualTo(0u));
+    }
+
+    [Test]
+    public void Encode_PlutoSequence_zero_returns_recorded_zero_block()
+    {
+        Assert.That(TokenBlockUtils.Encode(0, EncodingSequences.Pluto).Value, Is.EqualTo(0x1F12121Fu));
+    }
+
+    [Test]
+    public void EncodeDecode_PlutoSequence_MatchesElevatorValidatedLowSamples()
+    {
+        var rows = ParseTable(Table83FE_ValidatedLowSamples);
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            var encoded = TokenBlockUtils.Encode((uint)ridesRemaining, EncodingSequences.Pluto);
+            Assert.That(encoded.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {encoded.Value:X8}");
+            Assert.That(TokenBlockUtils.Decode(new T55Block(block)), Is.EqualTo((uint)ridesRemaining));
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_PlutoSequence_MatchesElevatorValidatedFirstTwoFamilyBoundaries()
+    {
+        var rows = ParseTable(Table83FE_128To255_ValidatedBoundaries);
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            var encoded = TokenBlockUtils.Encode((uint)ridesRemaining, EncodingSequences.Pluto);
+            Assert.That(encoded.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {encoded.Value:X8}");
+            Assert.That(TokenBlockUtils.Decode(new T55Block(block)), Is.EqualTo((uint)ridesRemaining));
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_RoundTrip_PlutoSequence_0To255()
+    {
+        for (uint value = 0; value <= 255; value++)
+        {
+            var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Pluto);
+            uint decoded = TokenBlockUtils.Decode(encoded);
+            Assert.That(decoded, Is.EqualTo(value),
+                $"Pluto round-trip failed for value {value}: encoded {encoded.Value:X8}, decoded {decoded}");
+        }
+    }
+
+    [Test]
+    public void TryGetByFriendlyName_finds_mercury_venus_earth_pluto_and_mars_case_insensitively()
     {
         Assert.That(EncodingSequences.TryGetByFriendlyName("mercury", out var mercury), Is.True);
         Assert.That(mercury, Is.EqualTo(EncodingSequences.Mercury));
@@ -1138,10 +1206,13 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.TryGetByFriendlyName("Earth", out var earth), Is.True);
         Assert.That(earth, Is.EqualTo(EncodingSequences.Earth));
 
+        Assert.That(EncodingSequences.TryGetByFriendlyName("Pluto", out var pluto), Is.True);
+        Assert.That(pluto, Is.EqualTo(EncodingSequences.Pluto));
+
         Assert.That(EncodingSequences.TryGetByFriendlyName("mArS", out var mars), Is.True);
         Assert.That(mars, Is.EqualTo(EncodingSequences.Mars));
 
-        Assert.That(EncodingSequences.TryGetByFriendlyName("pluto", out _), Is.False);
+        Assert.That(EncodingSequences.TryGetByFriendlyName("neptune", out _), Is.False);
     }
 
     [Test]
@@ -1186,6 +1257,28 @@ public class TokenBlockUtilsTest
 
         Assert.That(ok, Is.True);
         Assert.That(sequence, Is.EqualTo(EncodingSequences.Earth));
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_1F12_block_returns_pluto_sequence()
+    {
+        var ok = EncodingSequences.TryGetSequenceFromBlock(
+            new T55Block(0x1F12121F),
+            out var sequence);
+
+        Assert.That(ok, Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Pluto));
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_EC12_block_returns_pluto_sequence()
+    {
+        var ok = EncodingSequences.TryGetSequenceFromBlock(
+            new T55Block(0xEC129217),
+            out var sequence);
+
+        Assert.That(ok, Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Pluto));
     }
 
     [Test]
