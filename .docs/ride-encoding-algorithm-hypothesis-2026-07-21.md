@@ -295,12 +295,11 @@ High confidence:
 - rotation 4 exactly replaces all registered family arithmetic;
 - rotation 0 exactly explains every trusted Saturn/C/Jupiter anchor and post-ride;
 - Saturn's separate `8B12CB72` dump and Jupiter's historical data independently corroborate rotation 0;
-- Saturn and Uranus boundary transitions and `1 -> 0` are hardware-validated; reset images are known;
+- Saturn and Uranus boundary transitions and `1 -> 0` are hardware-validated; reset images are known; hardware `reset --profile uranus` smoke test passed 2026-07-22 on sacrificial Saturn card;
 - previous Earth/Pluto 256+ tests did not test the constant-zero-block XOR predictions.
 
 Still hypotheses:
 
 - corrected Earth and Pluto high ranges have boundary hardware validation; interior 256+ values are extrapolated by the same verified family rule;
-- Uranus hardware reset smoke test on a sacrificial token is pending before final reset handoff;
 - rotations 1,2,3,5,6,7 are mathematically natural but currently have no identified captures;
 - the rule by which an elevator decides that a `(zeroBlock, rotation)` is an allowed sequence is unknown.
