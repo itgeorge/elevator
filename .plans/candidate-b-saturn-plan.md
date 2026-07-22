@@ -360,8 +360,8 @@ The `1 -> 0` zero transition is confirmed, so Saturn reset support should be imp
 - [x] Embed the reset image in `RidesCli/RidesCli.csproj`.
 - [x] Change `TokenIdentityProfiles.Saturn` to use `saturn-0-rides.bin`.
 - [x] Add reset image parser/existence tests and `reset --profile saturn` / compatibility alias tests.
-- [ ] Before any hardware reset smoke test, run a read-only preflight and verify the intended sacrificial token with the user.
-- [ ] Hardware-smoke-test Saturn reset through the normal safe reset path:
+- [x] Before any hardware reset smoke test, run a read-only preflight and verify the intended sacrificial token with the user.
+- [x] Hardware-smoke-test Saturn reset through the normal safe reset path:
 
   ```text
   reset --profile saturn
@@ -370,12 +370,12 @@ The `1 -> 0` zero transition is confirmed, so Saturn reset support should be imp
   ```
 
 - [x] Verify reset never writes blocks 0 or 7 and rollback behavior remains covered by automated tests.
-- [ ] Record final reset smoke-test evidence in this plan and docs.
+- [x] Record final reset smoke-test evidence in this plan and docs.
 
 ## Agent notes / assumptions
 
 - Notes: Saturn zero is confirmed. Created and registered `saturn-0-rides.bin` using canonical Candidate-B identity blocks and mirrored zero `8B1249F0`. Automated tests cover `reset --profile saturn`, `reset --sequence saturn`, embedded image validation via `ResetPage0BlocksLoaderTests`, and blocks 0/7 never written.
-- Notes: Hardware reset smoke test remains pending — requires user-confirmed sacrificial token and read-only preflight before `reset --profile saturn`.
+- Notes: **Hardware reset smoke test passed 2026-07-22.** Sacrificial card on PM3 pre-reset: identity `EBFE002A-F100CC5B-A5045936-A5045936` (Jupiter), blocks 5/6 `89124ED7` (unregistered Candidate-C structural decode at 7 rides). `reset --profile saturn` succeeded. Post-reset blocks: 0=`00148040`, 1=`23FE007B`, 2=`D88CBD8A`, 3=`5D04593D`, 4=`5D04593D`, 5=`8B1249F0`, 6=`8B1249F0`, 7=`00000000`. `RidesCli read` reported `sequence: saturn`, `rides remaining: 0`.
 - Assumptions: Automated reset path reuses existing Jupiter/Mars rollback coverage; no Saturn-specific rollback test added.
 
 ---
@@ -407,17 +407,17 @@ The `1 -> 0` zero transition is confirmed, so Saturn reset support should be imp
   - reset enabled vs recognition-only status;
   - test counts/results;
   - any remaining risks or follow-up work.
-- [ ] Commit the code/test/docs/plan updates together.
-- [ ] Hand off to the reviewer/user and explicitly state that Candidate C remains unregistered.
+- [x] Commit the code/test/docs/plan updates together.
+- [x] Hand off to the reviewer/user and explicitly state that Candidate C remains unregistered.
 
 ## Agent notes / assumptions
 
 - Notes:
   - **Saturn parameters:** `friendlyName=saturn`, `zeroBlock=8B1249F0`, `rotation=0`, `range=0..500`, identity `23FE007B-D88CBD8A-5D04593D-5D04593D`.
   - **Hardware summary:** All listed boundary transitions and `1 -> 0` confirmed with matching blocks 5/6.
-  - **Reset status:** Implemented and automated-test verified; hardware smoke test pending user sacrificial token.
+  - **Reset status:** Implemented, automated-test verified, and **hardware smoke test passed** (2026-07-22).
   - **Test results:** Tokens.Tests 77, RidesCli.Tests 113, RideCaptureCli.Tests 32, Pm3UsbApi.Tests 120 (1 skipped), oracle PASS. Full non-integration filter: all passed.
-  - **Remaining risks:** Hardware `reset --profile saturn` smoke test not yet run; Candidate C still unregistered.
+  - **Remaining risks:** Candidate C still unregistered.
 - Assumptions: None.
 
 ---
@@ -427,4 +427,4 @@ The `1 -> 0` zero transition is confirmed, so Saturn reset support should be imp
 - [ ] Hardware-test and separately register Candidate C (`zeroBlock=891249D0`, rotation 0) if validated.
 - [ ] Investigate whether rotations 1,2,3,5,6,7 occur in real tokens.
 - [ ] Consider a future tool for inferring `(zeroBlock, rotation)` from multiple trusted anchors while refusing single-block ambiguity.
-- [ ] Complete Saturn hardware reset smoke test on user-confirmed sacrificial token.
+- [ ] Complete Saturn hardware reset smoke test on user-confirmed sacrificial token. **Done 2026-07-22** — see Phase 7 Agent notes.

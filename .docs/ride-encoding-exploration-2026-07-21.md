@@ -92,7 +92,7 @@ Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
 Earlier synthesized values from the obsolete family formula (`7812483D` at rides=1, `8B12C925` at rides=128) are superseded by the generalized rotation-0 model.
 
-Reset image: `RidesCli/Data/saturn-0-rides.bin`. Profile name: `saturn`.
+Reset image: `RidesCli/Data/saturn-0-rides.bin`. Profile name: `saturn`. Hardware `reset --profile saturn` smoke test passed 2026-07-22 on sacrificial EBFE card; post-reset read reported `sequence: saturn`, rides 0, with blocks 1..6 matching the reset image.
 
 ## Candidate C — FBFE (pending)
 
