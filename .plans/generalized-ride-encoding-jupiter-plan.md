@@ -490,8 +490,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 - [x] Embed the reset image and make the canonical Jupiter identity profile resettable.
 - [x] Add reset image parser/existence tests and `reset --profile jupiter` / compatibility alias tests.
-- [ ] Before any hardware reset, run read-only preflight and verify the intended sacrificial token.
-- [ ] Hardware-smoke-test Jupiter reset through the normal safe reset path:
+- [x] Before any hardware reset, run read-only preflight and verify the intended sacrificial token.
+- [x] Hardware-smoke-test Jupiter reset through the normal safe reset path:
 
   ```text
   reset --profile jupiter
@@ -506,7 +506,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 - Notes: User-reported elevator test was read back via read-only PM3 preflight: blocks 5/6 both matched expected Jupiter zero `8C124980`. The test token identity was `9BFE0062-5BA4A3DE-D5D1D713-D5D1D713`, confirming again that identity blocks are not ride-encoding input.
 - Notes: Created and embedded canonical EBFE Jupiter reset image. Automated tests cover reset image parsing/existence through all resettable profiles, `reset --profile jupiter`, the `--sequence jupiter` alias, and no writes to blocks 0/7. Validation passed: `Tokens.Tests` 63, `RidesCli.Tests` 101, and full non-integration suite.
-- Notes: Hardware reset smoke test is still pending explicit confirmation that the current physical card should be overwritten with the EBFE Jupiter reset identity.
+- Notes: Hardware reset smoke test completed after user confirmed the current card was sacrificial. Preflight read was `block0=00148040`, `block1=9BFE0062`, `block2=5BA4A3DE`, `block3=D5D1D713`, `block4=D5D1D713`, `block5=8C124980`, `block6=8C124980`, `block7=00000000`. `reset --profile jupiter` succeeded; `RidesCli read` reported `rides remaining: 0` and `sequence: jupiter`. Final raw verification was `block0=00148040`, `block1=EBFE002A`, `block2=F100CC5B`, `block3=A5045936`, `block4=A5045936`, `block5=8C124980`, `block6=8C124980`, `block7=00000000`. Blocks 0 and 7 remained unchanged.
 - Assumptions:
 
 ---
