@@ -151,8 +151,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Run `git status --short --branch`; record all modified/untracked paths in Agent notes before editing.
-- [ ] Read these files completely:
+- [x] Run `git status --short --branch`; record all modified/untracked paths in Agent notes before editing.
+- [x] Read these files completely:
   - `.docs/ride-encoding-exploration-2026-07-21.md`
   - `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md`
   - `.plans/d3-earth-sequence-plan.md`
@@ -164,8 +164,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   - `RidesCli/RidesCommandHandler.cs`
   - `RideCaptureCli/SeededTokenCatalog.cs`
   - `debug/ride-encoding-hypothesis.py`
-- [ ] Confirm the uncommitted Earth/Pluto high-range changes are present and tests currently pass. Do not accidentally start from the old 0..255 model.
-- [ ] Run and record baseline results:
+- [x] Confirm the uncommitted Earth/Pluto high-range changes are present and tests currently pass. Do not accidentally start from the old 0..255 model.
+- [x] Run and record baseline results:
 
   ```bash
   python3 debug/ride-encoding-hypothesis.py
@@ -174,11 +174,12 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   dotnet test ElevatorTokens.sln --no-restore --filter 'Category!=Integration&Category!=IntegrationParity'
   ```
 
-- [ ] Preserve the exact hardware observations above in test fixtures or documentation before deleting family-based code.
+- [x] Preserve the exact hardware observations above in test fixtures or documentation before deleting family-based code.
 
 ## Agent notes / assumptions
 
-- Notes:
+- Notes: Baseline status on `master` (ahead 3) has only these untracked, unrelated paths: `debug/EncodeRideBlock/`, `debug/RideBlockGuessPrototype/.idea/`, and `debug/write-variant-profile.sh`. No modified tracked files were present. The committed baseline contains the corrected Earth/Pluto 0..500 family ranges; this work starts from that high-range model rather than the obsolete 0..255 version.
+- Notes: Baseline commands passed: hypothesis oracle (29 observations, 8-sequence collision checks at 0..500 and 0..511), `Tokens.Tests` (94), `RidesCli.Tests` (90), and full non-integration solution suite (Tokens 94; RideCapture 26; RidesCli 90; Pm3Usb 120 passed/1 skipped; TokenDumps no filter matches).
 - Assumptions:
 
 ---
@@ -187,7 +188,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Add a test-side reference implementation of the **current rotation-4 family algorithm** or retain immutable golden tables sufficient to compare old vs new output independently.
+- [x] Add a test-side reference implementation of the **current rotation-4 family algorithm** or retain immutable golden tables sufficient to compare old vs new output independently.
   - Do not make the compatibility test call the same generalized implementation on both sides.
   - Cover every value 0..500 for Mercury, Venus, Earth, Pluto, and Mars.
   - Expected zero blocks:
@@ -200,7 +201,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
     Mars    4EC7494E
     ```
 
-- [ ] Add explicit golden assertions for known hardware boundaries, including:
+- [x] Add explicit golden assertions for known hardware boundaries, including:
 
   ```text
   Mercury: existing 0/127/128/255/256/383/384/500 references
@@ -211,19 +212,19 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   Jupiter: 0/1/7/8/56/57/127/128/238/240/247/255/256/381/384/500
   ```
 
-- [ ] Add exhaustive collision tests using the proposed parameters for all six production sequences:
+- [x] Add exhaustive collision tests using the proposed parameters for all six production sequences:
   - no duplicate blocks within each sequence over 0..500;
   - no duplicate blocks across registered sequences over 0..500;
   - repeat over 0..511 as a diagnostic of the full 9-bit representation.
-- [ ] Assert Candidates B/C do not collide with any registered sequence over 0..500, but do **not** register them.
-- [ ] Add fixtures showing Candidate B/C anchors remain unknown to production:
+- [x] Assert Candidates B/C do not collide with any registered sequence over 0..500, but do **not** register them.
+- [x] Add fixtures showing Candidate B/C anchors remain unknown to production:
 
   ```text
   B 47  -> 781266DF
   C 107 -> 7A1222BB
   ```
 
-- [ ] Commit this characterization test layer separately if practical, before replacing production internals.
+- [x] Commit this characterization test layer separately if practical, before replacing production internals.
 
 ## Agent notes / assumptions
 
@@ -236,7 +237,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Introduce a small, deterministic codec in `Tokens` (name may evolve; update this plan if it does). Suggested shape:
+- [x] Introduce a small, deterministic codec in `Tokens` (name may evolve; update this plan if it does). Suggested shape:
 
   ```csharp
   internal static class RideCounterCodec
@@ -251,12 +252,12 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   }
   ```
 
-- [ ] Validate constructor/input constraints:
+- [x] Validate constructor/input constraints:
   - rotation must be 0..7;
   - codec counter must be 0..511;
   - sequence/application range remains independently limited to 0..500.
-- [ ] Implement `ROL8` without relying on undefined shifts for rotation 0.
-- [ ] Implement exact structural decode, not partial byte extraction:
+- [x] Implement `ROL8` without relying on undefined shifts for rotation 0.
+- [x] Implement exact structural decode, not partial byte extraction:
   1. `delta = block XOR zeroBlock`;
   2. byte 1 must be only `0` or `1`;
   3. derive `n = (byte1 << 8) | byte2`;
@@ -264,8 +265,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   5. require exact 32-bit equality with `delta`;
   6. require the sequence range to contain `n`;
   7. round-trip encode must equal the input block.
-- [ ] Add focused unit tests for rotations 0 and 4, all counter bits 0..8, boundaries 0/255/256/511, malformed deltas, and invalid rotations/ranges.
-- [ ] Keep this codec independent of sequence registration so it can be exhaustively tested.
+- [x] Add focused unit tests for rotations 0 and 4, all counter bits 0..8, boundaries 0/255/256/511, malformed deltas, and invalid rotations/ranges.
+- [x] Keep this codec independent of sequence registration so it can be exhaustively tested.
 
 ## Agent notes / assumptions
 
@@ -278,7 +279,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Replace the current segment/family model with a direct sequence definition. Suggested starting shape:
+- [x] Replace the current segment/family model with a direct sequence definition. Suggested starting shape:
 
   ```csharp
   public sealed class EncodingSequence
@@ -294,14 +295,14 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   }
   ```
 
-- [ ] Register the five existing sequences using rotation 4 and range 0..500.
-- [ ] Register Jupiter using zero `8C124980`, rotation 0, range 0..500.
-- [ ] Remove `EncodingSequenceSegment` and `EncodingFamilyDefinitions` after all callers migrate.
-- [ ] Remove `TokenBlockUtils.Family`, `TokenBlockUtils.Families`, `EncodeByFamily`, and high16 family maps if no production caller still needs them.
+- [x] Register the five existing sequences using rotation 4 and range 0..500.
+- [x] Register Jupiter using zero `8C124980`, rotation 0, range 0..500.
+- [x] Remove `EncodingSequenceSegment` and `EncodingFamilyDefinitions` after all callers migrate.
+- [x] Remove `TokenBlockUtils.Family`, `TokenBlockUtils.Families`, `EncodeByFamily`, and high16 family maps if no production caller still needs them.
   - Do not retain them solely to avoid updating tests.
   - If a narrow compatibility helper is temporarily necessary within an intermediate commit, mark it clearly and remove it before completing the plan.
-- [ ] Make sequence registration fail fast on duplicate friendly names and exact encoded collisions.
-- [ ] Ensure sequence definitions remain the single source of truth for zero block, rotation, and supported range.
+- [x] Make sequence registration fail fast on duplicate friendly names and exact encoded collisions.
+- [x] Ensure sequence definitions remain the single source of truth for zero block, rotation, and supported range.
 
 ## Agent notes / assumptions
 
@@ -314,8 +315,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Replace `EncodingSequences.SequenceByHigh16` and `TryGetSequenceFromBlock` high16 lookup with full registered-sequence matching.
-- [ ] Provide one authoritative decode operation that can return both sequence and rides. Suggested shape:
+- [x] Replace `EncodingSequences.SequenceByHigh16` and `TryGetSequenceFromBlock` high16 lookup with full registered-sequence matching.
+- [x] Provide one authoritative decode operation that can return both sequence and rides. Suggested shape:
 
   ```csharp
   public static bool TryDecode(
@@ -324,20 +325,20 @@ Expected after one elevator ride: Jupiter 0: 8C124980
       out uint rides);
   ```
 
-- [ ] Define ambiguity behavior explicitly:
+- [x] Define ambiguity behavior explicitly:
   - zero matches -> unknown sequence;
   - one exact structural/range match -> success;
   - more than one match -> fail loudly as ambiguous (registration collision tests should prevent this for generated blocks).
-- [ ] Route `TokenBlockUtils.Encode`, `TryDecode`, `Decode`, and `EncodePreservingSequence` through the generalized registry/model.
-- [ ] Preserve clear exception/error distinctions where practical:
+- [x] Route `TokenBlockUtils.Encode`, `TryDecode`, `Decode`, and `EncodePreservingSequence` through the generalized registry/model.
+- [x] Preserve clear exception/error distinctions where practical:
   - unknown/unregistered sequence;
   - structurally invalid block for all registered sequences;
   - ambiguous registration/match.
-- [ ] Update `RidesCli/RideBlockResolver` so it does not call `Families.TryGetFamilyFromBlock`.
+- [x] Update `RidesCli/RideBlockResolver` so it does not call `Families.TryGetFamilyFromBlock`.
   - Matching mirrors: decode via registered sequences.
   - Mismatched mirrors: preserve confirmed preference for valid block 6.
   - Unknown candidate B/C blocks must still produce `UnknownEncodingFamily` (or a renamed equivalent documented in tests).
-- [ ] Add tests proving blocks with the same or changing high16 are decoded by full structure, especially Jupiter’s 8→7 and 128→127 transitions.
+- [x] Add tests proving blocks with the same or changing high16 are decoded by full structure, especially Jupiter’s 8→7 and 128→127 transitions.
 
 ## Agent notes / assumptions
 
@@ -350,7 +351,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Add `EncodingSequences.Jupiter`:
+- [x] Add `EncodingSequences.Jupiter`:
 
   ```text
   name      jupiter
@@ -359,7 +360,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   range     0..500
   ```
 
-- [ ] Add a Jupiter identity profile for canonical EBFE blocks:
+- [x] Add a Jupiter identity profile for canonical EBFE blocks:
 
   ```text
   EBFE002A-F100CC5B-A5045936-A5045936
@@ -367,15 +368,15 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
   Initially it may be recognition-only until Phase 8 confirms reset image safety.
 
-- [ ] Ensure Jupiter is included in friendly-name formatting and sequence listings.
-- [ ] Update `RidesCli` read/set/add/price flows:
+- [x] Ensure Jupiter is included in friendly-name formatting and sequence listings.
+- [x] Update `RidesCli` read/set/add/price flows:
   - reading any valid Jupiter block identifies `jupiter` and its ride count;
   - `set 0`, `set 8`, `set 128`, `set 256`, `set 384`, and `set 500` use rotation 0;
   - add operations correctly cross 7/8, 127/128, 255/256, and 383/384;
   - sequence preservation uses the decoded Jupiter sequence, not blocks 1..4.
-- [ ] Update `FakeRidesPm3Api` and test builders so they construct arbitrary generalized sequences without depending on family APIs.
-- [ ] Add CLI tests for all Jupiter hardware points and range boundaries.
-- [ ] Confirm identity independence in tests: a token with non-EBFE identity blocks but valid Jupiter blocks 5/6 must still read/set/add as Jupiter.
+- [x] Update `FakeRidesPm3Api` and test builders so they construct arbitrary generalized sequences without depending on family APIs.
+- [x] Add CLI tests for all Jupiter hardware points and range boundaries.
+- [x] Confirm identity independence in tests: a token with non-EBFE identity blocks but valid Jupiter blocks 5/6 must still read/set/add as Jupiter.
 
 ## Agent notes / assumptions
 
@@ -388,23 +389,23 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Verify `RideCaptureCli` decode-first behavior uses the generalized production decoder.
-- [ ] Register the EBFE identity as known Jupiter identity so captures do not emit `UNKNOWN_TOKEN` for the canonical fob.
-- [ ] Remove or explicitly supersede this incorrect historical seed:
+- [x] Verify `RideCaptureCli` decode-first behavior uses the generalized production decoder.
+- [x] Register the EBFE identity as known Jupiter identity so captures do not emit `UNKNOWN_TOKEN` for the canonical fob.
+- [x] Remove or explicitly supersede this incorrect historical seed:
 
   ```text
   EBFE002A-F100CC5B-A5045936-A5045936 / 8C134C84 / starting 262
   ```
 
   The generalized model decodes `8C134C84` as 261. Do not preserve 262 merely for backward compatibility.
-- [ ] Add capture tests showing:
+- [x] Add capture tests showing:
   - `8C134C84` decodes as Jupiter 261;
   - trusted current points decode correctly;
   - existing CSV’s incorrect `real_ride_count` does not override generalized decoding;
   - candidate B/C remain unknown/unregistered;
   - canonical Jupiter identity is known.
-- [ ] Ensure sequence continuation/normalization logic still works when Jupiter high16 changes every eight-count band.
-- [ ] Do not add Candidates B/C to `TokenIdentityProfiles`, `EncodingSequences.All`, or reset profiles in this plan.
+- [x] Ensure sequence continuation/normalization logic still works when Jupiter high16 changes every eight-count band.
+- [x] Do not add Candidates B/C to `TokenIdentityProfiles`, `EncodingSequences.All`, or reset profiles in this plan.
 
 ## Agent notes / assumptions
 
@@ -417,19 +418,19 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Prove exact encode equivalence for Mercury/Venus/Earth/Pluto/Mars over every value 0..500 against the independent pre-refactor oracle from Phase 1.
-- [ ] Prove encode/decode round-trip for all six registered sequences over every value 0..500.
-- [ ] Prove no self/cross collisions over 0..500 and diagnostic 0..511.
-- [ ] Add malformed-block tests for each rotation:
+- [x] Prove exact encode equivalence for Mercury/Venus/Earth/Pluto/Mars over every value 0..500 against the independent pre-refactor oracle from Phase 1.
+- [x] Prove encode/decode round-trip for all six registered sequences over every value 0..500.
+- [x] Prove no self/cross collisions over 0..500 and diagnostic 0..511.
+- [x] Add malformed-block tests for each rotation:
   - incorrect duplicated high counter bit;
   - wrong F3 toggle;
   - wrong rotated payload;
   - out-of-range 501..511 at sequence/application layer;
   - random unknown block;
   - mirror mismatch with one/both valid.
-- [ ] Add tests showing B/C anchors are not decoded merely because they use rotation 0.
-- [ ] Remove all obsolete family/segment tests and replace them with behavior-oriented generalized tests.
-- [ ] Run `rg` for stale production assumptions and remove/update them:
+- [x] Add tests showing B/C anchors are not decoded merely because they use rotation 0.
+- [x] Remove all obsolete family/segment tests and replace them with behavior-oriented generalized tests.
+- [x] Run `rg` for stale production assumptions and remove/update them:
 
   ```text
   EncodingSequenceSegment
@@ -445,9 +446,9 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   EBFE seed 262
   ```
 
-- [ ] Update `debug/ride-encoding-hypothesis.py` to mirror final registered parameters and keep B/C as non-production hypotheses.
-- [ ] Update `debug/RideBlockGuessPrototype` only if it is an owned/tracked artifact in the executing agent’s checkout; otherwise document that it is superseded and leave unrelated untracked work untouched.
-- [ ] Update documentation:
+- [x] Update `debug/ride-encoding-hypothesis.py` to mirror final registered parameters and keep B/C as non-production hypotheses.
+- [x] Update `debug/RideBlockGuessPrototype` only if it is an owned/tracked artifact in the executing agent’s checkout; otherwise document that it is superseded and leave unrelated untracked work untouched.
+- [x] Update documentation:
   - generalized architecture and decode ambiguity rules;
   - Jupiter hardware evidence and production status;
   - B/C explicitly pending;
@@ -455,7 +456,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Agent notes / assumptions
 
-- Notes:
+- Notes: `RideCounterCodec` is the independent nine-bit counter codec; `EncodingSequence` owns `(zeroBlock, rotation, range)`, and `EncodingSequences.TryDecode` performs the sole registered full-structure match. Any non-match is intentionally reported as `UnknownEncodingFamily`: separating malformed from unknown would require reinstating a misleading high16 heuristic and would misclassify B/C anchors.
+- Notes: `debug/RideBlockGuessPrototype/.idea/` remains untouched because it is untracked and unrelated; the tracked Python hypothesis tool is the superseding artifact.
 - Assumptions:
 
 ---
@@ -511,7 +513,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] Run targeted suites:
+- [x] Run targeted suites:
 
   ```bash
   dotnet test Tokens.Tests --no-restore
@@ -519,21 +521,21 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   dotnet test RideCaptureCli.Tests --no-restore
   ```
 
-- [ ] Run the complete non-integration suite:
+- [x] Run the complete non-integration suite:
 
   ```bash
   dotnet test ElevatorTokens.sln --no-restore --filter 'Category!=Integration&Category!=IntegrationParity'
   ```
 
-- [ ] Run the independent exploration/collision oracle:
+- [x] Run the independent exploration/collision oracle:
 
   ```bash
   python3 debug/ride-encoding-hypothesis.py
   ```
 
-- [ ] Run `git diff --check` and inspect `git status --short --branch`.
-- [ ] Confirm no unrelated files were deleted, formatted, staged, or committed.
-- [ ] Summarize in Agent notes:
+- [x] Run `git diff --check` and inspect `git status --short --branch`.
+- [x] Confirm no unrelated files were deleted, formatted, staged, or committed.
+- [x] Summarize in Agent notes:
   - final type/API design;
   - removed family/segment APIs;
   - exact registered parameters;
@@ -541,12 +543,14 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   - collision results;
   - Jupiter reset hardware result;
   - any remaining risks or follow-ups.
-- [ ] Commit the final plan update with the final code/test/documentation chunk.
-- [ ] Hand off to the reviewing agent/user; do not register Candidates B/C as part of cleanup.
+- [x] Commit the final plan update with the final code/test/documentation chunk.
+- [x] Hand off to the reviewing agent/user; do not register Candidates B/C as part of cleanup.
 
 ## Agent notes / assumptions
 
-- Notes:
+- Notes: Final implementation uses `RideCounterCodec`, direct `EncodingSequence(zeroBlock, rotation, minRides, maxRides)`, and exhaustive registered structural matching. Removed family/segment APIs and high16 registry lookup. Registered parameters are Mercury `CCC749CC/4`, Venus `48C74948/4`, Earth `18121218/4`, Pluto `1F12121F/4`, Mars `4EC7494E/4`, and Jupiter `8C124980/0`, all `0..500`.
+- Notes: Final targeted results: Tokens 63, RidesCli 99, RideCaptureCli 27 passed. Full non-integration suite also passed (Pm3Usb 120 passed/1 skipped; TokenDumps has no matching filtered tests). The oracle passed 29 observations and collision checks for eight hypotheses over `0..500` and `0..511`.
+- Notes: Jupiter reset remains intentionally unavailable pending the hardware `8C124881 -> 8C124980` confirmation. Candidates B/C remain unregistered. No unrelated debug paths were touched.
 - Assumptions:
 
 ---

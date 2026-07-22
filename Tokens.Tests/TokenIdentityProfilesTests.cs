@@ -24,6 +24,10 @@ public class TokenIdentityProfilesTests
 
         Assert.That(TokenIdentityProfiles.Mars.RideSequence, Is.EqualTo(EncodingSequences.Mars));
         Assert.That(TokenIdentityProfiles.Mars.TokenId, Is.EqualTo("C3FE0031-20C60722-B6D14924-B6D14924"));
+
+        Assert.That(TokenIdentityProfiles.Jupiter.RideSequence, Is.EqualTo(EncodingSequences.Jupiter));
+        Assert.That(TokenIdentityProfiles.Jupiter.TokenId, Is.EqualTo("EBFE002A-F100CC5B-A5045936-A5045936"));
+        Assert.That(TokenIdentityProfiles.Jupiter.CanReset, Is.False);
     }
 
     [Test]
@@ -72,6 +76,9 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("pluto", out var pluto), Is.True);
         Assert.That(pluto, Is.EqualTo(TokenIdentityProfiles.Pluto));
 
+        Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("JUPITER", out var jupiter), Is.True);
+        Assert.That(jupiter, Is.EqualTo(TokenIdentityProfiles.Jupiter));
+
         Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("neptune", out _), Is.False);
     }
 
@@ -100,5 +107,6 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Mars));
         Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.Venus21Ff));
         Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.EarthA457));
+        Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.Jupiter));
     }
 }

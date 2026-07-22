@@ -49,6 +49,12 @@ public static class TokenIdentityProfiles
         "C3FE0031-20C60722-B6D14924-B6D14924",
         "mars-0-rides.bin");
 
+    // Recognition only: reset support is gated on the pending hardware 1 -> 0 confirmation.
+    public static readonly TokenIdentityProfile Jupiter = Create(
+        "jupiter",
+        EncodingSequences.Jupiter,
+        "EBFE002A-F100CC5B-A5045936-A5045936");
+
     public static readonly TokenIdentityProfile Venus21Ff = Create(
         "venus21ff",
         EncodingSequences.Venus,
@@ -60,7 +66,7 @@ public static class TokenIdentityProfiles
         "D3FE005D-A4578D3A-650432F5-650432F5");
 
     public static IReadOnlyList<TokenIdentityProfile> All { get; } =
-        [Mercury, Venus, Earth, Pluto, Mars, Venus21Ff, EarthA457];
+        [Mercury, Venus, Earth, Pluto, Mars, Jupiter, Venus21Ff, EarthA457];
 
     public static IReadOnlyList<TokenIdentityProfile> Resettable { get; } =
         All.Where(profile => profile.CanReset).ToArray();

@@ -34,27 +34,18 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
     public List<uint> WrittenBlocks { get; } = [];
     public Dictionary<uint, int> RemainingWriteFailuresByBlock { get; } = new();
 
-    public static FakeRidesPm3Api WithRidesEncodedByFamily(uint rides, TokenBlockUtils.Family family)
-    {
-        var blocks = CreatePage0Blocks(0);
-        var encoded = TokenBlockUtils.EncodeByFamily(rides, family);
-        blocks[5] = encoded;
-        blocks[6] = encoded;
-        return new FakeRidesPm3Api(new T55xxImage(blocks));
-    }
-
     public static FakeRidesPm3Api WithSequenceRides(EncodingSequence sequence, uint rides)
     {
-        if (!TokenIdentityProfiles.TryGetByFriendlyName(sequence.FriendlyName, out var profile)
-            || profile is null
-            || !profile.CanReset)
+        ArgumentNullException.ThrowIfNull(sequence);
+        var blocks = CreatePage0Blocks(0);
+        if (TokenIdentityProfiles.TryGetByFriendlyName(sequence.FriendlyName, out var profile) && profile is not null)
         {
-            throw new ArgumentException(
-                $"No resettable identity profile is registered for ride sequence '{sequence.FriendlyName}'.",
-                nameof(sequence));
+            blocks[1] = profile.Block1;
+            blocks[2] = profile.Block2;
+            blocks[3] = profile.Block3;
+            blocks[4] = profile.Block4;
         }
 
-        var blocks = ResetPage0BlocksLoader.Load(profile);
         var encoded = sequence.Encode(rides);
         blocks[5] = encoded;
         blocks[6] = encoded;

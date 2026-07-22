@@ -1,221 +1,134 @@
 namespace Tokens;
 
-/// <summary>
-/// Canonical family instances. <see cref="EncodingSequences"/> is the source of truth for which families are registered.
-/// </summary>
-internal static class EncodingFamilyDefinitions
-{
-    internal static readonly TokenBlockUtils.Family Mercury0To127 = new(0xCCC7, 0x0000, 0);
-    internal static readonly TokenBlockUtils.Family Mercury128To255 = new(0x3FC7, 0x8008, 128);
-    internal static readonly TokenBlockUtils.Family Mercury256To383 = new(0xCCC6, 0x0010, 256);
-    internal static readonly TokenBlockUtils.Family Mercury384To500 = new(0x3FC6, 0x8018, 384);
-
-    // 43FE0062-5BA494A3-D6D1C733-D6D1C733 (Venus): captured 0..180, high range elevator-validated 2026-07-12
-    internal static readonly TokenBlockUtils.Family Venus0To127 = new(0x48C7, 0x0084, 0);
-    internal static readonly TokenBlockUtils.Family Venus128To255 = new(0xBBC7, 0x808C, 128);
-    internal static readonly TokenBlockUtils.Family Venus256To383 = new(0x48C6, 0x0094, 256);
-    internal static readonly TokenBlockUtils.Family Venus384To500 = new(0xBBC6, 0x809C, 384);
-
-    // D3FE005D-522BC69D-650432F5-650432F5 (Earth): low range captured 0..23;
-    // 128/255 boundaries validated 2026-07-12; corrected XOR-derived 256/384 boundaries validated 2026-07-21.
-    // The old 5BE4/DBEC high-family constants were produced by addition and were wrong. Constant-zero-block
-    // XOR composition gives 5BC4/DBCC and matches 256 -> 255 and 384 -> 383 elevator transitions.
-    internal static readonly TokenBlockUtils.Family Earth0To127 = new(0x1812, 0x5BD4, 0);
-    internal static readonly TokenBlockUtils.Family Earth128To255 = new(0xEB12, 0xDBDC, 128);
-    internal static readonly TokenBlockUtils.Family Earth256To383 = new(0x1813, 0x5BC4, 256);
-    internal static readonly TokenBlockUtils.Family Earth384To500 = new(0xEB13, 0xDBCC, 384);
-
-    // 83FE002A-F100C064-A3045930-A3045930 (Pluto): low range and corrected XOR-derived
-    // 256/384 boundaries elevator-validated 2026-07-21. Earlier addition-derived and minus-one
-    // 256+ candidates failed because they used the wrong high-family constants.
-    internal static readonly TokenBlockUtils.Family Pluto0To127 = new(0x1F12, 0x5BD3, 0);
-    internal static readonly TokenBlockUtils.Family Pluto128To255 = new(0xEC12, 0xDBDB, 128);
-    internal static readonly TokenBlockUtils.Family Pluto256To383 = new(0x1F13, 0x5BC3, 256);
-    internal static readonly TokenBlockUtils.Family Pluto384To500 = new(0xEC13, 0xDBCB, 384);
-
-    // C3FE0031-20C60722-B6D14924-B6D14924 (Mars): low range and family boundaries elevator-validated 2026-07-20.
-    internal static readonly TokenBlockUtils.Family Mars0To127 = new(0x4EC7, 0x0082, 0);
-    internal static readonly TokenBlockUtils.Family Mars128To255 = new(0xBDC7, 0x808A, 128);
-    internal static readonly TokenBlockUtils.Family Mars256To383 = new(0x4EC6, 0x0092, 256);
-    internal static readonly TokenBlockUtils.Family Mars384To500 = new(0xBDC6, 0x809A, 384);
-}
-
-/// <summary>
-/// A ride-count range within an <see cref="EncodingSequence"/>, mapped to one encoding family.
-/// </summary>
-public sealed record EncodingSequenceSegment(uint MinRides, uint MaxRides, TokenBlockUtils.Family Family)
-{
-    public bool Contains(uint ridesRemaining) =>
-        ridesRemaining >= MinRides && ridesRemaining <= MaxRides;
-}
-
-/// <summary>
-/// A token ride-count encoding sequence: one or more families that cover ride ranges
-/// and handle transitions between them (e.g. 0..127 and 128..255).
-/// </summary>
+/// <summary>A registered ride-count encoding defined by one zero block and counter layout.</summary>
 public sealed class EncodingSequence
 {
-    private readonly EncodingSequenceSegment[] _segments;
-
-    internal EncodingSequence(
-        string friendlyName,
-        params EncodingSequenceSegment[] segments)
+    public EncodingSequence(string friendlyName, T55Block zeroBlock, byte rotation, uint minRides, uint maxRides)
     {
         if (string.IsNullOrWhiteSpace(friendlyName))
             throw new ArgumentException("Friendly name is required.", nameof(friendlyName));
-        if (segments is null || segments.Length == 0)
-            throw new ArgumentException("At least one segment is required.", nameof(segments));
-
-        foreach (var segment in segments)
-        {
-            if (segment.MinRides > segment.MaxRides)
-            {
-                throw new ArgumentException(
-                    $"Segment min rides {segment.MinRides} exceeds max rides {segment.MaxRides}.",
-                    nameof(segments));
-            }
-        }
+        if (rotation > 7)
+            throw new ArgumentOutOfRangeException(nameof(rotation), rotation, "Rotation must be in [0, 7].");
+        if (minRides > maxRides)
+            throw new ArgumentException("Minimum rides cannot exceed maximum rides.", nameof(minRides));
+        if (maxRides > RideCounterCodec.MaxCounter)
+            throw new ArgumentOutOfRangeException(nameof(maxRides), maxRides, $"Maximum rides must be in [0, {RideCounterCodec.MaxCounter}].");
 
         FriendlyName = friendlyName.Trim().ToLowerInvariant();
-        _segments = segments;
-        MinRides = _segments.Min(segment => segment.MinRides);
-        MaxRides = _segments.Max(segment => segment.MaxRides);
+        ZeroBlock = zeroBlock;
+        Rotation = rotation;
+        MinRides = minRides;
+        MaxRides = maxRides;
     }
 
     public string FriendlyName { get; }
-
+    public T55Block ZeroBlock { get; }
+    public byte Rotation { get; }
     public uint MinRides { get; }
-
     public uint MaxRides { get; }
 
-    public IReadOnlyList<EncodingSequenceSegment> Segments => _segments;
-
-    public TokenBlockUtils.Family GetFamilyForRides(uint ridesRemaining)
+    public T55Block Encode(uint rides)
     {
-        foreach (var segment in _segments)
-        {
-            if (segment.Contains(ridesRemaining))
-            {
-                return segment.Family;
-            }
-        }
+        if (rides < MinRides || rides > MaxRides)
+            throw new ArgumentOutOfRangeException(nameof(rides), rides,
+                $"Rides remaining {rides} is out of range [{MinRides}, {MaxRides}] for encoding sequence '{FriendlyName}'.");
 
-        throw new ArgumentException(
-            $"Rides remaining {ridesRemaining} is out of range for encoding sequence '{FriendlyName}'");
+        return RideCounterCodec.Encode(ZeroBlock, Rotation, rides);
     }
 
-    public T55Block Encode(uint ridesRemaining) =>
-        TokenBlockUtils.EncodeByFamily(ridesRemaining, GetFamilyForRides(ridesRemaining));
-
-    internal IEnumerable<TokenBlockUtils.Family> EnumerateFamilies()
+    public bool TryDecode(T55Block block, out uint rides)
     {
-        foreach (var segment in _segments)
+        if (!RideCounterCodec.TryDecode(ZeroBlock, Rotation, block, out rides))
+            return false;
+
+        if (rides < MinRides || rides > MaxRides)
         {
-            yield return segment.Family;
+            rides = 0;
+            return false;
         }
+
+        return true;
     }
 }
 
 public static class EncodingSequences
 {
-    public static readonly EncodingSequence Mercury = new(
-        "mercury",
-        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mercury0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Mercury128To255),
-        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mercury256To383),
-        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Mercury384To500));
+    public static readonly EncodingSequence Mercury = new("mercury", new T55Block(0xCCC749CC), 4, 0, 500);
+    public static readonly EncodingSequence Venus = new("venus", new T55Block(0x48C74948), 4, 0, 500);
+    public static readonly EncodingSequence Earth = new("earth", new T55Block(0x18121218), 4, 0, 500);
+    public static readonly EncodingSequence Pluto = new("pluto", new T55Block(0x1F12121F), 4, 0, 500);
+    public static readonly EncodingSequence Mars = new("mars", new T55Block(0x4EC7494E), 4, 0, 500);
+    public static readonly EncodingSequence Jupiter = new("jupiter", new T55Block(0x8C124980), 0, 0, 500);
 
-    public static readonly EncodingSequence Venus = new(
-        "venus",
-        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Venus0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Venus128To255),
-        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Venus256To383),
-        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Venus384To500));
+    public static IReadOnlyList<EncodingSequence> All { get; } = BuildRegistry([Mercury, Venus, Earth, Pluto, Mars, Jupiter]);
 
-    public static readonly EncodingSequence Earth = new(
-        "earth",
-        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Earth0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255),
-        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Earth256To383),
-        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Earth384To500));
-
-    public static readonly EncodingSequence Pluto = new(
-        "pluto",
-        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Pluto0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Pluto128To255),
-        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Pluto256To383),
-        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Pluto384To500));
-
-    public static readonly EncodingSequence Mars = new(
-        "mars",
-        new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Mars0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Mars128To255),
-        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Mars256To383),
-        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Mars384To500));
-
-    public static IReadOnlyList<EncodingSequence> All { get; } = [Mercury, Venus, Earth, Pluto, Mars];
-
-    private static readonly Dictionary<uint, EncodingSequence> SequenceByHigh16 = BuildSequenceByHigh16();
-
-    private static Dictionary<uint, EncodingSequence> BuildSequenceByHigh16()
+    private static IReadOnlyList<EncodingSequence> BuildRegistry(IReadOnlyList<EncodingSequence> sequences)
     {
-        var map = new Dictionary<uint, EncodingSequence>();
-        foreach (var sequence in All)
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var blocks = new Dictionary<uint, (EncodingSequence Sequence, uint Rides)>();
+        foreach (var sequence in sequences)
         {
-            foreach (var family in sequence.EnumerateFamilies())
+            if (!names.Add(sequence.FriendlyName))
+                throw new InvalidOperationException($"Duplicate encoding sequence name '{sequence.FriendlyName}'.");
+
+            for (var rides = sequence.MinRides; rides <= sequence.MaxRides; rides++)
             {
-                map[family.High16] = sequence;
+                var block = sequence.Encode(rides).Value;
+                if (!blocks.TryAdd(block, (sequence, rides)))
+                {
+                    var other = blocks[block];
+                    throw new InvalidOperationException(
+                        $"Encoding collision: {sequence.FriendlyName}/{rides} and {other.Sequence.FriendlyName}/{other.Rides} encode as {block:X8}.");
+                }
             }
         }
 
-        return map;
+        return sequences;
     }
 
     public static bool TryGetByFriendlyName(string friendlyName, out EncodingSequence? sequence)
     {
         sequence = null;
         if (string.IsNullOrWhiteSpace(friendlyName))
-        {
             return false;
-        }
 
-        var normalized = friendlyName.Trim().ToLowerInvariant();
+        sequence = All.SingleOrDefault(candidate =>
+            string.Equals(candidate.FriendlyName, friendlyName.Trim(), StringComparison.OrdinalIgnoreCase));
+        return sequence is not null;
+    }
+
+    /// <summary>Matches a block against every registered sequence using complete structural validation.</summary>
+    public static bool TryDecode(T55Block block, out EncodingSequence? sequence, out uint rides)
+    {
+        sequence = null;
+        rides = 0;
         foreach (var candidate in All)
         {
-            if (candidate.FriendlyName == normalized)
-            {
-                sequence = candidate;
-                return true;
-            }
+            if (!candidate.TryDecode(block, out var candidateRides))
+                continue;
+
+            if (sequence is not null)
+                throw new InvalidOperationException($"Block {block.ToHex()} ambiguously matches '{sequence.FriendlyName}' and '{candidate.FriendlyName}'.");
+
+            sequence = candidate;
+            rides = candidateRides;
         }
 
-        return false;
+        return sequence is not null;
     }
 
-    public static bool TryGetSequenceFromBlock(T55Block block, out EncodingSequence? sequence)
-    {
-        uint high16 = block.Value >> 16;
-        if (SequenceByHigh16.TryGetValue(high16, out var found))
-        {
-            sequence = found;
-            return true;
-        }
+    public static bool TryGetSequenceFromBlock(T55Block block, out EncodingSequence? sequence) =>
+        TryDecode(block, out sequence, out _);
 
-        sequence = null;
-        return false;
-    }
 
     public static EncodingSequence GetSequenceFromBlock(T55Block block)
     {
         if (TryGetSequenceFromBlock(block, out var sequence) && sequence is not null)
-        {
             return sequence;
-        }
 
-        uint high16 = block.Value >> 16;
-        throw new ArgumentException($"Block {block.Value:X8} uses an unknown encoding sequence (high 16 {high16:X4})");
+        throw new ArgumentException($"Block {block.ToHex()} does not match a registered encoding sequence.", nameof(block));
     }
 
     public static string FormatKnownFriendlyNames() =>
-        string.Join(", ", All.Select(s => s.FriendlyName));
+        string.Join(", ", All.Select(sequence => sequence.FriendlyName));
 }

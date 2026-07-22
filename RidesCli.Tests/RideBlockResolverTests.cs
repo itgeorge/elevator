@@ -34,13 +34,13 @@ public class RideBlockResolverTests
     }
 
     [Test]
-    public void Resolve_matching_invalid_payload_returns_invalid()
+    public void Resolve_matching_malformed_payload_returns_unknown_without_high_word_guessing()
     {
         var block = new T55Block(0xCCC70000);
 
         var result = RideBlockResolver.Resolve(block, block);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.InvalidBlockFormat));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
         Assert.That(result.Rides, Is.Null);
         Assert.That(result.BlocksMatched, Is.True);
     }
@@ -103,14 +103,14 @@ public class RideBlockResolverTests
     }
 
     [Test]
-    public void Resolve_mismatch_neither_valid_known_family_returns_invalid()
+    public void Resolve_mismatch_neither_valid_block_returns_unknown()
     {
         var block5 = new T55Block(0xCCC70000);
         var block6 = new T55Block(0xCCC70001);
 
         var result = RideBlockResolver.Resolve(block5, block6);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.InvalidBlockFormat));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
     }
 
     [Test]
@@ -128,7 +128,7 @@ public class RideBlockResolverTests
     [Test]
     public void Resolve_matching_43fe_sequence_family_returns_rides()
     {
-        var block = TokenBlockUtils.EncodeByFamily(0, TokenBlockUtils.Families.Family48C7_0To127);
+        var block = EncodingSequences.Venus.Encode(0);
 
         var result = RideBlockResolver.Resolve(block, block);
 
@@ -191,13 +191,35 @@ public class RideBlockResolverTests
         Assert.That(result.BlocksMatched, Is.True);
     }
 
-    [Test]
-    public void Resolve_matching_rides_above_500_returns_invalid()
+    [TestCase(0x8C124980u, 0u)]
+    [TestCase(0x7F124188u, 8u)]
+    [TestCase(0x8C12C900u, 128u)]
+    [TestCase(0x8C134981u, 256u)]
+    [TestCase(0x8C13C901u, 384u)]
+    public void Resolve_matching_jupiter_blocks_returns_rides(uint blockValue, uint expectedRides)
     {
-        var block = TokenBlockUtils.EncodeByFamily(501, TokenBlockUtils.Families.Family384To500);
+        var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+    }
+
+    [TestCase(0x781266DFu)]
+    [TestCase(0x7A1222BBu)]
+    public void Resolve_candidate_b_and_c_anchors_as_unknown(uint blockValue)
+    {
+        var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+    }
+
+    [Test]
+    public void Resolve_matching_rides_above_500_returns_unknown()
+    {
+        var block = new T55Block(0x3FC6BC83);
 
         var result = RideBlockResolver.Resolve(block, block);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.InvalidBlockFormat));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
     }
 }

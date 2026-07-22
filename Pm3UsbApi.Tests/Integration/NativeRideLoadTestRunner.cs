@@ -141,7 +141,7 @@ public static class NativeRideLoadTestRunner
     {
         var hex = await pm3.ReadPage0BlockAsync(5, ct);
         var block = T55Block.FromHex(hex);
-        if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block, out _))
+        if (!EncodingSequences.TryGetSequenceFromBlock(block, out _))
             throw new InvalidOperationException($"Unknown encoding family in block 5: {block.ToHex()}");
         return TokenBlockUtils.Decode(block);
     }

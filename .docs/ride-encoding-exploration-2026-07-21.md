@@ -12,9 +12,9 @@ This document summarizes hardware exploration of unknown ride-encoding candidate
 
 ---
 
-## Encoding model (production)
+## Historical family model
 
-Registered sequences live in `Tokens/EncodingSequence.cs` and `Tokens/TokenBlockUtils.cs`.
+The family/segment formula below is retained only to explain pre-generalization captures. Production now uses the constant-zero-block generalized model documented in `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md`; `EncodingSequenceSegment`, family registries, and high16 lookup have been removed.
 
 ```text
 m      = rides - family.baseOffset
@@ -22,17 +22,7 @@ low16  = baseLow(m) XOR family.xor
 block  = family.high16 << 16 | low16
 ```
 
-`baseLow(m)` is implemented in `TokenBlockUtils.EncodeBaseLow16Only` / `DecodeFromBaseBlock`.
-
-A single trusted `(ride count, block5/6)` point can infer a **candidate** low family:
-
-```text
-high16 = block >> 16
-xor    = block.low16 XOR baseLow(knownRides)
-base   = 0
-```
-
-Treat inferred families as hypotheses until elevator-validated across multiple ride values.
+A single trusted `(ride count, block5/6)` point can still generate an exploration hypothesis, but production never infers a sequence from one arbitrary block. It requires an exact structural match against a registered `(zeroBlock, rotation, range)` sequence.
 
 ---
 
@@ -73,7 +63,9 @@ Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
 ---
 
-## Candidates B, C, D (not registered — capture in progress)
+## Candidates B/C pending; Candidate D superseded by Jupiter
+
+> **Current production status:** the later generalized codec registered Candidate D as **Jupiter** (`zeroBlock=8C124980`, rotation 0, range 0..500) and recognizes its canonical EBFE identity. Candidate B/C remain unregistered. Jupiter reset support remains gated on a pending hardware `1 -> 0` confirmation; this historical section records the evidence that led to the generalized model.
 
 All three share a visual pattern distinct from Pluto:
 

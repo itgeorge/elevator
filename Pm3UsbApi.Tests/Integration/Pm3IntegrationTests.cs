@@ -238,9 +238,9 @@ public class Pm3IntegrationTests
         var block5 = T55Block.FromHex(await pm3.ReadPage0BlockAsync(5));
         var block6 = T55Block.FromHex(await pm3.ReadPage0BlockAsync(6));
 
-        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _), Is.True,
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(block5, out _), Is.True,
             "Block 5 should use a known elevator encoding family.");
-        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(block6, out _), Is.True,
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(block6, out _), Is.True,
             "Block 6 should use a known elevator encoding family.");
 
         var rides5 = TokenBlockUtils.Decode(block5);
@@ -390,7 +390,7 @@ public class Pm3IntegrationTests
         }
 
         var ridesBlock = T55Block.FromHex(await pm3.ReadPage0BlockAsync(5));
-        Assert.That(TokenBlockUtils.Families.TryGetFamilyFromBlock(ridesBlock, out _), Is.True);
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(ridesBlock, out _), Is.True);
         Assert.That(TokenBlockUtils.Decode(ridesBlock), Is.InRange(0u, 500u));
 
         Assert.That(await pm3.IsConnectedAsync(), Is.True);

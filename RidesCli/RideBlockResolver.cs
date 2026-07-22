@@ -35,107 +35,41 @@ public static class RideBlockResolver
 
         if (valid5 && valid6)
         {
-            return new RideReadResult(
-                RideReadStatus.Success,
-                rides6,
-                block6,
-                6,
-                BlocksMatched: false,
-                WarningMessage: rides5 == rides6
+            return new RideReadResult(RideReadStatus.Success, rides6, block6, 6, false,
+                rides5 == rides6
                     ? "Warning: blocks 5 and 6 differ; using block 6."
                     : $"Warning: blocks 5 and 6 differ; using block 6 ({rides6} rides).");
         }
 
         if (valid5)
-        {
-            return new RideReadResult(
-                RideReadStatus.Success,
-                rides5,
-                block5,
-                5,
-                BlocksMatched: false,
-                WarningMessage: "Warning: blocks 5 and 6 differ; using block 5.");
-        }
+            return new RideReadResult(RideReadStatus.Success, rides5, block5, 5, false,
+                "Warning: blocks 5 and 6 differ; using block 5.");
 
         if (valid6)
-        {
-            return new RideReadResult(
-                RideReadStatus.Success,
-                rides6,
-                block6,
-                6,
-                BlocksMatched: false,
-                WarningMessage: "Warning: blocks 5 and 6 differ; using block 6.");
-        }
+            return new RideReadResult(RideReadStatus.Success, rides6, block6, 6, false,
+                "Warning: blocks 5 and 6 differ; using block 6.");
 
-        return ResolveFailure(block5, block6);
+        return Failure(block5, block6, blocksMatched: false);
     }
 
     private static RideReadResult ResolveMatching(T55Block block)
     {
-        if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block, out _))
-        {
-            return new RideReadResult(
-                RideReadStatus.UnknownEncodingFamily,
-                null,
-                block,
-                5,
-                BlocksMatched: true,
-                WarningMessage: null);
-        }
+        if (TryValidate(block, out var rides))
+            return new RideReadResult(RideReadStatus.Success, rides, block, 5, true, null);
 
-        if (!TryValidate(block, out var rides))
-        {
-            return new RideReadResult(
-                RideReadStatus.InvalidBlockFormat,
-                null,
-                block,
-                5,
-                BlocksMatched: true,
-                WarningMessage: null);
-        }
-
-        return new RideReadResult(
-            RideReadStatus.Success,
-            rides,
-            block,
-            5,
-            BlocksMatched: true,
-            WarningMessage: null);
+        return Failure(block, block, blocksMatched: true);
     }
 
-    private static RideReadResult ResolveFailure(T55Block block5, T55Block block6)
+    private static RideReadResult Failure(T55Block block5, T55Block block6, bool blocksMatched)
     {
-        var family5 = TokenBlockUtils.Families.TryGetFamilyFromBlock(block5, out _);
-        var family6 = TokenBlockUtils.Families.TryGetFamilyFromBlock(block6, out _);
-
-        if (!family5 || !family6)
-        {
-            return new RideReadResult(
-                RideReadStatus.UnknownEncodingFamily,
-                null,
-                block5,
-                5,
-                BlocksMatched: false,
-                WarningMessage: null);
-        }
-
-        return new RideReadResult(
-            RideReadStatus.InvalidBlockFormat,
-            null,
-            block5,
-            5,
-            BlocksMatched: false,
-            WarningMessage: null);
+        // A failed full registry match is unknown. Do not use visible high-word patterns to
+        // guess a family: unregistered rotation-0 candidates must remain unknown as well.
+        return new RideReadResult(RideReadStatus.UnknownEncodingFamily, null, block5, 5, blocksMatched, null);
     }
 
     internal static bool TryValidate(T55Block block, out uint rides)
     {
-        rides = 0;
-        if (!TokenBlockUtils.Families.TryGetFamilyFromBlock(block, out _))
-            return false;
-
-        if (!TokenBlockUtils.TryDecode(block, out rides))
+        if (!EncodingSequences.TryDecode(block, out _, out rides))
             return false;
 
         return rides <= MaxRides;

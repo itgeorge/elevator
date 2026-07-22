@@ -8,6 +8,12 @@ Reproduction tool:
 python3 debug/ride-encoding-hypothesis.py
 ```
 
+## Production status (post-generalization)
+
+Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`.
+
+Candidates B (`8B1249F0`, rotation 0) and C (`891249D0`, rotation 0) remain non-production hypotheses and their anchors intentionally decode as unknown. Jupiter identity recognition is enabled, but its reset image/profile remains disabled pending the hardware-confirmed `1 (8C124881) -> 0 (8C124980)` transition. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
+
 ## Main finding
 
 The production “base low16 + 128-value families” implementation is a local description of a much simpler 32-bit operation.
@@ -102,13 +108,13 @@ This immediately explains the observed B/C/D decrement. All three anchors have o
 
 The formula reproduces all currently implemented values in their confirmed ranges and all Mercury/Venus/Mars values through 500.
 
-### Rotation 0 — candidates
+### Rotation 0 — Jupiter and pending candidates
 
-| Candidate | Inferred zero block | Evidence |
+| Sequence/candidate | Inferred zero block | Evidence / production state |
 |---|---:|---|
-| B | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump |
-| C | `891249D0` | 107 anchor, 106 post-ride |
-| D | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states |
+| B | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; pending |
+| C | `891249D0` | 107 anchor, 106 post-ride; pending |
+| Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states; registered 0..500, reset gated |
 
 For rotation 0, candidate middle bytes make the count directly visible:
 

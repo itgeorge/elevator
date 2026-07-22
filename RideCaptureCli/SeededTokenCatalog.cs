@@ -13,7 +13,6 @@ public static class SeededTokenCatalog
         // observed ride-state matches the original capture state.
         new("D3FE005D-522BC69D-650432F5-650432F5", "18120569", "18120569", 24),
         new("43FE0062-5BA494A3-D6D1C733-D6D1C733", "BBC7FD03", "BBC7FD03", 181),
-        new("EBFE002A-F100CC5B-A5045936-A5045936", "8C134C84", "8C134C84", 262),
         new("C3FE0031-20C60722-B6D14924-B6D14924", "4EC747AE", "4EC747AE", 14),
     ];
 

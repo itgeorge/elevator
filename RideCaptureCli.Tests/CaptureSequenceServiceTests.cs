@@ -77,16 +77,28 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
-    public void First_seeded_undecoded_token_scan_uses_matching_seeded_state_count()
+    public void First_canonical_jupiter_scan_decodes_261_instead_of_the_stale_seed_count()
     {
         var service = new CaptureSequenceService();
         var scan = CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "8C134C84", "8C134C84");
 
         var result = service.ApplyScan([], scan);
 
-        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(262));
-        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(262));
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(261));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(261));
         Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void Jupiter_capture_continues_across_the_changing_high_word_boundary()
+    {
+        var service = new CaptureSequenceService();
+        var first = service.ApplyScan([], CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "8C12C900", "8C12C900"));
+        var second = service.ApplyScan(first.Records, CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "7F1236FF", "7F1236FF", timestamp: first.AddedRecord.TimestampAsDateTimeOffset().AddMinutes(1)));
+
+        Assert.That(first.AddedRecord.RealRideCount, Is.EqualTo(128));
+        Assert.That(second.AddedRecord.SequenceId, Is.EqualTo(first.AddedRecord.SequenceId));
+        Assert.That(second.AddedRecord.TrackedCount, Is.EqualTo(127));
     }
 
     [Test]
