@@ -204,9 +204,32 @@ public class RideBlockResolverTests
         Assert.That(result.Rides, Is.EqualTo(expectedRides));
     }
 
-    [TestCase(0x781266DFu)]
+    [TestCase(0x8B1249F0u, 0u)]
+    [TestCase(0x8B1248F1u, 1u)]
+    [TestCase(0x781241F8u, 8u)]
+    [TestCase(0x8B12C970u, 128u)]
+    [TestCase(0x8B1349F1u, 256u)]
+    [TestCase(0x8B13C971u, 384u)]
+    [TestCase(0x8B13BD05u, 500u)]
+    public void Resolve_matching_saturn_blocks_returns_rides(uint blockValue, uint expectedRides)
+    {
+        var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+    }
+
+    [TestCase(0x781266DFu, 47u)]
+    public void Resolve_saturn_anchor_blocks_returns_rides(uint blockValue, uint expectedRides)
+    {
+        var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+    }
+
     [TestCase(0x7A1222BBu)]
-    public void Resolve_candidate_b_and_c_anchors_as_unknown(uint blockValue)
+    public void Resolve_candidate_c_anchor_as_unknown(uint blockValue)
     {
         var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
 

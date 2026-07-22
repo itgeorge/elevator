@@ -10,9 +10,9 @@ python3 debug/ride-encoding-hypothesis.py
 
 ## Production status (post-generalization)
 
-Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`.
+Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`.
 
-Candidates B (`8B1249F0`, rotation 0) and C (`891249D0`, rotation 0) remain non-production hypotheses and their anchors intentionally decode as unknown. Jupiter reset/profile support was enabled after hardware confirmed the `1 (8C124881) -> 0 (8C124980)` transition on a 9BFE card with matching blocks 5/6. The same sacrificial card then passed `reset --profile jupiter`: blocks 1..4 became the canonical EBFE identity, blocks 5/6 stayed `8C124980`, `RidesCli read` reported `sequence: jupiter`, and blocks 0/7 remained unchanged. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
+Candidate C (`891249D0`, rotation 0) remains a non-production hypothesis and its anchors intentionally decode as unknown. Jupiter and Saturn reset/profile support are enabled after hardware confirmed their `1 -> 0` transitions; Saturn reset image `saturn-0-rides.bin` matches the confirmed zero blocks. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
 
 ## Main finding
 
@@ -108,11 +108,11 @@ This immediately explains the observed B/C/D decrement. All three anchors have o
 
 The formula reproduces all currently implemented values in their confirmed ranges and all Mercury/Venus/Mars values through 500.
 
-### Rotation 0 — Jupiter and pending candidates
+### Rotation 0 — Jupiter, Saturn, and pending Candidate C
 
 | Sequence/candidate | Inferred zero block | Evidence / production state |
 |---|---:|---|
-| B | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; pending |
+| Saturn (formerly Candidate B) | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; boundary tests 128/256/384/8 and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
 | C | `891249D0` | 107 anchor, 106 post-ride; pending |
 | Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states, confirmed 1 -> 0 transition; registered/resettable 0..500 |
 
@@ -126,7 +126,21 @@ rides = (h << 8) | r
 
 This decodes the trusted anchors as 47, 107, and 57.
 
-### Independent confirmation for Candidate B
+### Saturn hardware validation (2026-07-22)
+
+Boundary transitions were validated on sacrificial tokens with EBFE/Jupiter identity blocks (blocks 1..4 are not ride-encoding inputs). Blocks 5 and 6 matched in each confirmed post-ride read:
+
+```text
+128 8B12C970 -> 127 7812368F  (card)
+256 8B1349F1 -> 255 7812B60F  (fob)
+384 8B13C971 -> 383 7813368E  (card, one ride)
+  8 781241F8 ->   7 8B124EF7  (fob)
+  1 8B1248F1 ->   0 8B1249F0  (card)
+```
+
+The `1 -> 0` transition confirms the Saturn zero block and reset image. Earlier synthesized Candidate-B values from the obsolete family formula are superseded by the generalized rotation-0 predictions above.
+
+### Independent confirmation for Saturn (formerly Candidate B)
 
 The unlabeled dump:
 
@@ -142,7 +156,7 @@ rides    = 130
 zero     = 8B1249F0
 ```
 
-That is exactly the same zero block inferred from B's trusted 47 anchor. Testing all rotations 0..7 against both points selects **rotation 0 uniquely**. Independently, each observed anchor/post-ride pair for B, C, and D also selects only rotation 0. This is strong evidence that blocks 1..4 are not inputs to this ride sequence.
+That is exactly the same zero block inferred from Saturn's trusted 47 anchor. Testing all rotations 0..7 against both points selects **rotation 0 uniquely**. Independently, each observed anchor/post-ride pair for Saturn, C, and Jupiter also selects only rotation 0. This is strong evidence that blocks 1..4 are not inputs to this ride sequence.
 
 ### Historical Candidate-D capture is structured, not random
 
@@ -202,28 +216,26 @@ Blocks 5 and 6 matched in both post-ride reads. Pluto is therefore registered th
 
 The current `baseLow XOR inferred-xor` synthesized values use rotation 4 and are expected to fail for rotation-0 candidates. Correct predictions include:
 
-| Candidate | 0 | 1 | 128 | 255 | 256 | 500 |
+| Candidate / sequence | 0 | 1 | 128 | 255 | 256 | 500 |
 |---|---:|---:|---:|---:|---:|---:|
-| B | `8B1249F0` | `8B1248F1` | `8B12C970` | `7812B60F` | `8B1349F1` | `8B13BD05` |
-| C | `891249D0` | `891248D1` | `8912C950` | `7A12B62F` | `891349D1` | `8913BD25` |
-| D | `8C124980` | `8C124881` | `8C12C900` | `7F12B67F` | `8C134981` | `8C13BD75` |
+| Saturn (registered) | `8B1249F0` | `8B1248F1` | `8B12C970` | `7812B60F` | `8B1349F1` | `8B13BD05` |
+| C (pending) | `891249D0` | `891248D1` | `8912C950` | `7A12B62F` | `891349D1` | `8913BD25` |
+| Jupiter (registered) | `8C124980` | `8C124881` | `8C12C900` | `7F12B67F` | `8C134981` | `8C13BD75` |
 
-Notably, Candidate B's predicted 130 block is `8B12CB72`, exactly matching the independent unlabeled dump. Candidate D's predicted 256/255 blocks exactly match the historical EBFE states.
+Notably, Saturn's predicted 130 block is `8B12CB72`, exactly matching the independent unlabeled dump. Jupiter's predicted 256/255 blocks exactly match the historical EBFE states.
 
-Recommended lowest-risk candidate boundary tests are the corrected 128 values, followed by one ride:
+Saturn boundary tests listed above are hardware-validated. Remaining open work for Candidate C:
 
 ```text
-B: 128 8B12C970 -> expected 127 7812368F
 C: 128 8912C950 -> expected 127 7A1236AF
-D: 128 8C12C900 -> expected 127 7F1236FF
 ```
 
 ## Collision results
 
 `debug/ride-encoding-hypothesis.py` checks:
 
-- all five registered rotation-4 sequences,
-- all three inferred rotation-0 candidates,
+- all seven registered sequences (five rotation-4 plus Jupiter and Saturn),
+- the pending Candidate C hypothesis,
 - every value 0..500,
 - and the complete 9-bit range 0..511.
 
@@ -272,13 +284,15 @@ Blocks 5/6 are sufficient once the sequence parameters are known. Current eviden
 High confidence:
 
 - rotation 4 exactly replaces all registered family arithmetic;
-- rotation 0 exactly explains every trusted B/C/D anchor and post-ride;
-- B's separate `8B12CB72` dump and D's historical data independently corroborate rotation 0;
+- rotation 0 exactly explains every trusted Saturn/C/Jupiter anchor and post-ride;
+- Saturn's separate `8B12CB72` dump and Jupiter's historical data independently corroborate rotation 0;
+- Saturn boundary transitions and `1 -> 0` are hardware-validated; reset image is known;
 - previous Earth/Pluto 256+ tests did not test the constant-zero-block XOR predictions.
 
 Still hypotheses:
 
 - corrected Earth and Pluto high ranges have boundary hardware validation; interior 256+ values are extrapolated by the same verified family rule;
-- synthesized B/C/D values other than captured points need hardware validation;
+- synthesized Candidate C values other than captured points need hardware validation;
+- Saturn hardware reset smoke test on a sacrificial token is pending before final reset handoff;
 - rotations 1,2,3,5,6,7 are mathematically natural but currently have no identified captures;
 - the rule by which an elevator decides that a `(zeroBlock, rotation)` is an allowed sequence is unknown.

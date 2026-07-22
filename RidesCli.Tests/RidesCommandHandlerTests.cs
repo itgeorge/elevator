@@ -179,6 +179,42 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_saturn_profile_writes_canonical_identity_blocks_and_zero_ride_encoding()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--profile", "saturn"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(0));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(7));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("23FE007B"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("D88CBD8A"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("5D04593D"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("5D04593D"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("8B1249F0"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("8B1249F0"));
+    }
+
+    [Test]
+    public void Reset_saturn_sequence_alias_uses_the_resettable_profile()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "saturn"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("23FE007B"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("8B1249F0"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("8B1249F0"));
+    }
+
+    [Test]
     public void Reset_without_read_prompts_and_writes_default_image_with_zero_rides()
     {
         var output = new StringBuilderRidesOutput();
@@ -1223,6 +1259,50 @@ public class RidesCommandHandlerTests
             handler.Execute(["add", added.ToString()]);
             Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Jupiter.Encode(expected).ToHex()), $"{start} + {added}");
             Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Jupiter.Encode(expected).ToHex()), $"{start} + {added}");
+        }
+    }
+
+    [Test]
+    public void Saturn_blocks_are_recognized_without_the_canonical_identity_and_read_reports_saturn_sequence()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithBlocks5And6(EncodingSequences.Saturn.Encode(47), EncodingSequences.Saturn.Encode(47));
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+
+        handler.Execute(["read"]);
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 47"));
+        Assert.That(output.Lines, Has.Some.EqualTo("sequence: saturn"));
+    }
+
+    [Test]
+    public void Saturn_set_preserves_saturn_encoding_after_writes()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithBlocks5And6(EncodingSequences.Saturn.Encode(127), EncodingSequences.Saturn.Encode(127));
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["set", "128"]);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("8B12C970"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("8B12C970"));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Jupiter.Encode(128).ToHex()));
+    }
+
+    [Test]
+    public void Saturn_add_crosses_observed_counter_boundaries()
+    {
+        foreach (var (start, added, expected) in new[]
+                 {
+                     (127u, 1, 128u), (255u, 1, 256u), (383u, 1, 384u),
+                 })
+        {
+            var output = new StringBuilderRidesOutput();
+            var pm3 = FakeRidesPm3Api.WithBlocks5And6(EncodingSequences.Saturn.Encode(start), EncodingSequences.Saturn.Encode(start));
+            var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+            handler.Execute(["read"]);
+            handler.Execute(["add", added.ToString()]);
+            Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Saturn.Encode(expected).ToHex()), $"{start} + {added}");
+            Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Saturn.Encode(expected).ToHex()), $"{start} + {added}");
         }
     }
 

@@ -63,10 +63,9 @@ SEQUENCES = (
     SequenceHypothesis("mars", 0x4EC7494E, 4),
     SequenceHypothesis("earth", 0x18121218, 4),
     SequenceHypothesis("pluto", 0x1F12121F, 4),
-    SequenceHypothesis("candidate-b", 0x8B1249F0, 0),
-    SequenceHypothesis("candidate-c", 0x891249D0, 0),
-    # Jupiter is registered; B/C remain non-production hypotheses.
     SequenceHypothesis("jupiter", 0x8C124980, 0),
+    SequenceHypothesis("saturn", 0x8B1249F0, 0),
+    SequenceHypothesis("candidate-c", 0x891249D0, 0),
 )
 
 # Earth and Pluto are hardware-validated through the corrected 256/384 boundaries.
@@ -139,10 +138,19 @@ OBSERVATIONS = (
     ("pluto 256 validated start", "pluto", 256, 0x1F13120F),
     ("pluto 383 validated post-ride", "pluto", 383, 0x1F136DF8),
     ("pluto 384 validated start", "pluto", 384, 0xEC139207),
-    ("candidate B anchor", "candidate-b", 47, 0x781266DF),
-    ("candidate B decrement", "candidate-b", 46, 0x781267DE),
-    # Different blocks 1..4, but the same inferred B sequence/base.
-    ("candidate B independent dump", "candidate-b", 130, 0x8B12CB72),
+    ("saturn anchor", "saturn", 47, 0x781266DF),
+    ("saturn decrement", "saturn", 46, 0x781267DE),
+    ("saturn independent dump", "saturn", 130, 0x8B12CB72),
+    ("saturn 128 boundary", "saturn", 128, 0x8B12C970),
+    ("saturn 127 post-ride", "saturn", 127, 0x7812368F),
+    ("saturn 256 boundary", "saturn", 256, 0x8B1349F1),
+    ("saturn 255 post-ride", "saturn", 255, 0x7812B60F),
+    ("saturn 384 boundary", "saturn", 384, 0x8B13C971),
+    ("saturn 383 post-ride", "saturn", 383, 0x7813368E),
+    ("saturn 8 boundary", "saturn", 8, 0x781241F8),
+    ("saturn 7 post-ride", "saturn", 7, 0x8B124EF7),
+    ("saturn 1 pre-zero", "saturn", 1, 0x8B1248F1),
+    ("saturn zero", "saturn", 0, 0x8B1249F0),
     ("candidate C anchor", "candidate-c", 107, 0x7A1222BB),
     ("candidate C decrement", "candidate-c", 106, 0x7A1223BA),
     ("jupiter anchor", "jupiter", 57, 0x7F1270B9),
@@ -186,8 +194,8 @@ def assert_observations() -> None:
 def assert_candidate_rotations() -> None:
     """Independent points select rotation 0 uniquely among rotations 0..7."""
     point_sets = {
-        "candidate B anchor/independent dump": ((47, 0x781266DF), (130, 0x8B12CB72)),
-        "candidate B decrement": ((47, 0x781266DF), (46, 0x781267DE)),
+        "saturn anchor/independent dump": ((47, 0x781266DF), (130, 0x8B12CB72)),
+        "saturn decrement": ((47, 0x781266DF), (46, 0x781267DE)),
         "candidate C decrement": ((107, 0x7A1222BB), (106, 0x7A1223BA)),
         "jupiter decrement": ((57, 0x7F1270B9), (56, 0x7F1271B8)),
     }
@@ -244,7 +252,7 @@ def main() -> None:
     for name in (
         "earth",
         "pluto",
-        "candidate-b",
+        "saturn",
         "candidate-c",
         "jupiter",
     ):

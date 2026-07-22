@@ -17,6 +17,7 @@ public class TokenBlockUtilsTest
         (EncodingSequences.Pluto, 0x1F12121F, 4),
         (EncodingSequences.Mars, 0x4EC7494E, 4),
         (EncodingSequences.Jupiter, 0x8C124980, 0),
+        (EncodingSequences.Saturn, 0x8B1249F0, 0),
     ];
 
     [Test]
@@ -93,6 +94,28 @@ public class TokenBlockUtilsTest
         Assert.That(decoded, Is.EqualTo(rides));
     }
 
+    [TestCase(0u, 0x8B1249F0u)]
+    [TestCase(1u, 0x8B1248F1u)]
+    [TestCase(7u, 0x8B124EF7u)]
+    [TestCase(8u, 0x781241F8u)]
+    [TestCase(46u, 0x781267DEu)]
+    [TestCase(47u, 0x781266DFu)]
+    [TestCase(127u, 0x7812368Fu)]
+    [TestCase(128u, 0x8B12C970u)]
+    [TestCase(130u, 0x8B12CB72u)]
+    [TestCase(255u, 0x7812B60Fu)]
+    [TestCase(256u, 0x8B1349F1u)]
+    [TestCase(383u, 0x7813368Eu)]
+    [TestCase(384u, 0x8B13C971u)]
+    [TestCase(500u, 0x8B13BD05u)]
+    public void Saturn_hardware_observations_are_encoded_and_decoded(uint rides, uint block)
+    {
+        Assert.That(EncodingSequences.Saturn.Encode(rides).Value, Is.EqualTo(block));
+        Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Saturn));
+        Assert.That(decoded, Is.EqualTo(rides));
+    }
+
     [Test]
     public void Registered_sequences_round_trip_and_have_no_collisions_through_counter_limit()
     {
@@ -134,22 +157,21 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void Candidate_b_and_c_are_collision_free_but_unregistered()
+    public void Candidate_c_remains_collision_free_but_unregistered()
     {
         var registered = new HashSet<uint>(Registered.SelectMany(sequence => Enumerable.Range(0, 501)
             .Select(rides => sequence.Sequence.Encode((uint)rides).Value)));
-        foreach (var (zero, anchor) in new[] { (0x8B1249F0u, 0x781266DFu), (0x891249D0u, 0x7A1222BBu) })
+        const uint zero = 0x891249D0u;
+        const uint anchor = 0x7A1222BBu;
+        var candidate = new HashSet<uint>();
+        for (uint rides = 0; rides <= 500; rides++)
         {
-            var candidate = new HashSet<uint>();
-            for (uint rides = 0; rides <= 500; rides++)
-            {
-                var block = EncodeCounter(zero, 0, rides);
-                Assert.That(candidate.Add(block), Is.True);
-                Assert.That(registered.Contains(block), Is.False);
-            }
-            Assert.That(TokenBlockUtils.TryDecode(new T55Block(anchor), out _), Is.False);
-            Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(anchor), out _), Is.False);
+            var block = EncodeCounter(zero, 0, rides);
+            Assert.That(candidate.Add(block), Is.True);
+            Assert.That(registered.Contains(block), Is.False);
         }
+        Assert.That(TokenBlockUtils.TryDecode(new T55Block(anchor), out _), Is.False);
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(anchor), out _), Is.False);
     }
 
     [Test]

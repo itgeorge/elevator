@@ -2,7 +2,9 @@
 
 This document summarizes hardware exploration of unknown ride-encoding candidates from recent `RidesCli` dumps, what was registered in production code, and open questions for follow-up investigation.
 
-**Audience:** a new agent investigating the general encoding algorithm from known families and dumps, while the hardware team continues capture work on candidates B/C/D.
+**Audience:** a new agent investigating the general encoding algorithm from known families and dumps, while the hardware team continues capture work on Candidate C.
+
+> **Update 2026-07-22:** Candidate B is now registered as **Saturn** (`zeroBlock=8B1249F0`, rotation 0, range 0..500) with canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`. Boundary transitions and `1 -> 0` were hardware-validated; reset image `saturn-0-rides.bin` is implemented. Candidate C remains pending.
 
 > **Update later on 2026-07-21:** the generalized constant-zero-block XOR algorithm in
 > `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md` identified corrected Earth high values.
@@ -35,6 +37,8 @@ A single trusted `(ride count, block5/6)` point can still generate an exploratio
 | Mars | 0..500 | 4EC7/0082, BDC7/808A, 4EC6/0092, BDC6/809A | C3FE0031-… | XOR-step 256+ validated |
 | Earth | 0..500 | 1812/5BD4, EB12/DBDC, 1813/5BC4, EB13/DBCC | D3FE005D-… | Corrected XOR-derived 256/384 boundaries validated |
 | **Pluto** | **0..500** | **1F12/5BD3, EC12/DBDB, 1F13/5BC3, EC13/DBCB** | **83FE002A-F100C064-A3045930-A3045930** | Corrected 256/384 boundaries validated |
+| **Jupiter** | **0..500** | **rotation 0, zeroBlock 8C124980** | **EBFE002A-F100CC5B-A5045936-A5045936** | Candidate D registered; reset enabled |
+| **Saturn** | **0..500** | **rotation 0, zeroBlock 8B1249F0** | **23FE007B-D88CBD8A-5D04593D-5D04593D** | Candidate B registered; reset enabled |
 
 Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
@@ -63,45 +67,34 @@ Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
 ---
 
-## Candidates B/C pending; Candidate D superseded by Jupiter
+## Candidate B → Saturn (registered)
 
-> **Current production status:** the later generalized codec registered Candidate D as **Jupiter** (`zeroBlock=8C124980`, rotation 0, range 0..500) and recognizes its canonical EBFE identity. Candidate B/C remain unregistered. Jupiter reset support remains gated on a pending hardware `1 -> 0` confirmation; this historical section records the evidence that led to the generalized model.
-
-All three share a visual pattern distinct from Pluto:
-
-- `high16` low byte is **`12`** (e.g. `7812`, `7A12`, `7F12`) — same *shape* as Earth/Pluto `xx12` families
-- `xor` is **tiny** (`00E1`, `00C1`, `00E6`) — Mars/Venus-*like*, not Earth-like (`5BDx`)
-- **Captured anchor blocks work** on the elevator
-- **Model-synthesized** values at rides 1 and 128 are **rejected**
-- **Second-family guesses** (Earth-style `high16 ^ F300`, `xor + 8008`) are **rejected**
-- Post-ride blocks follow a **`low16 += 0xFF`** decrement rule, **not** the production `baseLow` step
-
-### Candidate B — 23FE
+> **Current production status:** Candidate B is registered as **Saturn** with `zeroBlock=8B1249F0`, rotation 0, range 0..500. Candidate C remains unregistered. Jupiter (formerly Candidate D) was registered earlier.
 
 | Item | Value |
 |------|-------|
 | Profile | `23FE007B-D88CBD8A-5D04593D-5D04593D` |
 | Source dump | `…--rides-47.bin` |
 | Observed anchor | rides **47** → `781266DF` |
-| Inferred family | `7812/00E1` |
-| Predicted 128 (untested family) | `8B12/80E9` → `8B12C925` |
+| Zero block | `8B1249F0` |
+
+### Hardware validation
 
 | Test | Write | Post-ride | Result |
 |------|-------|-----------|--------|
-| Synthesized rides=1 | `7812483D` | unchanged | ❌ |
-| Synthesized rides=128 | `8B12C925` | unchanged | ❌ |
-| Captured rides=47 | `781266DF` | `781267DE` | ✅ Ride accepted (normal beep) |
+| Historical decrement | 47 `781266DF` | `781267DE` | ✅ |
+| Independent dump (130 rides) | `8B12CB72` | — | ✅ decodes structurally |
+| 128 boundary (card) | `8B12C970` | `7812368F` | ✅ blocks 5/6 matched |
+| 256 boundary (fob) | `8B1349F1` | `7812B60F` | ✅ blocks 5/6 matched |
+| 384 boundary (card) | `8B13C971` | `7813368E` | ✅ one ride, blocks 5/6 matched |
+| 8 boundary (fob) | `781241F8` | `8B124EF7` | ✅ blocks 5/6 matched |
+| Zero transition (card) | 1 `8B1248F1` | 0 `8B1249F0` | ✅ blocks 5/6 matched |
 
-Decrement analysis:
+Earlier synthesized values from the obsolete family formula (`7812483D` at rides=1, `8B12C925` at rides=128) are superseded by the generalized rotation-0 model.
 
-```text
-Predicted (model): 781266DF → 781267CF  (rides 47 → 46)
-Observed:          781266DF → 781267DE
-low16 step:        0x66DF → 0x67DE = +0xFF
-pred ⊕ obs (low16): 0x0011
-```
+Reset image: `RidesCli/Data/saturn-0-rides.bin`. Profile name: `saturn`.
 
-### Candidate C — FBFE
+## Candidate C — FBFE (pending)
 
 | Item | Value |
 |------|-------|
@@ -118,7 +111,9 @@ pred ⊕ obs (low16): 0x0011
 
 Decrement: `0x22BB → 0x23BA` (+`0xFF`); model predicted `7A1223AB`; pred ⊕ obs low16 = `0x0011`.
 
-### Candidate D — EBFE
+### Candidate D — EBFE (registered as Jupiter)
+
+See Jupiter in the registered sequences table above. Historical exploration notes:
 
 | Item | Value |
 |------|-------|

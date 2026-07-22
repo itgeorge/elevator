@@ -55,6 +55,12 @@ public static class TokenIdentityProfiles
         "EBFE002A-F100CC5B-A5045936-A5045936",
         "jupiter-0-rides.bin");
 
+    public static readonly TokenIdentityProfile Saturn = Create(
+        "saturn",
+        EncodingSequences.Saturn,
+        "23FE007B-D88CBD8A-5D04593D-5D04593D",
+        "saturn-0-rides.bin");
+
     public static readonly TokenIdentityProfile Venus21Ff = Create(
         "venus21ff",
         EncodingSequences.Venus,
@@ -66,7 +72,7 @@ public static class TokenIdentityProfiles
         "D3FE005D-A4578D3A-650432F5-650432F5");
 
     public static IReadOnlyList<TokenIdentityProfile> All { get; } =
-        [Mercury, Venus, Earth, Pluto, Mars, Jupiter, Venus21Ff, EarthA457];
+        [Mercury, Venus, Earth, Pluto, Mars, Jupiter, Saturn, Venus21Ff, EarthA457];
 
     public static IReadOnlyList<TokenIdentityProfile> Resettable { get; } =
         All.Where(profile => profile.CanReset).ToArray();

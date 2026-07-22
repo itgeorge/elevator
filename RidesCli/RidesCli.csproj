@@ -19,6 +19,7 @@
     <EmbeddedResource Include="Data\pluto-0-rides.bin" />
     <EmbeddedResource Include="Data\mars-0-rides.bin" />
     <EmbeddedResource Include="Data\jupiter-0-rides.bin" />
+    <EmbeddedResource Include="Data\saturn-0-rides.bin" />
   </ItemGroup>
 
 </Project>
