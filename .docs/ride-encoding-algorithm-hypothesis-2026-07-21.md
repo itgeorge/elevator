@@ -204,6 +204,52 @@ Correct mathematical rotation-4 predictions are:
 
 These differ from the previously rejected/tested values such as Earth `18131228` and Pluto `1F13922F`. Consequently, those hardware failures did **not** reject the generalized 256+ hypothesis.
 
+### Why the old visual alternatives reset to zero
+
+The old “decrement the visible prefix” alternatives behaved differently from the malformed addition-derived candidates:
+
+```text
+Earth intended 256: 18111228 -> Earth zero 18121218, low/double beep
+Earth intended 384: EB119220 -> Earth zero 18121218, low/double beep
+Pluto intended 256: 1F11122F -> Pluto zero 1F12121F, low/double beep
+```
+
+There is a clean structural explanation for why these values reached a processed low/zero path. Extend the generalized rotation-4 counter algebraically by letting `q = rides >> 8`, rather than restricting the production ninth-bit field to `h ∈ {0,1}`:
+
+```text
+r = rides & FF
+p = ROL8(r, 4) XOR ((q << 4) & FF)
+
+delta.byte0 = F3 if p.bit3 is set, otherwise 00
+delta.byte1 = q
+delta.byte2 = r
+delta.byte3 = p
+block = zeroBlock XOR delta
+```
+
+This extension is an analysis tool, not a supported production range. Relative to Earth zero `18121218`, the old visual alternatives are internally consistent extended codewords:
+
+| Intended count | Block | `block XOR zero` | Extended decode |
+|---:|---:|---:|---:|
+| 256 | `18111228` | `00030030` | `q=3, r=00` → 768 |
+| 384 | `EB119220` | `F3038038` | `q=3, r=80` → 896 |
+
+They encode exactly `intended + 512`, not 256 and 384. Pluto's old `1F11122F` has the same `00030030` delta from Pluto zero and therefore independently encodes the same extended value 768.
+
+By contrast, the rejected addition-derived Earth candidate `18131228` has delta `00010030`: `q=1, r=00` requires payload `10`, but the block contains `30`. It is structurally inconsistent and was left unchanged. This distinction suggests a generic elevator flow resembling:
+
+```text
+decode and validate redundant counter structure
+if structurally malformed:
+    reject/leave unchanged
+else if decoded count is outside the allowed domain:
+    signal low/invalid and write canonical zero
+else:
+    write encode(count - 1)
+```
+
+The zero rewrite is therefore not explained by ordinary decrement execution: decrementing the extended 768/896 values would produce other extended codewords, not zero. It is most likely generic range/invalid-value sanitization rather than an Earth-specific special case. A signed interpretation is also possible—`0x300` and `0x380` are -256 and -128 as signed 10-bit values—but existing observations cannot distinguish signed-negative clamping from an unsigned maximum-range check.
+
 ### Earth hardware validation (2026-07-21)
 
 Both corrected starts were accepted by the elevator and decremented exactly as predicted, despite using token identities unrelated to the original D3 Earth profile:
@@ -302,4 +348,5 @@ Still hypotheses:
 
 - corrected Earth and Pluto high ranges have boundary hardware validation; interior 256+ values are extrapolated by the same verified family rule;
 - rotations 1,2,3,5,6,7 are mathematically natural but currently have no identified captures;
+- the old Earth/Pluto visual alternatives are structurally consistent with extended counts 768/896, but whether the elevator treats them as unsigned out-of-range values or signed negative values is unknown;
 - the rule by which an elevator decides that a `(zeroBlock, rotation)` is an allowed sequence is unknown.

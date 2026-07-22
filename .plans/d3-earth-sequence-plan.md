@@ -367,6 +367,8 @@ Earth 384..500: high16 EB11, xor DBEC, base 384
 
 Hardware accepted/processed visual alternative `256` (`18111228`) and `384` (`EB119220`), but not as true high ride counts: instead of decrementing by one, the elevator treated them as low/empty, gave a low-rides double beep, and the token read back as Earth zero (`18121218`).
 
+Later generalized-algorithm analysis explains why these differed from the malformed candidates that stayed unchanged. Relative to Earth zero, their deltas are `00030030` and `F3038038`; under the natural algebraic extension where the counter-high field is not restricted to one bit, these are structurally consistent encodings of 768 and 896 (`intended + 512`). The zero rewrite therefore appears to be generic out-of-range/negative sanitization, not ordinary decrement behavior or an Earth-specific case. See “Why the old visual alternatives reset to zero” in `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md`.
+
 Historical conclusion (superseded 2026-07-21): no then-tested high-family extrapolation behaved as true `256+`. The tests had used addition-derived constants; corrected XOR-derived values subsequently validated.
 
 ---
