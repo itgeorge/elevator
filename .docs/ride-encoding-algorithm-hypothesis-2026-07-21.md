@@ -12,7 +12,7 @@ python3 debug/ride-encoding-hypothesis.py
 
 Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`.
 
-Candidates B (`8B1249F0`, rotation 0) and C (`891249D0`, rotation 0) remain non-production hypotheses and their anchors intentionally decode as unknown. Jupiter identity recognition is enabled, but its reset image/profile remains disabled pending the hardware-confirmed `1 (8C124881) -> 0 (8C124980)` transition. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
+Candidates B (`8B1249F0`, rotation 0) and C (`891249D0`, rotation 0) remain non-production hypotheses and their anchors intentionally decode as unknown. Jupiter reset/profile support was enabled after hardware confirmed the `1 (8C124881) -> 0 (8C124980)` transition on a 9BFE card with matching blocks 5/6. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
 
 ## Main finding
 
@@ -114,7 +114,7 @@ The formula reproduces all currently implemented values in their confirmed range
 |---|---:|---|
 | B | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; pending |
 | C | `891249D0` | 107 anchor, 106 post-ride; pending |
-| Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states; registered 0..500, reset gated |
+| Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states, confirmed 1 -> 0 transition; registered/resettable 0..500 |
 
 For rotation 0, candidate middle bytes make the count directly visible:
 

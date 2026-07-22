@@ -466,7 +466,7 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 
 ## Todos
 
-- [ ] **Block reset registration until the user reports the pending hardware test.** Confirm:
+- [x] **Block reset registration until the user reports the pending hardware test.** Confirm:
 
   ```text
   written 1: 8C124881
@@ -474,8 +474,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   blocks 5 and 6 must match
   ```
 
-- [ ] If the result differs, stop and update the model/plan before creating or registering a reset image.
-- [ ] If confirmed, create `RidesCli/Data/jupiter-0-rides.bin` as big-endian page-0 words:
+- [x] If the result differs, stop and update the model/plan before creating or registering a reset image.
+- [x] If confirmed, create `RidesCli/Data/jupiter-0-rides.bin` as big-endian page-0 words:
 
   ```text
   block0 00148040
@@ -488,8 +488,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   block7 00000000
   ```
 
-- [ ] Embed the reset image and make the canonical Jupiter identity profile resettable.
-- [ ] Add reset image parser/existence tests and `reset --profile jupiter` / compatibility alias tests.
+- [x] Embed the reset image and make the canonical Jupiter identity profile resettable.
+- [x] Add reset image parser/existence tests and `reset --profile jupiter` / compatibility alias tests.
 - [ ] Before any hardware reset, run read-only preflight and verify the intended sacrificial token.
 - [ ] Hardware-smoke-test Jupiter reset through the normal safe reset path:
 
@@ -499,12 +499,14 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   read -> sequence jupiter, rides 0
   ```
 
-- [ ] Verify reset never writes blocks 0 or 7 and rollback behavior remains covered by automated tests.
-- [ ] Record the final zero/reset evidence in this plan and `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md`.
+- [x] Verify reset never writes blocks 0 or 7 and rollback behavior remains covered by automated tests.
+- [x] Record the final zero/reset evidence in this plan and `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md`.
 
 ## Agent notes / assumptions
 
-- Notes:
+- Notes: User-reported elevator test was read back via read-only PM3 preflight: blocks 5/6 both matched expected Jupiter zero `8C124980`. The test token identity was `9BFE0062-5BA4A3DE-D5D1D713-D5D1D713`, confirming again that identity blocks are not ride-encoding input.
+- Notes: Created and embedded canonical EBFE Jupiter reset image. Automated tests cover reset image parsing/existence through all resettable profiles, `reset --profile jupiter`, the `--sequence jupiter` alias, and no writes to blocks 0/7. Validation passed: `Tokens.Tests` 63, `RidesCli.Tests` 101, and full non-integration suite.
+- Notes: Hardware reset smoke test is still pending explicit confirmation that the current physical card should be overwritten with the EBFE Jupiter reset identity.
 - Assumptions:
 
 ---

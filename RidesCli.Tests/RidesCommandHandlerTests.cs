@@ -143,6 +143,42 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_jupiter_profile_writes_ebfe_identity_blocks_and_zero_ride_encoding()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--profile", "jupiter"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(0));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(7));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("EBFE002A"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("F100CC5B"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("A5045936"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("A5045936"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("8C124980"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("8C124980"));
+    }
+
+    [Test]
+    public void Reset_jupiter_sequence_alias_uses_the_resettable_profile()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "jupiter"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("EBFE002A"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("8C124980"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("8C124980"));
+    }
+
+    [Test]
     public void Reset_without_read_prompts_and_writes_default_image_with_zero_rides()
     {
         var output = new StringBuilderRidesOutput();

@@ -49,11 +49,11 @@ public static class TokenIdentityProfiles
         "C3FE0031-20C60722-B6D14924-B6D14924",
         "mars-0-rides.bin");
 
-    // Recognition only: reset support is gated on the pending hardware 1 -> 0 confirmation.
     public static readonly TokenIdentityProfile Jupiter = Create(
         "jupiter",
         EncodingSequences.Jupiter,
-        "EBFE002A-F100CC5B-A5045936-A5045936");
+        "EBFE002A-F100CC5B-A5045936-A5045936",
+        "jupiter-0-rides.bin");
 
     public static readonly TokenIdentityProfile Venus21Ff = Create(
         "venus21ff",
