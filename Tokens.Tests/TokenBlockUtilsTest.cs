@@ -18,6 +18,7 @@ public class TokenBlockUtilsTest
         (EncodingSequences.Mars, 0x4EC7494E, 4),
         (EncodingSequences.Jupiter, 0x8C124980, 0),
         (EncodingSequences.Saturn, 0x8B1249F0, 0),
+        (EncodingSequences.Uranus, 0x891249D0, 0),
     ];
 
     [Test]
@@ -116,6 +117,27 @@ public class TokenBlockUtilsTest
         Assert.That(decoded, Is.EqualTo(rides));
     }
 
+    [TestCase(0u, 0x891249D0u)]
+    [TestCase(1u, 0x891248D1u)]
+    [TestCase(7u, 0x89124ED7u)]
+    [TestCase(8u, 0x7A1241D8u)]
+    [TestCase(106u, 0x7A1223BAu)]
+    [TestCase(107u, 0x7A1222BBu)]
+    [TestCase(127u, 0x7A1236AFu)]
+    [TestCase(128u, 0x8912C950u)]
+    [TestCase(255u, 0x7A12B62Fu)]
+    [TestCase(256u, 0x891349D1u)]
+    [TestCase(383u, 0x7A1336AEu)]
+    [TestCase(384u, 0x8913C951u)]
+    [TestCase(500u, 0x8913BD25u)]
+    public void Uranus_hardware_observations_are_encoded_and_decoded(uint rides, uint block)
+    {
+        Assert.That(EncodingSequences.Uranus.Encode(rides).Value, Is.EqualTo(block));
+        Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Uranus));
+        Assert.That(decoded, Is.EqualTo(rides));
+    }
+
     [Test]
     public void Registered_sequences_round_trip_and_have_no_collisions_through_counter_limit()
     {
@@ -157,21 +179,18 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void Candidate_c_remains_collision_free_but_unregistered()
+    public void All_registered_rotation_zero_sequences_have_unique_blocks_over_app_range()
     {
-        var registered = new HashSet<uint>(Registered.SelectMany(sequence => Enumerable.Range(0, 501)
-            .Select(rides => sequence.Sequence.Encode((uint)rides).Value)));
-        const uint zero = 0x891249D0u;
-        const uint anchor = 0x7A1222BBu;
-        var candidate = new HashSet<uint>();
-        for (uint rides = 0; rides <= 500; rides++)
+        var rotationZero = Registered.Where(item => item.Rotation == 0).ToArray();
+        var blocks = new HashSet<uint>();
+        foreach (var (sequence, _, _) in rotationZero)
         {
-            var block = EncodeCounter(zero, 0, rides);
-            Assert.That(candidate.Add(block), Is.True);
-            Assert.That(registered.Contains(block), Is.False);
+            for (uint rides = 0; rides <= 500; rides++)
+            {
+                var block = sequence.Encode(rides).Value;
+                Assert.That(blocks.Add(block), Is.True, $"cross collision {sequence.FriendlyName}/{rides}");
+            }
         }
-        Assert.That(TokenBlockUtils.TryDecode(new T55Block(anchor), out _), Is.False);
-        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(anchor), out _), Is.False);
     }
 
     [Test]

@@ -193,6 +193,71 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
+    public void First_uranus_ride_blocks_decode_exact_structural_count_even_without_canonical_identity()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "7A1222BB", "7A1222BB");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(107));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(107));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void First_uranus_ride_blocks_at_128_and_256_boundaries_decode_exact_structural_counts()
+    {
+        var service = new CaptureSequenceService();
+        var at128 = service.ApplyScan([], CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "8912C950", "8912C950"));
+        var at256 = service.ApplyScan([], CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "891349D1", "891349D1"));
+
+        Assert.That(at128.AddedRecord.RealRideCount, Is.EqualTo(128));
+        Assert.That(at256.AddedRecord.RealRideCount, Is.EqualTo(256));
+        Assert.That(at128.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+        Assert.That(at256.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void First_canonical_uranus_identity_is_known_and_does_not_produce_unknown_token()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("FBFE002A", "F1003C92", "F5D1D766", "F5D1D766", "891249D0", "891249D0");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void Uranus_scan_with_stale_history_uses_the_decoded_count_and_starts_a_new_sequence()
+    {
+        var service = new CaptureSequenceService();
+        var history = new List<CaptureRecord>
+        {
+            new()
+            {
+                Timestamp = "2026-04-20T16:36:21.0000000+03:00",
+                TokenId = "FBFE002A-F1003C92-F5D1D766-F5D1D766",
+                SequenceId = "FBFE002A-legacy-s01",
+                TrackedCount = 500,
+                RealRideCount = 500,
+                Block5 = "DEAD1234",
+                Block6 = "DEAD1234"
+            }
+        };
+        var scan = CreateScan("FBFE002A", "F1003C92", "F5D1D766", "F5D1D766", "8912C950", "8912C950");
+
+        var result = service.ApplyScan(history, scan);
+
+        Assert.That(result.AddedRecord.SequenceId, Is.Not.EqualTo("FBFE002A-legacy-s01"));
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(128));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(128));
+    }
+
+    [Test]
     public void First_known_token_with_unseeded_undecodable_state_does_not_use_historical_seed()
     {
         var service = new CaptureSequenceService();

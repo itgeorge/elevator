@@ -228,12 +228,29 @@ public class RideBlockResolverTests
         Assert.That(result.Rides, Is.EqualTo(expectedRides));
     }
 
-    [TestCase(0x7A1222BBu)]
-    public void Resolve_candidate_c_anchor_as_unknown(uint blockValue)
+    [TestCase(0x891249D0u, 0u)]
+    [TestCase(0x891248D1u, 1u)]
+    [TestCase(0x89124ED7u, 7u)]
+    [TestCase(0x7A1241D8u, 8u)]
+    [TestCase(0x8912C950u, 128u)]
+    [TestCase(0x891349D1u, 256u)]
+    [TestCase(0x8913C951u, 384u)]
+    [TestCase(0x8913BD25u, 500u)]
+    public void Resolve_matching_uranus_blocks_returns_rides(uint blockValue, uint expectedRides)
     {
         var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+    }
+
+    [TestCase(0x7A1222BBu, 107u)]
+    public void Resolve_uranus_anchor_blocks_returns_rides(uint blockValue, uint expectedRides)
+    {
+        var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
     }
 
     [Test]

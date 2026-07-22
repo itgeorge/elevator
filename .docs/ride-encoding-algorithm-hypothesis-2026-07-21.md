@@ -10,9 +10,9 @@ python3 debug/ride-encoding-hypothesis.py
 
 ## Production status (post-generalization)
 
-Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`.
+Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`. **Uranus** (formerly Candidate C) is registered for `0..500` with `zeroBlock=891249D0`, `rotation=0`, and canonical identity `FBFE002A-F1003C92-F5D1D766-F5D1D766`.
 
-Candidate C (`891249D0`, rotation 0) remains a non-production hypothesis and its anchors intentionally decode as unknown. Jupiter and Saturn reset/profile support are enabled after hardware confirmed their `1 -> 0` transitions; Saturn reset image `saturn-0-rides.bin` matches the confirmed zero blocks. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
+Jupiter, Saturn, and Uranus reset/profile support are enabled after hardware confirmed their `1 -> 0` transitions. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
 
 ## Main finding
 
@@ -108,12 +108,12 @@ This immediately explains the observed B/C/D decrement. All three anchors have o
 
 The formula reproduces all currently implemented values in their confirmed ranges and all Mercury/Venus/Mars values through 500.
 
-### Rotation 0 — Jupiter, Saturn, and pending Candidate C
+### Rotation 0 — Jupiter, Saturn, and Uranus
 
 | Sequence/candidate | Inferred zero block | Evidence / production state |
 |---|---:|---|
-| Saturn (formerly Candidate B) | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; boundary tests 128/256/384/8 and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
-| C | `891249D0` | 107 anchor, 106 post-ride; pending |
+| Saturn (formerly Candidate B) | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; boundary tests and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
+| Uranus (formerly Candidate C) | `891249D0` | 107 anchor, 106 post-ride; boundary tests and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
 | Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states, confirmed 1 -> 0 transition; registered/resettable 0..500 |
 
 For rotation 0, candidate middle bytes make the count directly visible:
@@ -139,6 +139,20 @@ Boundary transitions were validated on sacrificial tokens with EBFE/Jupiter iden
 ```
 
 The `1 -> 0` transition confirms the Saturn zero block and reset image. Earlier synthesized Candidate-B values from the obsolete family formula are superseded by the generalized rotation-0 predictions above.
+
+### Uranus hardware validation (2026-07-22)
+
+Boundary transitions were validated on sacrificial tokens with EBFE/Jupiter identity blocks. Blocks 5 and 6 matched in each confirmed post-ride read:
+
+```text
+128 8912C950 -> 127 7A1236AF  (fob)
+256 891349D1 -> 255 7A12B62F  (card)
+384 8913C951 -> 383 7A1336AE  (fob, one ride)
+  8 7A1241D8 ->   7 89124ED7  (card, one ride)
+  1 891248D1 ->   0 891249D0  (fob)
+```
+
+The `1 -> 0` transition confirms the Uranus zero block and reset image. Earlier synthesized Candidate-C values from the obsolete family formula are superseded.
 
 ### Independent confirmation for Saturn (formerly Candidate B)
 
@@ -219,23 +233,18 @@ The current `baseLow XOR inferred-xor` synthesized values use rotation 4 and are
 | Candidate / sequence | 0 | 1 | 128 | 255 | 256 | 500 |
 |---|---:|---:|---:|---:|---:|---:|
 | Saturn (registered) | `8B1249F0` | `8B1248F1` | `8B12C970` | `7812B60F` | `8B1349F1` | `8B13BD05` |
-| C (pending) | `891249D0` | `891248D1` | `8912C950` | `7A12B62F` | `891349D1` | `8913BD25` |
+| Uranus (registered) | `891249D0` | `891248D1` | `8912C950` | `7A12B62F` | `891349D1` | `8913BD25` |
 | Jupiter (registered) | `8C124980` | `8C124881` | `8C12C900` | `7F12B67F` | `8C134981` | `8C13BD75` |
 
 Notably, Saturn's predicted 130 block is `8B12CB72`, exactly matching the independent unlabeled dump. Jupiter's predicted 256/255 blocks exactly match the historical EBFE states.
 
-Saturn boundary tests listed above are hardware-validated. Remaining open work for Candidate C:
-
-```text
-C: 128 8912C950 -> expected 127 7A1236AF
-```
+Saturn and Uranus boundary tests listed above are hardware-validated.
 
 ## Collision results
 
 `debug/ride-encoding-hypothesis.py` checks:
 
-- all seven registered sequences (five rotation-4 plus Jupiter and Saturn),
-- the pending Candidate C hypothesis,
+- all eight registered sequences (five rotation-4 plus Jupiter, Saturn, and Uranus),
 - every value 0..500,
 - and the complete 9-bit range 0..511.
 
@@ -286,12 +295,12 @@ High confidence:
 - rotation 4 exactly replaces all registered family arithmetic;
 - rotation 0 exactly explains every trusted Saturn/C/Jupiter anchor and post-ride;
 - Saturn's separate `8B12CB72` dump and Jupiter's historical data independently corroborate rotation 0;
-- Saturn boundary transitions and `1 -> 0` are hardware-validated; reset image is known; **hardware `reset --profile saturn` smoke test passed 2026-07-22** on sacrificial EBFE card (pre-reset blocks 5/6 `89124ED7`);
+- Saturn and Uranus boundary transitions and `1 -> 0` are hardware-validated; reset images are known;
 - previous Earth/Pluto 256+ tests did not test the constant-zero-block XOR predictions.
 
 Still hypotheses:
 
 - corrected Earth and Pluto high ranges have boundary hardware validation; interior 256+ values are extrapolated by the same verified family rule;
-- synthesized Candidate C values other than captured points need hardware validation;
+- Uranus hardware reset smoke test on a sacrificial token is pending before final reset handoff;
 - rotations 1,2,3,5,6,7 are mathematically natural but currently have no identified captures;
 - the rule by which an elevator decides that a `(zeroBlock, rotation)` is an allowed sequence is unknown.

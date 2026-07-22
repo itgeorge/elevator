@@ -65,7 +65,7 @@ SEQUENCES = (
     SequenceHypothesis("pluto", 0x1F12121F, 4),
     SequenceHypothesis("jupiter", 0x8C124980, 0),
     SequenceHypothesis("saturn", 0x8B1249F0, 0),
-    SequenceHypothesis("candidate-c", 0x891249D0, 0),
+    SequenceHypothesis("uranus", 0x891249D0, 0),
 )
 
 # Earth and Pluto are hardware-validated through the corrected 256/384 boundaries.
@@ -151,8 +151,18 @@ OBSERVATIONS = (
     ("saturn 7 post-ride", "saturn", 7, 0x8B124EF7),
     ("saturn 1 pre-zero", "saturn", 1, 0x8B1248F1),
     ("saturn zero", "saturn", 0, 0x8B1249F0),
-    ("candidate C anchor", "candidate-c", 107, 0x7A1222BB),
-    ("candidate C decrement", "candidate-c", 106, 0x7A1223BA),
+    ("uranus anchor", "uranus", 107, 0x7A1222BB),
+    ("uranus decrement", "uranus", 106, 0x7A1223BA),
+    ("uranus 128 boundary", "uranus", 128, 0x8912C950),
+    ("uranus 127 post-ride", "uranus", 127, 0x7A1236AF),
+    ("uranus 256 boundary", "uranus", 256, 0x891349D1),
+    ("uranus 255 post-ride", "uranus", 255, 0x7A12B62F),
+    ("uranus 384 boundary", "uranus", 384, 0x8913C951),
+    ("uranus 383 post-ride", "uranus", 383, 0x7A1336AE),
+    ("uranus 8 boundary", "uranus", 8, 0x7A1241D8),
+    ("uranus 7 post-ride", "uranus", 7, 0x89124ED7),
+    ("uranus 1 pre-zero", "uranus", 1, 0x891248D1),
+    ("uranus zero", "uranus", 0, 0x891249D0),
     ("jupiter anchor", "jupiter", 57, 0x7F1270B9),
     ("jupiter decrement", "jupiter", 56, 0x7F1271B8),
     # Historical EBFE states decode as 9-bit counts despite bad CSV ride labels.
@@ -196,7 +206,7 @@ def assert_candidate_rotations() -> None:
     point_sets = {
         "saturn anchor/independent dump": ((47, 0x781266DF), (130, 0x8B12CB72)),
         "saturn decrement": ((47, 0x781266DF), (46, 0x781267DE)),
-        "candidate C decrement": ((107, 0x7A1222BB), (106, 0x7A1223BA)),
+        "uranus decrement": ((107, 0x7A1222BB), (106, 0x7A1223BA)),
         "jupiter decrement": ((57, 0x7F1270B9), (56, 0x7F1271B8)),
     }
     for label, points in point_sets.items():
@@ -253,7 +263,7 @@ def main() -> None:
         "earth",
         "pluto",
         "saturn",
-        "candidate-c",
+        "uranus",
         "jupiter",
     ):
         sequence = by_name[name]
