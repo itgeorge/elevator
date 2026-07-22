@@ -252,7 +252,7 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["reset", "--sequence", "mercury"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("unknown encoding family"));
+        Assert.That(output.Lines, Has.Some.Contains("unknown ride encoding sequence"));
         Assert.That(output.Lines, Has.Some.EqualTo("Success."));
         Assert.That(pm3.GetBlockHex(5), Is.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
         Assert.That(pm3.GetBlockHex(6), Is.EqualTo(TokenBlockUtils.Encode(0, EncodingSequences.Mercury).ToHex()));
@@ -310,7 +310,7 @@ public class RidesCommandHandlerTests
             Assert.That(files, Has.Length.EqualTo(1));
             Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-UNKNOWN.bin"));
             Assert.That(new FileInfo(files[0]).Length, Is.EqualTo(32));
-            Assert.That(output.Lines, Has.Some.Contains("Unknown encoding family"));
+            Assert.That(output.Lines, Has.Some.Contains("Unknown ride encoding sequence"));
             Assert.That(output.Lines, Has.Some.Contains("Saved token dump to"));
 
             var bytes = File.ReadAllBytes(files[0]);
@@ -347,7 +347,7 @@ public class RidesCommandHandlerTests
             Assert.That(files, Has.Length.EqualTo(1));
             Assert.That(Path.GetFileName(files[0]), Does.EndWith("--rides-UNKNOWN.bin"));
             Assert.That(new FileInfo(files[0]).Length, Is.EqualTo(32));
-            Assert.That(output.Lines, Has.Some.Contains("Unknown encoding family"));
+            Assert.That(output.Lines, Has.Some.Contains("Unknown ride encoding sequence"));
             Assert.That(output.Lines, Has.Some.Contains("Saved token dump to"));
 
             handler.Execute(["set", "50"]);
@@ -496,7 +496,7 @@ public class RidesCommandHandlerTests
             handler.Execute(["read", "-d"]);
 
             Assert.That(output.Lines, Has.Some.EqualTo("raw dump output"));
-            Assert.That(output.Lines, Has.Some.Contains("Unknown encoding family"));
+            Assert.That(output.Lines, Has.Some.Contains("Unknown ride encoding sequence"));
         }
         finally
         {

@@ -5,8 +5,7 @@ namespace RidesCli;
 public enum RideReadStatus
 {
     Success,
-    UnknownEncodingFamily,
-    InvalidBlockFormat,
+    UnknownEncodingSequence,
 }
 
 public sealed record RideReadResult(
@@ -64,7 +63,7 @@ public static class RideBlockResolver
     {
         // A failed full registry match is unknown. Do not use visible high-word patterns to
         // guess a family: unregistered rotation-0 candidates must remain unknown as well.
-        return new RideReadResult(RideReadStatus.UnknownEncodingFamily, null, block5, 5, blocksMatched, null);
+        return new RideReadResult(RideReadStatus.UnknownEncodingSequence, null, block5, 5, blocksMatched, null);
     }
 
     internal static bool TryValidate(T55Block block, out uint rides)

@@ -90,6 +90,32 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
+    public void Jupiter_scan_with_stale_ebfe_history_uses_the_decoded_count_and_starts_a_new_sequence()
+    {
+        var service = new CaptureSequenceService();
+        var history = new List<CaptureRecord>
+        {
+            new()
+            {
+                Timestamp = "2026-04-20T16:36:21.0000000+03:00",
+                TokenId = "EBFE002A-F100CC5B-A5045936-A5045936",
+                SequenceId = "EBFE002A-legacy-s01",
+                TrackedCount = 500,
+                RealRideCount = 500,
+                Block5 = "DEAD1234",
+                Block6 = "DEAD1234"
+            }
+        };
+        var scan = CreateScan("EBFE002A", "F100CC5B", "A5045936", "A5045936", "8C134C84", "8C134C84");
+
+        var result = service.ApplyScan(history, scan);
+
+        Assert.That(result.AddedRecord.SequenceId, Is.Not.EqualTo("EBFE002A-legacy-s01"));
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(261));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(261));
+    }
+
+    [Test]
     public void Jupiter_capture_continues_across_the_changing_high_word_boundary()
     {
         var service = new CaptureSequenceService();

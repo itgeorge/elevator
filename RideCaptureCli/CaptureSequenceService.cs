@@ -25,39 +25,67 @@ public sealed class CaptureSequenceService
 
         var warnings = BuildWarnings(scan, tokenHistory);
         var matchedHistoricalRow = tokenHistory.LastOrDefault(r => r.Block5 == scan.Blocks[5] && r.Block6 == scan.Blocks[6]);
+        var hasDecodedRides = TryDecodeScan(scan, out var decodedRides);
 
         CaptureRecord added;
-        var shouldStartNewSequence = lastActiveRow is null || (lastActiveRow.RealRideCount.HasValue && lastActiveRow.RealRideCount.Value == 0 && matchedHistoricalRow is null);
+        var isDuplicate = lastActiveRow is not null
+            && lastActiveRow.Block5 == scan.Blocks[5]
+            && lastActiveRow.Block6 == scan.Blocks[6];
 
-        if (lastActiveRow is not null && lastActiveRow.Block5 == scan.Blocks[5] && lastActiveRow.Block6 == scan.Blocks[6])
+        if (isDuplicate)
         {
-            added = CreateRecord(scan, lastActiveRow.SequenceId, CaptureStatus.NoChange, warnings, lastActiveRow.TrackedCount, lastActiveRow.RealRideCount);
-        }
-        else if (shouldStartNewSequence)
-        {
-            var sequenceId = _sequenceIdGenerator.CreateNext(scan.TokenId, records, scan.Timestamp);
-            if (tokenHistory.Count == 0 && TryDecodeScan(scan, out var decodedRides))
-            {
-                added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, decodedRides, decodedRides);
-            }
-            else if (tokenHistory.Count == 0 && SeededTokenCatalog.TryGetStartingRides(scan.TokenId, scan.Blocks[5], scan.Blocks[6], out var seededRides))
-            {
-                added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, seededRides, seededRides);
-            }
-            else
-            {
-                added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, UnknownStartTrackedCount, null);
-            }
-        }
-        else
-        {
+            // Registered mirrored blocks are authoritative even when old CSV labels were offset.
             added = CreateRecord(
                 scan,
                 lastActiveRow!.SequenceId,
-                CaptureStatus.Ok,
+                CaptureStatus.NoChange,
                 warnings,
-                lastActiveRow.TrackedCount - 1,
-                lastActiveRow.RealRideCount.HasValue ? lastActiveRow.RealRideCount.Value - 1 : null);
+                hasDecodedRides ? decodedRides : lastActiveRow.TrackedCount,
+                hasDecodedRides ? decodedRides : lastActiveRow.RealRideCount);
+        }
+        else if (hasDecodedRides)
+        {
+            // Continue only an immediately adjacent, known count. A jump isolates stale or
+            // interrupted history into a new sequence instead of propagating its label.
+            var normalizesUnknownActiveSequence = lastActiveRow is not null
+                && !lastActiveRow.RealRideCount.HasValue
+                && matchedHistoricalRow?.RealRideCount == decodedRides;
+            var continuesActiveSequence = lastActiveRow?.RealRideCount == decodedRides + 1
+                || normalizesUnknownActiveSequence;
+            var sequenceId = continuesActiveSequence
+                ? lastActiveRow!.SequenceId
+                : _sequenceIdGenerator.CreateNext(scan.TokenId, records, scan.Timestamp);
+            var trackedCount = normalizesUnknownActiveSequence
+                ? lastActiveRow!.TrackedCount - 1
+                : decodedRides;
+            added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, trackedCount, decodedRides);
+        }
+        else
+        {
+            var shouldStartNewSequence = lastActiveRow is null
+                || (lastActiveRow.RealRideCount.HasValue && lastActiveRow.RealRideCount.Value == 0 && matchedHistoricalRow is null);
+            if (shouldStartNewSequence)
+            {
+                var sequenceId = _sequenceIdGenerator.CreateNext(scan.TokenId, records, scan.Timestamp);
+                if (tokenHistory.Count == 0 && SeededTokenCatalog.TryGetStartingRides(scan.TokenId, scan.Blocks[5], scan.Blocks[6], out var seededRides))
+                {
+                    added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, seededRides, seededRides);
+                }
+                else
+                {
+                    added = CreateRecord(scan, sequenceId, CaptureStatus.Ok, warnings, UnknownStartTrackedCount, null);
+                }
+            }
+            else
+            {
+                added = CreateRecord(
+                    scan,
+                    lastActiveRow!.SequenceId,
+                    CaptureStatus.Ok,
+                    warnings,
+                    lastActiveRow.TrackedCount - 1,
+                    lastActiveRow.RealRideCount.HasValue ? lastActiveRow.RealRideCount.Value - 1 : null);
+            }
         }
 
         records.Add(added);
@@ -65,7 +93,8 @@ public sealed class CaptureSequenceService
         var autoNormalized = false;
         if (matchedHistoricalRow is not null
             && matchedHistoricalRow.RealRideCount.HasValue
-            && matchedHistoricalRow.SequenceId != added.SequenceId)
+            && matchedHistoricalRow.SequenceId != added.SequenceId
+            && (!hasDecodedRides || matchedHistoricalRow.RealRideCount == decodedRides))
         {
             NormalizeSequence(records, added.SequenceId, added.TrackedCount, matchedHistoricalRow.RealRideCount.Value, zeroAnchor: false);
             autoNormalized = true;

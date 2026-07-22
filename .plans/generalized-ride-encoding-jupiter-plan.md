@@ -549,7 +549,8 @@ Expected after one elevator ride: Jupiter 0: 8C124980
 ## Agent notes / assumptions
 
 - Notes: Final implementation uses `RideCounterCodec`, direct `EncodingSequence(zeroBlock, rotation, minRides, maxRides)`, and exhaustive registered structural matching. Removed family/segment APIs and high16 registry lookup. Registered parameters are Mercury `CCC749CC/4`, Venus `48C74948/4`, Earth `18121218/4`, Pluto `1F12121F/4`, Mars `4EC7494E/4`, and Jupiter `8C124980/0`, all `0..500`.
-- Notes: Final targeted results: Tokens 63, RidesCli 99, RideCaptureCli 27 passed. Full non-integration suite also passed (Pm3Usb 120 passed/1 skipped; TokenDumps has no matching filtered tests). The oracle passed 29 observations and collision checks for eight hypotheses over `0..500` and `0..511`.
+- Notes: Final targeted results: Tokens 63, RidesCli 99, RideCaptureCli 28 passed. Full non-integration suite also passed (Pm3Usb 120 passed/1 skipped; TokenDumps has no matching filtered tests). The oracle passed 29 observations and collision checks for eight hypotheses over `0..500` and `0..511`.
+- Notes: Follow-up hardening decodes every mirrored registered capture state even with prior history; stale EBFE labels cannot override Jupiter’s structural count, and count jumps start a new capture sequence.
 - Notes: Jupiter reset remains intentionally unavailable pending the hardware `8C124881 -> 8C124980` confirmation. Candidates B/C remain unregistered. No unrelated debug paths were touched.
 - Assumptions:
 

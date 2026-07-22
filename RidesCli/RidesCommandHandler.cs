@@ -281,30 +281,23 @@ public sealed class RidesCommandHandler
             if (!string.IsNullOrEmpty(result.WarningMessage))
                 _output.WriteLine(result.WarningMessage);
 
-            switch (result.Status)
+            if (result.Status == RideReadStatus.Success)
             {
-                case RideReadStatus.Success:
-                    _rides = result.Rides!.Value;
-                    _encodingSequence = result.SourceBlock is T55Block sourceBlock
-                        && EncodingSequences.TryGetSequenceFromBlock(sourceBlock, out var sequence)
-                        ? sequence
-                        : null;
-                    _output.WriteLine($"rides remaining: {_rides.Value}");
-                    if (_encodingSequence is not null)
-                        _output.WriteLine($"sequence: {_encodingSequence.FriendlyName}");
-                    return true;
-                case RideReadStatus.UnknownEncodingFamily:
-                    _rides = null;
-                    _encodingSequence = null;
-                    await HandleUnknownEncodingFamilyAsync(block5).ConfigureAwait(false);
-                    return true;
-                default:
-                    _rides = null;
-                    _encodingSequence = null;
-                    _lastDumpRaw = null;
-                    await HandleInvalidBlockFormatAsync(block5).ConfigureAwait(false);
-                    return true;
+                _rides = result.Rides!.Value;
+                _encodingSequence = result.SourceBlock is T55Block sourceBlock
+                    && EncodingSequences.TryGetSequenceFromBlock(sourceBlock, out var sequence)
+                    ? sequence
+                    : null;
+                _output.WriteLine($"rides remaining: {_rides.Value}");
+                if (_encodingSequence is not null)
+                    _output.WriteLine($"sequence: {_encodingSequence.FriendlyName}");
+                return true;
             }
+
+            _rides = null;
+            _encodingSequence = null;
+            await HandleUnknownEncodingSequenceAsync(block5).ConfigureAwait(false);
+            return true;
         }
         catch (Exception ex)
         {
@@ -329,18 +322,10 @@ public sealed class RidesCommandHandler
             var block6Hex = currentBlocks[6].ToHex();
             var describe = RideBlockResolver.Resolve(currentBlocks[5], currentBlocks[6]);
 
-            switch (describe.Status)
-            {
-                case RideReadStatus.Success:
-                    _output.WriteLine($"current token rides: {describe.Rides!.Value}");
-                    break;
-                case RideReadStatus.UnknownEncodingFamily:
-                    _output.WriteLine($"Current token cannot be decoded: unknown encoding family in block 5 ({block5Hex}).");
-                    break;
-                default:
-                    _output.WriteLine($"Current token cannot be decoded: invalid block format in block 5 ({block5Hex}).");
-                    break;
-            }
+            if (describe.Status == RideReadStatus.Success)
+                _output.WriteLine($"current token rides: {describe.Rides!.Value}");
+            else
+                _output.WriteLine($"Current token cannot be decoded: unknown ride encoding sequence in block 5 ({block5Hex}).");
         }
         catch (Exception ex)
         {
@@ -542,18 +527,11 @@ public sealed class RidesCommandHandler
         }
     }
 
-    private async Task HandleUnknownEncodingFamilyAsync(T55Block block5)
+    private async Task HandleUnknownEncodingSequenceAsync(T55Block block5)
     {
-        _output.WriteLine($"Unknown encoding family detected in page 0 block 5: {block5.ToHex()}");
+        _output.WriteLine($"Unknown ride encoding sequence detected in page 0 block 5: {block5.ToHex()}");
         await SaveUndecodableTokenDumpAsync(
-            "Error: could not decode rides because the token uses an unknown encoding family.").ConfigureAwait(false);
-    }
-
-    private async Task HandleInvalidBlockFormatAsync(T55Block block5)
-    {
-        _output.WriteLine($"Invalid ride block format detected in page 0 block 5: {block5.ToHex()}");
-        await SaveUndecodableTokenDumpAsync(
-            "Error: could not decode rides because the token uses an invalid block format.").ConfigureAwait(false);
+            "Error: could not decode rides because the token uses an unknown ride encoding sequence.").ConfigureAwait(false);
     }
 
     private async Task SaveUndecodableTokenDumpAsync(string finalErrorMessage)

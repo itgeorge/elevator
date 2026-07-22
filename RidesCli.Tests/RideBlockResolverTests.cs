@@ -28,7 +28,7 @@ public class RideBlockResolverTests
 
         var result = RideBlockResolver.Resolve(block, block);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
         Assert.That(result.Rides, Is.Null);
         Assert.That(result.BlocksMatched, Is.True);
     }
@@ -40,7 +40,7 @@ public class RideBlockResolverTests
 
         var result = RideBlockResolver.Resolve(block, block);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
         Assert.That(result.Rides, Is.Null);
         Assert.That(result.BlocksMatched, Is.True);
     }
@@ -110,7 +110,7 @@ public class RideBlockResolverTests
 
         var result = RideBlockResolver.Resolve(block5, block6);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
     }
 
     [Test]
@@ -121,7 +121,7 @@ public class RideBlockResolverTests
 
         var result = RideBlockResolver.Resolve(block5, block6);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
         Assert.That(result.SourceBlockNumber, Is.EqualTo(5));
     }
 
@@ -210,7 +210,7 @@ public class RideBlockResolverTests
     {
         var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
     }
 
     [Test]
@@ -220,6 +220,6 @@ public class RideBlockResolverTests
 
         var result = RideBlockResolver.Resolve(block, block);
 
-        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingFamily));
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.UnknownEncodingSequence));
     }
 }

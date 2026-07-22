@@ -17,7 +17,7 @@ These assumptions are based on the current analysis and must be preserved unless
 
 - T55xx page 0 **blocks 5 and 6** are mirrored ride-state blocks.
 - After a ride, only **blocks 5 and 6** change.
-- Token identity / family identity should be inferred automatically from the other static blocks, specifically **page 0 blocks 1..4**.
+- Token identity should be inferred automatically from **page 0 blocks 1..4**; the ride encoding sequence/count must be structurally decoded from mirrored blocks 5/6, independently of identity.
 - The tool should require minimal interaction during capture: the operator places a token on the scanner and presses **Enter**.
 - Each successful changed capture for a sequence implies the rides remaining went down by **1**.
 - We want one cumulative CSV across all runs, plus copied `.bin` dumps stored locally under date-based subfolders.
@@ -31,9 +31,9 @@ Seed these from `familyerrors/README.md` using `blocks 1..4` as the token id:
 
 - `D3FE005D-522BC69D-650432F5-650432F5` → starting real rides `24`
 - `43FE0062-5BA494A3-D6D1C733-D6D1C733` → starting real rides `181`
-- `EBFE002A-F100CC5B-A5045936-A5045936` → starting real rides `262`
+- `EBFE002A-F100CC5B-A5045936-A5045936` is the canonical **Jupiter** identity. Do not seed a count: registered mirrored blocks decode structurally (for example, `8C134C84` is Jupiter `261`, not `262`).
 
-For these seeded tokens, the first unseen capture in a sequence should use the seeded real ride count, then decrement by 1 on each changed capture.
+For the remaining historical seeds, the first unseen capture in a sequence should use the seeded real ride count, then decrement by 1 on each changed capture. Registered mirrored blocks always take precedence over historical labels and start a new capture sequence when they do not continue the prior decoded count.
 
 ## Capture behavior summary
 
