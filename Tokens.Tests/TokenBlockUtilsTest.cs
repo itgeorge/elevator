@@ -829,6 +829,19 @@ public class TokenBlockUtilsTest
         128 EB129210
         """;
 
+    const string TableD3FE_256To383_CorrectedReferenceBlocks =
+        """
+        383 18136DFF
+        256 18131208
+        """;
+
+    // 384 is hardware-validated; 500 follows the same corrected family.
+    const string TableD3FE_384To500_CorrectedReferenceBlocks =
+        """
+        500 EB13E647
+        384 EB139200
+        """;
+
     const string Table83FE_ValidatedLowSamples =
         """
         50 1F12203C
@@ -842,6 +855,19 @@ public class TokenBlockUtilsTest
         255 EC12EDE0
         254 EC12ECF0
         128 EC129217
+        """;
+
+    const string Table83FE_256To383_CorrectedReferenceBlocks =
+        """
+        383 1F136DF8
+        256 1F13120F
+        """;
+
+    // 384 is hardware-validated; 500 follows the same corrected family.
+    const string Table83FE_384To500_CorrectedReferenceBlocks =
+        """
+        500 EC13E640
+        384 EC139207
         """;
 
 
@@ -874,8 +900,12 @@ public class TokenBlockUtilsTest
     [TestCase(Table43FE_128To180, (uint)0xBBC7, (uint)0x808C, (uint)128)]
     [TestCase(TableD3FE_0To23, (uint)0x1812, (uint)0x5BD4, (uint)0)]
     [TestCase(TableD3FE_128To255_ValidatedBoundaries, (uint)0xEB12, (uint)0xDBDC, (uint)128)]
+    [TestCase(TableD3FE_256To383_CorrectedReferenceBlocks, (uint)0x1813, (uint)0x5BC4, (uint)256)]
+    [TestCase(TableD3FE_384To500_CorrectedReferenceBlocks, (uint)0xEB13, (uint)0xDBCC, (uint)384)]
     [TestCase(Table83FE_ValidatedLowSamples, (uint)0x1F12, (uint)0x5BD3, (uint)0)]
     [TestCase(Table83FE_128To255_ValidatedBoundaries, (uint)0xEC12, (uint)0xDBDB, (uint)128)]
+    [TestCase(Table83FE_256To383_CorrectedReferenceBlocks, (uint)0x1F13, (uint)0x5BC3, (uint)256)]
+    [TestCase(Table83FE_384To500_CorrectedReferenceBlocks, (uint)0xEC13, (uint)0xDBCB, (uint)384)]
     public void EncodeByFamily_MatchesKnownValues(string countAndBlockTable, uint high16, uint xorConst, uint baseOffset)
     {
         var rows = ParseTable(countAndBlockTable);
@@ -965,9 +995,9 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.Venus.MinRides, Is.EqualTo(0u));
         Assert.That(EncodingSequences.Venus.MaxRides, Is.EqualTo(500u));
         Assert.That(EncodingSequences.Earth.MinRides, Is.EqualTo(0u));
-        Assert.That(EncodingSequences.Earth.MaxRides, Is.EqualTo(255u));
+        Assert.That(EncodingSequences.Earth.MaxRides, Is.EqualTo(500u));
         Assert.That(EncodingSequences.Pluto.MinRides, Is.EqualTo(0u));
-        Assert.That(EncodingSequences.Pluto.MaxRides, Is.EqualTo(255u));
+        Assert.That(EncodingSequences.Pluto.MaxRides, Is.EqualTo(500u));
         Assert.That(EncodingSequences.Mars.MinRides, Is.EqualTo(0u));
         Assert.That(EncodingSequences.Mars.MaxRides, Is.EqualTo(500u));
     }
@@ -1015,6 +1045,36 @@ public class TokenBlockUtilsTest
         Assert.That(sequence.GetFamilyForRides(383), Is.EqualTo(TokenBlockUtils.Families.Family48C6_256To383));
         Assert.That(sequence.GetFamilyForRides(384), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC6_384To500));
         Assert.That(sequence.GetFamilyForRides(500), Is.EqualTo(TokenBlockUtils.Families.FamilyBBC6_384To500));
+    }
+
+    [Test]
+    public void GetFamilyForRides_Earth_sequence_uses_corrected_high_families()
+    {
+        var sequence = EncodingSequences.Earth;
+
+        Assert.That(sequence.GetFamilyForRides(0), Is.EqualTo(TokenBlockUtils.Families.Family1812_0To127));
+        Assert.That(sequence.GetFamilyForRides(127), Is.EqualTo(TokenBlockUtils.Families.Family1812_0To127));
+        Assert.That(sequence.GetFamilyForRides(128), Is.EqualTo(TokenBlockUtils.Families.FamilyEB12_128To255));
+        Assert.That(sequence.GetFamilyForRides(255), Is.EqualTo(TokenBlockUtils.Families.FamilyEB12_128To255));
+        Assert.That(sequence.GetFamilyForRides(256), Is.EqualTo(TokenBlockUtils.Families.Family1813_256To383));
+        Assert.That(sequence.GetFamilyForRides(383), Is.EqualTo(TokenBlockUtils.Families.Family1813_256To383));
+        Assert.That(sequence.GetFamilyForRides(384), Is.EqualTo(TokenBlockUtils.Families.FamilyEB13_384To500));
+        Assert.That(sequence.GetFamilyForRides(500), Is.EqualTo(TokenBlockUtils.Families.FamilyEB13_384To500));
+    }
+
+    [Test]
+    public void GetFamilyForRides_Pluto_sequence_uses_corrected_high_families()
+    {
+        var sequence = EncodingSequences.Pluto;
+
+        Assert.That(sequence.GetFamilyForRides(0), Is.EqualTo(TokenBlockUtils.Families.Family1F12_0To127));
+        Assert.That(sequence.GetFamilyForRides(127), Is.EqualTo(TokenBlockUtils.Families.Family1F12_0To127));
+        Assert.That(sequence.GetFamilyForRides(128), Is.EqualTo(TokenBlockUtils.Families.FamilyEC12_128To255));
+        Assert.That(sequence.GetFamilyForRides(255), Is.EqualTo(TokenBlockUtils.Families.FamilyEC12_128To255));
+        Assert.That(sequence.GetFamilyForRides(256), Is.EqualTo(TokenBlockUtils.Families.Family1F13_256To383));
+        Assert.That(sequence.GetFamilyForRides(383), Is.EqualTo(TokenBlockUtils.Families.Family1F13_256To383));
+        Assert.That(sequence.GetFamilyForRides(384), Is.EqualTo(TokenBlockUtils.Families.FamilyEC13_384To500));
+        Assert.That(sequence.GetFamilyForRides(500), Is.EqualTo(TokenBlockUtils.Families.FamilyEC13_384To500));
     }
 
     [Test]
@@ -1133,9 +1193,22 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void EncodeDecode_RoundTrip_EarthSequence_0To255()
+    public void EncodeDecode_EarthSequence_MatchesCorrectedHighRangeReferenceBlocks()
     {
-        for (uint value = 0; value <= 255; value++)
+        var rows = ParseTable(string.Join("\n", TableD3FE_256To383_CorrectedReferenceBlocks, TableD3FE_384To500_CorrectedReferenceBlocks));
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            var encoded = TokenBlockUtils.Encode((uint)ridesRemaining, EncodingSequences.Earth);
+            Assert.That(encoded.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {encoded.Value:X8}");
+            Assert.That(TokenBlockUtils.Decode(new T55Block(block)), Is.EqualTo((uint)ridesRemaining));
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_RoundTrip_EarthSequence_0To500()
+    {
+        for (uint value = 0; value <= 500; value++)
         {
             var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Earth);
             uint decoded = TokenBlockUtils.Decode(encoded);
@@ -1183,9 +1256,22 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
-    public void EncodeDecode_RoundTrip_PlutoSequence_0To255()
+    public void EncodeDecode_PlutoSequence_MatchesCorrectedHighRangeReferenceBlocks()
     {
-        for (uint value = 0; value <= 255; value++)
+        var rows = ParseTable(string.Join("\n", Table83FE_256To383_CorrectedReferenceBlocks, Table83FE_384To500_CorrectedReferenceBlocks));
+
+        foreach (var (ridesRemaining, block) in rows)
+        {
+            var encoded = TokenBlockUtils.Encode((uint)ridesRemaining, EncodingSequences.Pluto);
+            Assert.That(encoded.Value, Is.EqualTo(block), $"Rides remaining {ridesRemaining}: expected {block:X8}, got {encoded.Value:X8}");
+            Assert.That(TokenBlockUtils.Decode(new T55Block(block)), Is.EqualTo((uint)ridesRemaining));
+        }
+    }
+
+    [Test]
+    public void EncodeDecode_RoundTrip_PlutoSequence_0To500()
+    {
+        for (uint value = 0; value <= 500; value++)
         {
             var encoded = TokenBlockUtils.Encode(value, EncodingSequences.Pluto);
             uint decoded = TokenBlockUtils.Decode(encoded);
@@ -1260,6 +1346,16 @@ public class TokenBlockUtilsTest
     }
 
     [Test]
+    public void TryGetSequenceFromBlock_1813_and_EB13_blocks_return_earth_sequence()
+    {
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0x18131208), out var from1813), Is.True);
+        Assert.That(from1813, Is.EqualTo(EncodingSequences.Earth));
+
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0xEB139200), out var fromEB13), Is.True);
+        Assert.That(fromEB13, Is.EqualTo(EncodingSequences.Earth));
+    }
+
+    [Test]
     public void TryGetSequenceFromBlock_1F12_block_returns_pluto_sequence()
     {
         var ok = EncodingSequences.TryGetSequenceFromBlock(
@@ -1279,6 +1375,16 @@ public class TokenBlockUtilsTest
 
         Assert.That(ok, Is.True);
         Assert.That(sequence, Is.EqualTo(EncodingSequences.Pluto));
+    }
+
+    [Test]
+    public void TryGetSequenceFromBlock_1F13_and_EC13_blocks_return_pluto_sequence()
+    {
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0x1F13120F), out var from1F13), Is.True);
+        Assert.That(from1F13, Is.EqualTo(EncodingSequences.Pluto));
+
+        Assert.That(EncodingSequences.TryGetSequenceFromBlock(new T55Block(0xEC139207), out var fromEC13), Is.True);
+        Assert.That(fromEC13, Is.EqualTo(EncodingSequences.Pluto));
     }
 
     [Test]

@@ -29,9 +29,11 @@ block6 18121218
 block7 00000000
 ```
 
-## Current status (2026-07-12)
+## Current status (updated 2026-07-21)
 
-Earth is now implemented and intentionally capped for confirmed rides `0..255`:
+**Superseding result:** Earth is now implemented for `0..500`. The generalized constant-zero-block XOR model corrected the old addition-derived high constants to `1813/5BC4` and `EB13/DBCC`. Hardware validated `256 18131208 -> 255 EB12EDE7` and `384 EB139200 -> 383 18136DFF` on 2026-07-21.
+
+The table below records the previous 2026-07-12 state and the failed incorrect candidates for historical context:
 
 | Range | Family | Evidence | Code status |
 |---|---|---|---|
@@ -306,9 +308,9 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
   start 384 -> write EB119220; expected 383 -> 18116DDF; observed elevator double-beep/low indication and readback Earth zero
   ```
 
-- [x] Formalize current conclusion: Earth appears capped at `255`; do not register `256..500`.
+- [x] Formalize the then-current conclusion that Earth appeared capped at `255` (superseded by Phase 7).
 - [x] Add sequence-specific range checks/tests so Earth `set/add` above `255` errors without writing.
-- [ ] If future evidence identifies valid high Earth families, reopen this plan and add a new experimental phase before changing production registration.
+- [x] Future evidence identified corrected high Earth families; see Phase 7.
 
 ## Agent notes / assumptions
 
@@ -361,4 +363,38 @@ Earth 384..500: high16 EB11, xor DBEC, base 384
 
 Hardware accepted/processed visual alternative `256` (`18111228`) and `384` (`EB119220`), but not as true high ride counts: instead of decrementing by one, the elevator treated them as low/empty, gave a low-rides double beep, and the token read back as Earth zero (`18121218`).
 
-Current conclusion: no tested high-family extrapolation behaves as true `256+`; Earth should remain capped at `255` in production code.
+Historical conclusion (superseded 2026-07-21): no then-tested high-family extrapolation behaved as true `256+`. The tests had used addition-derived constants; corrected XOR-derived values subsequently validated.
+
+---
+
+# Phase 7 — Generalized XOR correction and full Earth registration
+
+## Todos
+
+- [x] Derive the constant-zero-block rotation-4 algorithm from all registered sequences.
+- [x] Identify that old Earth high XOR constants used addition (`5BE4`/`DBEC`) instead of XOR composition.
+- [x] Predict corrected high families:
+
+  ```text
+  256..383: 1813 / 5BC4 / base 256
+  384..500: EB13 / DBCC / base 384
+  ```
+
+- [x] Hardware validate corrected `256 -> 255` transition:
+
+  ```text
+  write 18131208; post-ride EB12EDE7
+  ```
+
+- [x] Hardware validate corrected `384 -> 383` transition:
+
+  ```text
+  write EB139200; post-ride 18136DFF
+  ```
+
+- [x] Register both corrected families and extend Earth to `0..500`.
+- [x] Update unit and CLI tests, help text, and exploration documentation.
+
+## Agent notes
+
+- The 256 test used a `9BFE...` card and the 384 test used an `EBFE...` fob. Both worked with only blocks 5/6 changed, further confirming blocks 1..4 are not inputs to the Earth ride encoding.

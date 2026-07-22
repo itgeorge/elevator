@@ -901,7 +901,7 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
-    public void Set_above_earth_confirmed_range_prints_sequence_range_and_does_not_write()
+    public void Set_earth_uses_corrected_fourth_family_at_500()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Earth, 255);
@@ -909,17 +909,15 @@ public class RidesCommandHandlerTests
         handler.Execute(["read"]);
         output.Clear();
 
-        handler.Execute(["set", "256"]);
+        handler.Execute(["set", "500"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("range [0, 255] for sequence 'earth'"));
-        Assert.That(output.Lines, Has.None.EqualTo("Success."));
-        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EB12EDE7"));
-        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EB12EDE7"));
-        Assert.That(pm3.WrittenBlocks, Is.Empty);
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EB13E647"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EB13E647"));
     }
 
     [Test]
-    public void Add_above_earth_confirmed_range_prints_sequence_range_and_does_not_write()
+    public void Add_earth_crossing_255_uses_corrected_third_family()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Earth, 255);
@@ -929,15 +927,13 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["add", "1"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("range [0, 255] for sequence 'earth'"));
-        Assert.That(output.Lines, Has.None.EqualTo("Success."));
-        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EB12EDE7"));
-        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EB12EDE7"));
-        Assert.That(pm3.WrittenBlocks, Is.Empty);
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("18131208"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("18131208"));
     }
 
     [Test]
-    public void Set_above_pluto_confirmed_range_prints_sequence_range_and_does_not_write()
+    public void Set_pluto_uses_corrected_fourth_family_at_500()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Pluto, 255);
@@ -945,17 +941,15 @@ public class RidesCommandHandlerTests
         handler.Execute(["read"]);
         output.Clear();
 
-        handler.Execute(["set", "256"]);
+        handler.Execute(["set", "500"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("range [0, 255] for sequence 'pluto'"));
-        Assert.That(output.Lines, Has.None.EqualTo("Success."));
-        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EC12EDE0"));
-        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EC12EDE0"));
-        Assert.That(pm3.WrittenBlocks, Is.Empty);
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EC13E640"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EC13E640"));
     }
 
     [Test]
-    public void Add_above_pluto_confirmed_range_prints_sequence_range_and_does_not_write()
+    public void Add_pluto_crossing_255_uses_corrected_third_family()
     {
         var output = new StringBuilderRidesOutput();
         var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Pluto, 255);
@@ -965,11 +959,9 @@ public class RidesCommandHandlerTests
 
         handler.Execute(["add", "1"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("range [0, 255] for sequence 'pluto'"));
-        Assert.That(output.Lines, Has.None.EqualTo("Success."));
-        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("EC12EDE0"));
-        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("EC12EDE0"));
-        Assert.That(pm3.WrittenBlocks, Is.Empty);
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("1F13120F"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("1F13120F"));
     }
 
     [Test]

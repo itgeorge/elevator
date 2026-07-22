@@ -16,19 +16,22 @@ internal static class EncodingFamilyDefinitions
     internal static readonly TokenBlockUtils.Family Venus256To383 = new(0x48C6, 0x0094, 256);
     internal static readonly TokenBlockUtils.Family Venus384To500 = new(0xBBC6, 0x809C, 384);
 
-    // Current high-family hypothesis:
-    // - Mercury/Venus/Mars support the XOR-step model for segments 256+ (high16 toggles by XOR F301/F300; xor += 0x8008 per segment).
-    // - Earth matched the first two segments, but the XOR-step 256+ candidates did not validate.
-    // - A visual minus-one alternative (1812/EB12 -> 1811/EB11) was accepted by the elevator for tested 256/384 values,
-    //   but it reset the token to Earth zero instead of decrementing by one, so it is either not valid or Earth is special/capped.
-    // D3FE005D-522BC69D-650432F5-650432F5 (Earth): low range captured 0..23; 128 and 255 boundary starts elevator-validated 2026-07-12.
+    // D3FE005D-522BC69D-650432F5-650432F5 (Earth): low range captured 0..23;
+    // 128/255 boundaries validated 2026-07-12; corrected XOR-derived 256/384 boundaries validated 2026-07-21.
+    // The old 5BE4/DBEC high-family constants were produced by addition and were wrong. Constant-zero-block
+    // XOR composition gives 5BC4/DBCC and matches 256 -> 255 and 384 -> 383 elevator transitions.
     internal static readonly TokenBlockUtils.Family Earth0To127 = new(0x1812, 0x5BD4, 0);
     internal static readonly TokenBlockUtils.Family Earth128To255 = new(0xEB12, 0xDBDC, 128);
+    internal static readonly TokenBlockUtils.Family Earth256To383 = new(0x1813, 0x5BC4, 256);
+    internal static readonly TokenBlockUtils.Family Earth384To500 = new(0xEB13, 0xDBCC, 384);
 
-    // 83FE002A-F100C064-A3045930-A3045930 (Pluto): 0..255 elevator-validated 2026-07-21.
-    // Matches Earth-style first two families; XOR-step and minus-one 256+ candidates reset to zero like Earth.
+    // 83FE002A-F100C064-A3045930-A3045930 (Pluto): low range and corrected XOR-derived
+    // 256/384 boundaries elevator-validated 2026-07-21. Earlier addition-derived and minus-one
+    // 256+ candidates failed because they used the wrong high-family constants.
     internal static readonly TokenBlockUtils.Family Pluto0To127 = new(0x1F12, 0x5BD3, 0);
     internal static readonly TokenBlockUtils.Family Pluto128To255 = new(0xEC12, 0xDBDB, 128);
+    internal static readonly TokenBlockUtils.Family Pluto256To383 = new(0x1F13, 0x5BC3, 256);
+    internal static readonly TokenBlockUtils.Family Pluto384To500 = new(0xEC13, 0xDBCB, 384);
 
     // C3FE0031-20C60722-B6D14924-B6D14924 (Mars): low range and family boundaries elevator-validated 2026-07-20.
     internal static readonly TokenBlockUtils.Family Mars0To127 = new(0x4EC7, 0x0082, 0);
@@ -132,12 +135,16 @@ public static class EncodingSequences
     public static readonly EncodingSequence Earth = new(
         "earth",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Earth0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255));
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Earth128To255),
+        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Earth256To383),
+        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Earth384To500));
 
     public static readonly EncodingSequence Pluto = new(
         "pluto",
         new EncodingSequenceSegment(0, 127, EncodingFamilyDefinitions.Pluto0To127),
-        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Pluto128To255));
+        new EncodingSequenceSegment(128, 255, EncodingFamilyDefinitions.Pluto128To255),
+        new EncodingSequenceSegment(256, 383, EncodingFamilyDefinitions.Pluto256To383),
+        new EncodingSequenceSegment(384, 500, EncodingFamilyDefinitions.Pluto384To500));
 
     public static readonly EncodingSequence Mars = new(
         "mars",

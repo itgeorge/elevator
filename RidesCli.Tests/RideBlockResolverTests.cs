@@ -161,6 +161,36 @@ public class RideBlockResolverTests
         Assert.That(result.BlocksMatched, Is.True);
     }
 
+    [TestCase(256u, 0x18131208u)]
+    [TestCase(383u, 0x18136DFFu)]
+    [TestCase(384u, 0xEB139200u)]
+    [TestCase(500u, 0xEB13E647u)]
+    public void Resolve_matching_earth_high_range_blocks_returns_rides(uint expectedRides, uint blockValue)
+    {
+        var block = new T55Block(blockValue);
+
+        var result = RideBlockResolver.Resolve(block, block);
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+        Assert.That(result.BlocksMatched, Is.True);
+    }
+
+    [TestCase(256u, 0x1F13120Fu)]
+    [TestCase(383u, 0x1F136DF8u)]
+    [TestCase(384u, 0xEC139207u)]
+    [TestCase(500u, 0xEC13E640u)]
+    public void Resolve_matching_pluto_high_range_blocks_returns_rides(uint expectedRides, uint blockValue)
+    {
+        var block = new T55Block(blockValue);
+
+        var result = RideBlockResolver.Resolve(block, block);
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+        Assert.That(result.BlocksMatched, Is.True);
+    }
+
     [Test]
     public void Resolve_matching_rides_above_500_returns_invalid()
     {

@@ -4,6 +4,12 @@ This document summarizes hardware exploration of unknown ride-encoding candidate
 
 **Audience:** a new agent investigating the general encoding algorithm from known families and dumps, while the hardware team continues capture work on candidates B/C/D.
 
+> **Update later on 2026-07-21:** the generalized constant-zero-block XOR algorithm in
+> `.docs/ride-encoding-algorithm-hypothesis-2026-07-21.md` identified corrected Earth high values.
+> Hardware validated Earth `256 18131208 -> 255 EB12EDE7` and `384 EB139200 -> 383 18136DFF`,
+> then Pluto `256 1F13120F -> 255 EC12EDE0` and `384 EC139207 -> 383 1F136DF8`.
+> Earth and Pluto are now registered through 500. Earlier rejection notes below concern incorrect addition-derived values.
+
 ---
 
 ## Encoding model (production)
@@ -37,8 +43,8 @@ Treat inferred families as hypotheses until elevator-validated across multiple r
 | Mercury | 0..500 | CCC7/0000, 3FC7/8008, CCC6/0010, 3FC6/8018 | 9BFE0062-… | XOR-step 256+ validated |
 | Venus | 0..500 | 48C7/0084, BBC7/808C, 48C6/0094, BBC6/809C | 43FE0062-… | XOR-step 256+ validated |
 | Mars | 0..500 | 4EC7/0082, BDC7/808A, 4EC6/0092, BDC6/809A | C3FE0031-… | XOR-step 256+ validated |
-| Earth | 0..255 | 1812/5BD4, EB12/DBDC | D3FE005D-… | 256+ extrapolations fail / reset to zero |
-| **Pluto** | **0..255** | **1F12/5BD3, EC12/DBDB** | **83FE002A-F100C064-A3045930-A3045930** | **Added 2026-07-21** |
+| Earth | 0..500 | 1812/5BD4, EB12/DBDC, 1813/5BC4, EB13/DBCC | D3FE005D-… | Corrected XOR-derived 256/384 boundaries validated |
+| **Pluto** | **0..500** | **1F12/5BD3, EC12/DBDB, 1F13/5BC3, EC13/DBCB** | **83FE002A-F100C064-A3045930-A3045930** | Corrected 256/384 boundaries validated |
 
 Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
@@ -63,7 +69,7 @@ Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 | XOR-step 256 | `1F13922F` | unchanged | ❌ Rejected |
 | Minus-one 256 | `1F11122F` | `1F12121F` (0), double-beep | ⚠️ Accepted as zero (Earth-like) |
 
-**Conclusion:** Pluto is Earth-class — full **0..255** with normal decrement; **capped at 255** for practical purposes. Committed as production sequence `pluto`.
+**Updated conclusion:** Pluto is Earth-class / rotation-4. The original failed 256 tests used incorrect addition-derived or minus-one values. Corrected XOR-derived values validated through the 256 and 384 boundaries, so Pluto is now committed as a 0..500 production sequence.
 
 ---
 
@@ -235,6 +241,9 @@ printf 'connect\nwrite 5 <hex>\nwrite 6 <hex>\nread 5\nread 6\nexit\n' | dotnet 
 
 | Date | Action |
 |------|--------|
-| 2026-07-21 | Validated and registered **Pluto** (83FE, 0..255) |
+| 2026-07-21 | Validated and registered **Pluto** (83FE, initially 0..255) |
 | 2026-07-21 | Tested candidates B/C/D: anchors work; 128 family fails; `+0xFF` decrement observed |
 | 2026-07-21 | Confirmed EBFE card unchanged at `8C12C922` after failed 128 test |
+| 2026-07-21 | Derived generalized rotation/XOR algorithm; corrected Earth high values |
+| 2026-07-21 | Validated Earth `256 -> 255` and `384 -> 383`; extended production Earth to 500 |
+| 2026-07-21 | Validated Pluto `256 -> 255` and `384 -> 383`; extended production Pluto to 500 |
