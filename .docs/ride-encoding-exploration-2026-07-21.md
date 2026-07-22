@@ -117,7 +117,7 @@ Reset image: `RidesCli/Data/saturn-0-rides.bin`. Profile name: `saturn`. Hardwar
 
 Earlier synthesized values from the obsolete family formula (`8912C905` at rides=128) are superseded by the generalized rotation-0 model.
 
-Reset image: `RidesCli/Data/uranus-0-rides.bin`. Profile name: `uranus`.
+Reset image: `RidesCli/Data/uranus-0-rides.bin`. Profile name: `uranus`. Hardware `reset --profile uranus` smoke test passed 2026-07-22 on sacrificial Saturn card (pre-reset 500 rides); post-reset read reported `sequence: uranus`, rides 0, with blocks 1..6 matching the reset image.
 
 ### Candidate D — EBFE (registered as Jupiter)
 

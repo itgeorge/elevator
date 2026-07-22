@@ -261,13 +261,13 @@ The implementing agent may create/register `RidesCli/Data/uranus-0-rides.bin`, b
 
 ## Todos
 
-- [ ] Before hardware reset, run a read-only preflight and verify the intended sacrificial token with the user.
-- [ ] Hardware-smoke-test Uranus reset through the normal safe reset path.
-- [ ] Record final reset smoke-test evidence in this plan and docs.
+- [x] Before hardware reset, run a read-only preflight and verify the intended sacrificial token with the user.
+- [x] Hardware-smoke-test Uranus reset through the normal safe reset path.
+- [x] Record final reset smoke-test evidence in this plan and docs.
 
 ## Agent notes / assumptions
 
-- Notes: Automated reset tests pass; hardware smoke test pending user-confirmed sacrificial token on PM3.
+- Notes: **Hardware reset smoke test passed 2026-07-22.** Sacrificial Saturn card on PM3 pre-reset: identity `23FE007B-D88CBD8A-5D04593D-5D04593D`, blocks 5/6 `8B13BD05` (500 rides, sequence saturn). `reset --profile uranus` succeeded. Post-reset blocks: 0=`00148040`, 1=`FBFE002A`, 2=`F1003C92`, 3=`F5D1D766`, 4=`F5D1D766`, 5=`891249D0`, 6=`891249D0`, 7=`00000000`. `RidesCli read` reported `sequence: uranus`, `rides remaining: 0`.
 - Assumptions: None.
 
 ---
@@ -281,15 +281,15 @@ The implementing agent may create/register `RidesCli/Data/uranus-0-rides.bin`, b
 - [x] Run `git diff --check` — clean.
 - [x] Inspect `git status` — unrelated untracked paths untouched.
 - [x] Update this plan's Agent notes (below).
-- [ ] Commit the code/test/docs/plan updates together.
-- [ ] Hand off to the reviewer/user.
+- [x] Commit the code/test/docs/plan updates together.
+- [x] Hand off to the reviewer/user.
 
 ## Agent notes / assumptions
 
 - Notes:
   - **Uranus parameters:** `friendlyName=uranus`, `zeroBlock=891249D0`, `rotation=0`, `range=0..500`, identity `FBFE002A-F1003C92-F5D1D766-F5D1D766`.
   - **Hardware summary:** All listed boundary transitions and `1 -> 0` confirmed with matching blocks 5/6.
-  - **Reset status:** Implemented and automated-test verified; hardware smoke test pending.
+  - **Reset status:** Implemented, automated-test verified, and **hardware smoke test passed** (2026-07-22).
   - **Saturn/Jupiter:** Unchanged; no regressions observed.
   - **Test results:** Tokens.Tests 90, RidesCli.Tests 126, RideCaptureCli.Tests 36, oracle PASS (8 sequences, 49 observations).
 - Assumptions: None.
@@ -298,6 +298,6 @@ The implementing agent may create/register `RidesCli/Data/uranus-0-rides.bin`, b
 
 # Follow-up work explicitly outside this plan
 
-- [ ] Complete Uranus hardware reset smoke test on user-confirmed sacrificial token.
+- [x] Complete Uranus hardware reset smoke test on user-confirmed sacrificial token. **Done 2026-07-22** — see Phase 8 Agent notes.
 - [ ] Investigate whether rotations 1,2,3,5,6,7 occur in real tokens.
 - [ ] Consider a future tool for inferring `(zeroBlock, rotation)` from multiple trusted anchors while refusing single-block ambiguity.
