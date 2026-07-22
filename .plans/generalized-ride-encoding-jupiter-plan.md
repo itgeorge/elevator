@@ -1,5 +1,7 @@
 # Generalized Ride Encoding and Jupiter Registration Plan
 
+> **Superseding update:** This plan originally registered Jupiter while leaving Candidates B/C unregistered. Later plans registered Candidate B as **Saturn** and Candidate C as **Uranus**, both rotation `0`, resettable, and supported through `0..500`. Any unchecked TODOs or notes below that say B/C remain unregistered are historical.
+
 ## How agents should use this plan
 
 Read this entire file before making changes. Start each session with `git status --short --branch` and inspect the current versions of all files relevant to the next task. Find the next `[ ]` TODO and work on it; if new relevant work is discovered, add TODOs under the current phase before continuing. Keep working until the current TODO, or a coherent group of TODOs that forms a testable chunk, is complete. Mark completed items by changing `[ ]` to `[x]`, and document assumptions, deviations, hardware results, and design decisions in this file.
@@ -68,7 +70,7 @@ Current registered sequences use rotation 4. Jupiter uses rotation 0.
 - Jupiter is recognized by `RideCaptureCli` and no longer depends on the incorrect historical EBFE seed count.
 - Registered sequence decode is based on full structural validation, not high16 lookup.
 - All registered sequences are self-collision-free and mutually collision-free over 0..500 (also check 0..511 as a diagnostic).
-- Candidates B/C remain unregistered and unresolved by production until separate hardware validation/registration work.
+- ~~Candidates B/C remain unregistered and unresolved by production until separate hardware validation/registration work.~~ Superseded: B is Saturn and C is Uranus.
 - Jupiter reset support is finalized only after hardware confirms `1 -> 0` and the reset image is tested.
 
 ---
@@ -79,7 +81,7 @@ Current registered sequences use rotation 4. Jupiter uses rotation 0.
 - Preserve public behavior that matters to users: friendly sequence names, read/set/add/reset flows, block safety, and all encoded values.
 - Normal set/add writes only blocks 5/6. Reset writes only blocks 1..6 through the existing verified/rollback path. Never write blocks 0 or 7.
 - Jupiter is the only rotation-0 sequence to register in this plan.
-- Candidate B (`zero=8B1249F0`, rotation 0) and Candidate C (`zero=891249D0`, rotation 0) remain exploration fixtures only. Production decode should return unknown for their blocks.
+- ~~Candidate B (`zero=8B1249F0`, rotation 0) and Candidate C (`zero=891249D0`, rotation 0) remain exploration fixtures only. Production decode should return unknown for their blocks.~~ Superseded after hardware validation: they are registered as Saturn and Uranus.
 - Do not infer a ride count for an arbitrary unregistered block by inventing a zero block. Production decoding must match a registered sequence and validate exact round-trip structure.
 - The app-supported range remains 0..500 even though the counter representation supports 0..511.
 - Jupiter canonical identity/reset image uses the EBFE fob profile, not the unrelated 9BFE card used for some boundary tests.
@@ -446,12 +448,12 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   EBFE seed 262
   ```
 
-- [x] Update `debug/ride-encoding-hypothesis.py` to mirror final registered parameters and keep B/C as non-production hypotheses.
+- [x] Update `debug/ride-encoding-hypothesis.py` to mirror final registered parameters and keep B/C as non-production hypotheses. Historical: B/C were registered later as Saturn/Uranus.
 - [x] Update `debug/RideBlockGuessPrototype` only if it is an owned/tracked artifact in the executing agent’s checkout; otherwise document that it is superseded and leave unrelated untracked work untouched.
 - [x] Update documentation:
   - generalized architecture and decode ambiguity rules;
   - Jupiter hardware evidence and production status;
-  - B/C explicitly pending;
+  - B/C explicitly pending at the time of the Jupiter plan; superseded later by Saturn/Uranus registration;
   - blocks 1..4 are identity/reset metadata, not ride-encoding input.
 
 ## Agent notes / assumptions
@@ -546,21 +548,21 @@ Expected after one elevator ride: Jupiter 0: 8C124980
   - Jupiter reset hardware result;
   - any remaining risks or follow-ups.
 - [x] Commit the final plan update with the final code/test/documentation chunk.
-- [x] Hand off to the reviewing agent/user; do not register Candidates B/C as part of cleanup.
+- [x] Hand off to the reviewing agent/user; do not register Candidates B/C as part of cleanup. Historical: B/C were registered in later dedicated plans.
 
 ## Agent notes / assumptions
 
 - Notes: Final implementation uses `RideCounterCodec`, direct `EncodingSequence(zeroBlock, rotation, minRides, maxRides)`, and exhaustive registered structural matching. Removed family/segment APIs and high16 registry lookup. Registered parameters are Mercury `CCC749CC/4`, Venus `48C74948/4`, Earth `18121218/4`, Pluto `1F12121F/4`, Mars `4EC7494E/4`, and Jupiter `8C124980/0`, all `0..500`.
 - Notes: Final targeted results: Tokens 63, RidesCli 99, RideCaptureCli 28 passed. Full non-integration suite also passed (Pm3Usb 120 passed/1 skipped; TokenDumps has no matching filtered tests). The oracle passed 29 observations and collision checks for eight hypotheses over `0..500` and `0..511`.
 - Notes: Follow-up hardening decodes every mirrored registered capture state even with prior history; stale EBFE labels cannot override Jupiter’s structural count, and count jumps start a new capture sequence.
-- Notes: Jupiter reset remains intentionally unavailable pending the hardware `8C124881 -> 8C124980` confirmation. Candidates B/C remain unregistered. No unrelated debug paths were touched.
+- Historical note: At an earlier handoff Jupiter reset remained unavailable pending the hardware `8C124881 -> 8C124980` confirmation, and Candidates B/C remained unregistered. Superseded: Jupiter reset is enabled, B is Saturn, and C is Uranus. No unrelated debug paths were touched.
 - Assumptions:
 
 ---
 
 # Follow-up work explicitly outside this plan
 
-- [ ] Hardware-test and separately register Candidate B (`zero=8B1249F0`, rotation 0) if validated.
-- [ ] Hardware-test and separately register Candidate C (`zero=891249D0`, rotation 0) if validated.
+- [x] Hardware-test and separately register Candidate B (`zero=8B1249F0`, rotation 0) if validated. Superseded/completed in `.plans/candidate-b-saturn-plan.md`.
+- [x] Hardware-test and separately register Candidate C (`zero=891249D0`, rotation 0) if validated. Superseded/completed in `.plans/candidate-c-uranus-plan.md`.
 - [ ] Investigate whether rotations 1,2,3,5,6,7 occur in real tokens.
 - [ ] Consider a future tool for inferring `(zeroBlock, rotation)` from multiple trusted anchors while refusing single-block ambiguity.

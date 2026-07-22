@@ -53,11 +53,15 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 
 ## End goal of this plan
 
+**Current outcome:** Earth is registered and resettable for `0..500` using the generalized zero-block/rotation codec. The older plan goals below are historical and were superseded by Phase 7.
+
+Historical goals from the earlier partial-registration phase:
+
 - Keep Earth reset safe via `RidesCli reset --sequence earth`.
 - Register only families with enough supporting evidence.
-- Treat Earth as capped at `255` in application code until contradictory evidence appears.
-- Keep `debug/write-earth-boundary.sh` limited to confirmed starts (`127`, `128`, `255`) so known-bad high candidates are not accidentally reused.
-- Do not register full Earth `0..500` unless future evidence identifies valid higher families.
+- ~~Treat Earth as capped at `255` in application code until contradictory evidence appears.~~ Superseded: corrected XOR-derived high values validated and Earth is now `0..500`.
+- ~~Keep `debug/write-earth-boundary.sh` limited to confirmed starts (`127`, `128`, `255`) so known-bad high candidates are not accidentally reused.~~ Superseded by production registration and generalized codec.
+- ~~Do not register full Earth `0..500` unless future evidence identifies valid higher families.~~ Superseded by Phase 7 validation.
 
 ## Key working assumptions
 
@@ -114,14 +118,14 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
   ```
 
 - [x] Add a public second-family alias: `TokenBlockUtils.Families.FamilyEB12_128To255`.
-- [x] Extend `EncodingSequences.Earth` to `0..255` only.
-- [x] Do not add predicted Earth `256..500` families.
+- [x] Extend `EncodingSequences.Earth` to `0..255` only. _(Historical; superseded by Phase 7 full `0..500` registration.)_
+- [x] Do not add predicted Earth `256..500` families. _(Historical; superseded by corrected XOR-derived high values.)_
 - [x] Expose sequence-supported ride ranges via `EncodingSequence.MinRides` / `MaxRides`.
-- [x] Enforce Earth's confirmed cap (`0..255`) in `RidesCli set/add/price`.
+- [x] Enforce Earth's confirmed cap (`0..255`) in `RidesCli set/add/price`. _(Historical; Earth is no longer capped.)_
 
 ## Agent notes / assumptions
 
-- Notes: `RidesCli set/add` may now preserve and write Earth values within `0..255`. Values above `255` are rejected for Earth instead of attempting unsupported high-family encodings.
+- Historical note: `RidesCli set/add` initially preserved and wrote Earth values only within `0..255`. This was superseded after the generalized codec corrected and validated Earth `256+` values.
 
 ---
 
@@ -315,7 +319,7 @@ The original `256` boundary attempt wrote `18131228`, but the subsequent failed-
 ## Agent notes / assumptions
 
 - Notes: The successful `128 -> 127` transition confirms both second-family starting value and transition down into the low family. The successful `255 -> 254` confirms second-family in-range decrement near its top.
-- Notes: The earlier single `256` failure was initially inconclusive, but subsequent controlled tests of old predicted `256`/`383` stayed unchanged and visual alternative `256`/`384` reset to zero/low. Combined evidence supports treating Earth as capped at `255`.
+- Historical note: The earlier single `256` failure was initially inconclusive, and subsequent controlled tests of old addition-derived `256`/`383` stayed unchanged while visual alternative `256`/`384` reset to zero/low. This temporarily supported a `0..255` cap, but Phase 7 showed those were the wrong high values; corrected XOR-derived values validated.
 
 ## Extrapolation notes for family 3
 

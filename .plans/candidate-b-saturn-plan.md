@@ -1,5 +1,7 @@
 # Candidate B / Saturn Registration Plan
 
+> **Superseding update:** This plan was written before Candidate C was registered. Candidate C is now registered as **Uranus** in `.plans/candidate-c-uranus-plan.md`. Notes below that say Candidate C remains unregistered/pending are historical to the Saturn implementation.
+
 ## How agents should use this plan
 
 Read this entire file before making changes. Start each session with `git status --short --branch` and inspect the current versions of all files relevant to the next task. Find the next `[ ]` TODO and work on it; if new relevant work is discovered, add TODOs under the current phase before continuing. Keep working until the current TODO, or a coherent group of TODOs that forms a testable chunk, is complete. Mark completed items by changing `[ ]` to `[x]`, and document assumptions, deviations, hardware results, and design decisions in this file.
@@ -40,7 +42,7 @@ This is not a codec refactor. Jupiter already proved production/elevator support
 - `EncodingSequences.Saturn` is registered for `0..500` using `zeroBlock=8B1249F0`, `rotation=0`.
 - Saturn read/set/add flows work through `RidesCli`, preserving Saturn after writes.
 - Saturn blocks decode structurally through the registered-sequence registry.
-- Candidate C remains unregistered and unknown to production.
+- ~~Candidate C remains unregistered and unknown to production.~~ Superseded: Candidate C is registered as Uranus.
 - Saturn identity recognition is added using the canonical Candidate-B identity:
 
   ```text
@@ -48,7 +50,7 @@ This is not a codec refactor. Jupiter already proved production/elevator support
   ```
 
 - Saturn reset support is implemented using the now-known zero/reset image, then hardware-smoke-tested before final handoff.
-- Documentation and exploration/oracle scripts reflect Saturn as production and Candidate C as still pending.
+- Documentation and exploration/oracle scripts reflect Saturn as production. Historical note: Candidate C was still pending during this plan, but is now Uranus.
 - All targeted and non-integration tests pass.
 
 ---
@@ -57,8 +59,8 @@ This is not a codec refactor. Jupiter already proved production/elevator support
 
 - Do not change the generalized codec unless a failing test proves the existing implementation is wrong.
 - Do not infer arbitrary rotation-0 blocks. Production decode must continue to require a registered exact structural match.
-- Do not register Candidate C in this plan.
-- Do not enable Candidate C identity or reset support in this plan.
+- Do not register Candidate C in this plan. Historical note: Candidate C was registered later as Uranus.
+- Do not enable Candidate C identity or reset support in this plan. Historical note: enabled later in the Uranus plan.
 - Saturn `1 -> 0` is confirmed, so the reset image is known; still smoke-test `reset --profile saturn` on a sacrificial token before declaring reset support complete.
 - Normal set/add writes only blocks 5/6. Reset writes only blocks 1..6 through the existing safe verified path. Never write blocks 0 or 7.
 - Identity blocks 1..4 are metadata/reset profile identity, not ride-encoding inputs. Saturn ride blocks were validated on EBFE/Jupiter identity tokens, which is acceptable evidence for the ride sequence.
@@ -408,7 +410,7 @@ The `1 -> 0` zero transition is confirmed, so Saturn reset support should be imp
   - test counts/results;
   - any remaining risks or follow-up work.
 - [x] Commit the code/test/docs/plan updates together.
-- [x] Hand off to the reviewer/user and explicitly state that Candidate C remains unregistered.
+- [x] Hand off to the reviewer/user and explicitly state that Candidate C remained unregistered at that time. Superseded: Candidate C is now Uranus.
 
 ## Agent notes / assumptions
 
@@ -417,14 +419,14 @@ The `1 -> 0` zero transition is confirmed, so Saturn reset support should be imp
   - **Hardware summary:** All listed boundary transitions and `1 -> 0` confirmed with matching blocks 5/6.
   - **Reset status:** Implemented, automated-test verified, and **hardware smoke test passed** (2026-07-22).
   - **Test results:** Tokens.Tests 77, RidesCli.Tests 113, RideCaptureCli.Tests 32, Pm3UsbApi.Tests 120 (1 skipped), oracle PASS. Full non-integration filter: all passed.
-  - **Remaining risks:** Candidate C still unregistered.
+  - **Remaining risks at Saturn handoff:** Candidate C still unregistered. Superseded: Candidate C is now Uranus.
 - Assumptions: None.
 
 ---
 
 # Follow-up work explicitly outside this plan
 
-- [ ] Hardware-test and separately register Candidate C (`zeroBlock=891249D0`, rotation 0) if validated.
+- [x] Hardware-test and separately register Candidate C (`zeroBlock=891249D0`, rotation 0) if validated. Completed later in `.plans/candidate-c-uranus-plan.md`.
 - [ ] Investigate whether rotations 1,2,3,5,6,7 occur in real tokens.
 - [ ] Consider a future tool for inferring `(zeroBlock, rotation)` from multiple trusted anchors while refusing single-block ambiguity.
-- [ ] Complete Saturn hardware reset smoke test on user-confirmed sacrificial token. **Done 2026-07-22** — see Phase 7 Agent notes.
+- [x] Complete Saturn hardware reset smoke test on user-confirmed sacrificial token. **Done 2026-07-22** — see Phase 7 Agent notes.

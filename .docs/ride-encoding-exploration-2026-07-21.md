@@ -61,8 +61,8 @@ Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 |------|-------|-----------|--------|
 | Low decrement | 50 `1F12203C` | `1F12230C` (49) | ✅ Matches model |
 | Second family decrement | 128 `EC129217` | `1F126DE8` (127) | ✅ Matches model |
-| XOR-step 256 | `1F13922F` | unchanged | ❌ Rejected |
-| Minus-one 256 | `1F11122F` | `1F12121F` (0), double-beep | ⚠️ Accepted as zero (Earth-like) |
+| Old incorrect 256 candidate | `1F13922F` | unchanged | ❌ Rejected; superseded by corrected `1F13120F` |
+| Minus-one 256 | `1F11122F` | `1F12121F` (0), double-beep | ⚠️ Accepted as zero; not the valid high-range encoding |
 
 **Updated conclusion:** Pluto is Earth-class / rotation-4. The original failed 256 tests used incorrect addition-derived or minus-one values. Corrected XOR-derived values validated through the 256 and 384 boundaries, so Pluto is now committed as a 0..500 production sequence.
 
@@ -70,7 +70,7 @@ Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
 ## Candidate B → Saturn (registered)
 
-> **Current production status:** Candidate B is registered as **Saturn** with `zeroBlock=8B1249F0`, rotation 0, range 0..500. Candidate C remains unregistered. Jupiter (formerly Candidate D) was registered earlier.
+> **Current production status:** Candidate B is registered as **Saturn** with `zeroBlock=8B1249F0`, rotation 0, range 0..500. Candidate C is now also registered as **Uranus**. Jupiter (formerly Candidate D) was registered earlier.
 
 | Item | Value |
 |------|-------|
@@ -138,7 +138,7 @@ See Jupiter in the registered sequences table above. Historical exploration note
 
 Decrement: `0x70B9 → 0x71B8` (+`0xFF`); model predicted `7F1271A9`; pred ⊕ obs low16 = `0x0011`.
 
-**Historical note:** older EBFE captures at rides 233..260 looked inconsistent. The 2026-07-21 low-range anchor at 57 behaved like B/C; high-range behavior remains untrusted.
+**Historical note:** older EBFE captures at rides 233..260 looked inconsistent under the old family model. The generalized rotation-0 model later explained those states and Jupiter is now registered/resettable for `0..500`.
 
 ---
 
@@ -147,8 +147,8 @@ Decrement: `0x70B9 → 0x71B8` (+`0xFF`); model predicted `7F1271A9`; pred ⊕ o
 | Class | Examples | xor | Decrement | 128 family | 256+ |
 |-------|----------|-----|-----------|------------|------|
 | C7/C6 (Mercury/Venus/Mars) | 48C7, BBC7, 4EC7 | 008x–809x | Matches `baseLow` model | Validated | XOR-step validated |
-| Earth / Pluto | 1812/EB12, 1F12/EC12 | 5BDx/DBDx | Matches `baseLow` model | Validated | Resets to zero |
-| **Unknown xx12 / tiny-xor** | **7812, 7A12, 7F12** | **00Cx–00Ex** | **`low16 += 0xFF`** | **Rejected** | **Not tested** |
+| Earth / Pluto | 1812/EB12, 1F12/EC12 | 5BDx/DBDx | Matches `baseLow` locally; generalized as rotation 4 | Validated | Corrected XOR-derived values validated through 500; earlier reset-to-zero tests used wrong addition/minus-one candidates |
+| Jupiter / Saturn / Uranus | 7F12/8C12/8C13, 7812/8B12/8B13, 7A12/8912/8913 | rotation 0 zero-block codec | `+0xFF` was the local odd-to-even decrement symptom | Validated | Registered/resettable through 500 |
 
 ### The `+0xFF` decrement hypothesis
 
@@ -160,7 +160,7 @@ post.low16 = (pre.low16 + 0xFF) mod 2^16
 
 while the production encoder predicts a different adjacent block (always `pred ⊕ obs` low16 = **`0x0011`** for the three cases above).
 
-**Implication:** these tokens may use a different encoding path than `baseLow(m) XOR xor`, or the elevator decrements with a rule not yet captured in `TokenBlockUtils`. Single-point xor inference can still find the anchor block but fails to generalize.
+**Superseding implication:** these observations were the clue for the rotation-0 codec. Single-point `baseLow` xor inference can find an anchor but fails to generalize for Jupiter/Saturn/Uranus; production now uses registered `(zeroBlock, rotation, range)` structural decoding instead.
 
 ---
 
@@ -193,27 +193,16 @@ Do not infer xor without CLI I/O or a known ride label:
 
 ## Recommended next work
 
-### Hardware / capture (human + RideCaptureCli)
+### Current status
 
-Priority: **full decrement captures** for B, C, D from validated anchors down toward 0.
+The old recommended full decrement captures for B/C/D are no longer necessary for production registration: B is Saturn, C is Uranus, and D is Jupiter, all registered/resettable through `0..500` with rotation `0`.
 
-| Candidate | Start block | Token on hand |
-|-----------|-------------|---------------|
-| B (23FE) | `781267DE` (post-ride from 47; treat as new baseline) | fob was last on EBFE profile |
-| C (FBFE) | `7A1223BA` (post-ride from 107) | fob |
-| D (EBFE) | `7F1271B8` (post-ride from 57) | fob |
+### Remaining useful follow-up
 
-Use `RideCaptureCli` Enter scans; avoid writing synthesized ride values except captured anchors. Record signal strength and mirror blocks 5/6.
-
-### Algorithm investigation (new agent)
-
-Hypotheses worth testing against **all** registered families and dumps:
-
-1. **`+0xFF` decrement class** — Is there a closed-form mapping between `baseLow(m)` blocks and the observed `+0xFF` chain? Why is pred ⊕ obs always `0x0011` for B/C/D?
-2. **Family taxonomy** — C7/C6 vs xx12/5BDx (Earth/Pluto) vs xx12/tiny-xor (B/C/D). Does high16 encode a class byte (`12`, `C7`, `C6`) independent of xor?
-3. **Single-point inference limits** — When does `xor = low16 XOR baseLow(knownRides)` produce decoy families that only work at one ride?
-4. **Second-family prediction** — Earth-style `^F300` / `+8008` works for Pluto but fails for B/C/D at 128. Is there an alternate second-family rule for tiny-xor class, or are they capped below 128?
-5. **Cross-dump clustering** — Compare `high16` across all `elevator-t55xx-*.bin` files; flag shared high16 across unrelated profiles (e.g. `8B12` on 93FE dump vs B's prediction).
+1. **Unlabeled dumps** — Revisit the `rides-UNKNOWN` dumps below using the generalized codec; some may now decode as registered sequences or indicate another zeroBlock/rotation candidate.
+2. **Rotation search** — Investigate whether rotations other than `0` and `4` occur in real tokens.
+3. **Inference tooling** — Build a tool that requires multiple trusted anchors to infer `(zeroBlock, rotation)` and refuses ambiguous single-block guesses.
+4. **Cross-dump clustering** — Compare `elevator-t55xx-*.bin` blocks against all registered sequences, then cluster remaining unknowns by possible rotation/zeroBlock hypotheses.
 
 Useful tooling:
 
