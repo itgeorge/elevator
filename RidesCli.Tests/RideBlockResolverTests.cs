@@ -253,6 +253,24 @@ public class RideBlockResolverTests
         Assert.That(result.Rides, Is.EqualTo(expectedRides));
     }
 
+    [TestCase(0x8F1249B0u, 0u)]
+    [TestCase(0x7C1236CFu, 127u)]
+    [TestCase(0x8F12C930u, 128u)]
+    [TestCase(0x7C12B64Fu, 255u)]
+    [TestCase(0x8F1349B1u, 256u)]
+    [TestCase(0x7C1336CEu, 383u)]
+    [TestCase(0x8F13C931u, 384u)]
+    [TestCase(0x8F13B840u, 497u)]
+    [TestCase(0x8F13BD45u, 500u)]
+    public void Resolve_matching_neptune_blocks_returns_rides(uint blockValue, uint expectedRides)
+    {
+        var result = RideBlockResolver.Resolve(new T55Block(blockValue), new T55Block(blockValue));
+
+        Assert.That(result.Status, Is.EqualTo(RideReadStatus.Success));
+        Assert.That(result.Rides, Is.EqualTo(expectedRides));
+        Assert.That(result.BlocksMatched, Is.True);
+    }
+
     [Test]
     public void Resolve_matching_rides_above_500_returns_unknown()
     {

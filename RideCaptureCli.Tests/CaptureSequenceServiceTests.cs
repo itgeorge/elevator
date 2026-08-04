@@ -258,6 +258,32 @@ public class CaptureSequenceServiceTests
     }
 
     [Test]
+    public void First_canonical_neptune_scan_decodes_zero_and_recognizes_identity()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("8BFE002A", "F100C6A2", "95D15917", "95D15917", "8F1249B0", "8F1249B0");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(0));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
+    public void Neptune_ride_blocks_on_saturn_identity_decode_structurally()
+    {
+        var service = new CaptureSequenceService();
+        var scan = CreateScan("23FE007B", "D88CBD8A", "5D04593D", "5D04593D", "8F13B840", "8F13B840");
+
+        var result = service.ApplyScan([], scan);
+
+        Assert.That(result.AddedRecord.TrackedCount, Is.EqualTo(497));
+        Assert.That(result.AddedRecord.RealRideCount, Is.EqualTo(497));
+        Assert.That(result.AddedRecord.Warnings, Does.Not.Contain("UNKNOWN_TOKEN"));
+    }
+
+    [Test]
     public void First_known_token_with_unseeded_undecodable_state_does_not_use_historical_seed()
     {
         var service = new CaptureSequenceService();

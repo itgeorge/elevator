@@ -61,8 +61,9 @@ public static class EncodingSequences
     public static readonly EncodingSequence Jupiter = new("jupiter", new T55Block(0x8C124980), 0, 0, 500);
     public static readonly EncodingSequence Saturn = new("saturn", new T55Block(0x8B1249F0), 0, 0, 500);
     public static readonly EncodingSequence Uranus = new("uranus", new T55Block(0x891249D0), 0, 0, 500);
+    public static readonly EncodingSequence Neptune = new("neptune", new T55Block(0x8F1249B0), 0, 0, 500);
 
-    public static IReadOnlyList<EncodingSequence> All { get; } = BuildRegistry([Mercury, Venus, Earth, Pluto, Mars, Jupiter, Saturn, Uranus]);
+    public static IReadOnlyList<EncodingSequence> All { get; } = BuildRegistry([Mercury, Venus, Earth, Pluto, Mars, Jupiter, Saturn, Uranus, Neptune]);
 
     private static IReadOnlyList<EncodingSequence> BuildRegistry(IReadOnlyList<EncodingSequence> sequences)
     {

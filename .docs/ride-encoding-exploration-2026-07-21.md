@@ -4,6 +4,8 @@ This document summarizes hardware exploration of unknown ride-encoding candidate
 
 **Audience:** a new agent investigating the general encoding algorithm from known families and dumps.
 
+> **Update 2026-08-04:** **Neptune** is registered with `zeroBlock=8F1249B0`, rotation 0, range 0..500, and canonical identity `8BFE002A-F100C6A2-95D15917-95D15917`. Its 128/256/384 boundaries and 500→497 decrement were hardware-validated; reset image `neptune-0-rides.bin` is implemented.
+
 > **Update 2026-07-22:** Candidate B is registered as **Saturn** and Candidate C as **Uranus** (both rotation 0, range 0..500). Boundary transitions and `1 -> 0` were hardware-validated; reset images `saturn-0-rides.bin` and `uranus-0-rides.bin` are implemented.
 
 > **Update later on 2026-07-21:** the generalized constant-zero-block XOR algorithm in
@@ -40,6 +42,7 @@ A single trusted `(ride count, block5/6)` point can still generate an exploratio
 | **Jupiter** | **0..500** | **rotation 0, zeroBlock 8C124980** | **EBFE002A-F100CC5B-A5045936-A5045936** | Candidate D registered; reset enabled |
 | **Saturn** | **0..500** | **rotation 0, zeroBlock 8B1249F0** | **23FE007B-D88CBD8A-5D04593D-5D04593D** | Candidate B registered; reset enabled |
 | **Uranus** | **0..500** | **rotation 0, zeroBlock 891249D0** | **FBFE002A-F1003C92-F5D1D766-F5D1D766** | Candidate C registered; reset enabled |
+| **Neptune** | **0..500** | **rotation 0, zeroBlock 8F1249B0** | **8BFE002A-F100C6A2-95D15917-95D15917** | Boundaries/high-count decrement validated; reset enabled |
 
 Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 
@@ -119,6 +122,25 @@ Earlier synthesized values from the obsolete family formula (`8912C905` at rides
 
 Reset image: `RidesCli/Data/uranus-0-rides.bin`. Profile name: `uranus`. Hardware `reset --profile uranus` smoke test passed 2026-07-22 on sacrificial Saturn card (pre-reset 500 rides); post-reset read reported `sequence: uranus`, rides 0, with blocks 1..6 matching the reset image.
 
+## Neptune (registered)
+
+| Item | Value |
+|------|-------|
+| Profile | `8BFE002A-F100C6A2-95D15917-95D15917` |
+| Canonical zero ride blocks | `8F1249B0` (blocks 5 and 6) |
+| Zero block / rotation | `8F1249B0` / 0 |
+
+### Hardware validation
+
+| Test | Write | Post-ride | Result |
+|------|-------|-----------|--------|
+| 128 boundary (Saturn identity) | `8F12C930` | `7C1236CF` (127) | ✅ blocks 5/6 matched |
+| 256 boundary (Uranus identity) | `8F1349B1` | `7C12B64F` (255) | ✅ blocks 5/6 matched |
+| 384 boundary (Uranus identity) | `8F13C931` | `7C1336CE` (383) | ✅ blocks 5/6 matched |
+| High-count decrement (Saturn identity) | 500 `8F13BD45` | `8F13B840` (497) | ✅ three rides, blocks 5/6 matched |
+
+The non-canonical identities in these tests reinforce that identity blocks are not ride-encoding inputs. Reset image: `RidesCli/Data/neptune-0-rides.bin`. Profile name: `neptune`. The canonical image retains observed block 7 `57F674C3`, but reset writes only blocks 1..6 and never blocks 0 or 7.
+
 ### Candidate D — EBFE (registered as Jupiter)
 
 See Jupiter in the registered sequences table above. Historical exploration notes:
@@ -148,7 +170,7 @@ Decrement: `0x70B9 → 0x71B8` (+`0xFF`); model predicted `7F1271A9`; pred ⊕ o
 |-------|----------|-----|-----------|------------|------|
 | C7/C6 (Mercury/Venus/Mars) | 48C7, BBC7, 4EC7 | 008x–809x | Matches `baseLow` model | Validated | XOR-step validated |
 | Earth / Pluto | 1812/EB12, 1F12/EC12 | 5BDx/DBDx | Matches `baseLow` locally; generalized as rotation 4 | Validated | Corrected XOR-derived values validated through 500; earlier reset-to-zero tests used wrong addition/minus-one candidates |
-| Jupiter / Saturn / Uranus | 7F12/8C12/8C13, 7812/8B12/8B13, 7A12/8912/8913 | rotation 0 zero-block codec | `+0xFF` was the local odd-to-even decrement symptom | Validated | Registered/resettable through 500 |
+| Jupiter / Saturn / Uranus / Neptune | 7F12/8C12/8C13, 7812/8B12/8B13, 7A12/8912/8913, 7C12/8F12/8F13 | rotation 0 zero-block codec | `+0xFF` was the local odd-to-even decrement symptom | Validated | Registered/resettable through 500 |
 
 ### The `+0xFF` decrement hypothesis
 
@@ -160,7 +182,7 @@ post.low16 = (pre.low16 + 0xFF) mod 2^16
 
 while the production encoder predicts a different adjacent block (always `pred ⊕ obs` low16 = **`0x0011`** for the three cases above).
 
-**Superseding implication:** these observations were the clue for the rotation-0 codec. Single-point `baseLow` xor inference can find an anchor but fails to generalize for Jupiter/Saturn/Uranus; production now uses registered `(zeroBlock, rotation, range)` structural decoding instead.
+**Superseding implication:** these observations were the clue for the rotation-0 codec. Single-point `baseLow` xor inference can find an anchor but fails to generalize for Jupiter/Saturn/Uranus/Neptune; production now uses registered `(zeroBlock, rotation, range)` structural decoding instead.
 
 ---
 
@@ -175,7 +197,7 @@ Do not infer xor without CLI I/O or a known ride label:
 | 6BFE002A-F100D40F-32D159A1-32D159A1 | `06C73709` | rides-UNKNOWN |
 | 93FE002A-EFEEC008-D6D1C733-D6D1C733 | `8B12CB72` | rides-UNKNOWN |
 
-**Note:** `93FE` block `8B12CB72` uses high16 `8B12` — the same second-family high16 predicted for candidate B (`23FE`). Worth investigating once B is better understood.
+**Note:** `93FE` block `8B12CB72` is now known to decode structurally as Saturn with 130 rides despite its non-canonical identity.
 
 ---
 
@@ -195,7 +217,7 @@ Do not infer xor without CLI I/O or a known ride label:
 
 ### Current status
 
-The old recommended full decrement captures for B/C/D are no longer necessary for production registration: B is Saturn, C is Uranus, and D is Jupiter, all registered/resettable through `0..500` with rotation `0`.
+The old recommended full decrement captures for B/C/D are no longer necessary for production registration: B is Saturn, C is Uranus, and D is Jupiter. Together with Neptune, all four are registered/resettable through `0..500` with rotation `0`.
 
 ### Remaining useful follow-up
 
@@ -231,3 +253,4 @@ printf 'connect\nwrite 5 <hex>\nwrite 6 <hex>\nread 5\nread 6\nexit\n' | dotnet 
 | 2026-07-21 | Derived generalized rotation/XOR algorithm; corrected Earth high values |
 | 2026-07-21 | Validated Earth `256 -> 255` and `384 -> 383`; extended production Earth to 500 |
 | 2026-07-21 | Validated Pluto `256 -> 255` and `384 -> 383`; extended production Pluto to 500 |
+| 2026-08-04 | Documented Neptune registration/reset image and validated 128/256/384 and 500→497 hardware evidence |

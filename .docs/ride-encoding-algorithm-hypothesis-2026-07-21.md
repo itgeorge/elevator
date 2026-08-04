@@ -10,9 +10,9 @@ python3 debug/ride-encoding-hypothesis.py
 
 ## Production status (post-generalization)
 
-Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4; **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`. **Uranus** (formerly Candidate C) is registered for `0..500` with `zeroBlock=891249D0`, `rotation=0`, and canonical identity `FBFE002A-F1003C92-F5D1D766-F5D1D766`.
+Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4. **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`. **Uranus** (formerly Candidate C) is registered for `0..500` with `zeroBlock=891249D0`, `rotation=0`, and canonical identity `FBFE002A-F1003C92-F5D1D766-F5D1D766`. **Neptune** is registered for `0..500` with `zeroBlock=8F1249B0`, `rotation=0`, and canonical identity `8BFE002A-F100C6A2-95D15917-95D15917`.
 
-Jupiter, Saturn, and Uranus reset/profile support are enabled after hardware confirmed their `1 -> 0` transitions. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
+Jupiter, Saturn, Uranus, and Neptune reset/profile support are enabled. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
 
 ## Main finding
 
@@ -21,10 +21,10 @@ The production “base low16 + 128-value families” implementation is a local d
 For every currently registered sequence, the complete block can be generated from that sequence's **zero block**, with no family table:
 
 ```text
-block(rides) = zeroBlock XOR counterDelta(rides, rotation=4)
+block(rides) = zeroBlock XOR counterDelta(rides, rotation)
 ```
 
-Candidates B/C/D use the same construction with a different byte-layout rotation:
+Jupiter, Saturn, Uranus, and Neptune use the same construction with a different byte-layout rotation from the original rotation-4 family:
 
 ```text
 block(rides) = zeroBlock XOR counterDelta(rides, rotation=0)
@@ -78,7 +78,7 @@ bit 7: F3008008
 bit 8: 00010010
 ```
 
-For `rotation=0` (B/C/D), they are:
+For `rotation=0` (Jupiter, Saturn, Uranus, and Neptune), they are:
 
 ```text
 bit 0: 00000101
@@ -108,15 +108,16 @@ This immediately explains the observed B/C/D decrement. All three anchors have o
 
 The formula reproduces all currently implemented values in their confirmed ranges and all Mercury/Venus/Mars values through 500.
 
-### Rotation 0 — Jupiter, Saturn, and Uranus
+### Rotation 0 — Jupiter, Saturn, Uranus, and Neptune
 
-| Sequence/candidate | Inferred zero block | Evidence / production state |
+| Sequence | Inferred zero block | Evidence / production state |
 |---|---:|---|
 | Saturn (formerly Candidate B) | `8B1249F0` | 47 anchor, 46 post-ride, independent 130 dump; boundary tests and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
 | Uranus (formerly Candidate C) | `891249D0` | 107 anchor, 106 post-ride; boundary tests and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
 | Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states, confirmed 1 -> 0 transition; registered/resettable 0..500 |
+| Neptune | `8F1249B0` | Canonical zero capture; 128/256/384 boundaries and 500→497 use validated; registered/resettable 0..500 |
 
-For rotation 0, candidate middle bytes make the count directly visible:
+For rotation 0, middle bytes make the count directly visible:
 
 ```text
 h = block.byte1 XOR 0x12
@@ -154,6 +155,19 @@ Boundary transitions were validated on sacrificial tokens with EBFE/Jupiter iden
 
 The `1 -> 0` transition confirms the Uranus zero block and reset image. Earlier synthesized Candidate-C values from the obsolete family formula are superseded.
 
+### Neptune hardware validation
+
+The canonical zero capture has identity `8BFE002A-F100C6A2-95D15917-95D15917` and matching ride blocks `8F1249B0`. Boundary and high-count writes were validated on sacrificial Saturn/Uranus identities, independently confirming that blocks 1..4 are not ride-encoding inputs:
+
+```text
+128 8F12C930 -> 127 7C1236CF  (Saturn identity)
+256 8F1349B1 -> 255 7C12B64F  (Uranus identity)
+384 8F13C931 -> 383 7C1336CE  (Uranus identity)
+500 8F13BD45 -> 497 8F13B840  (three rides, Saturn identity)
+```
+
+Neptune is registered/resettable through 500. Its reset image is `RidesCli/Data/neptune-0-rides.bin`; the canonical image contains the observed block 7 value `57F674C3`, but the reset path writes only blocks 1..6 and never writes blocks 0 or 7.
+
 ### Independent confirmation for Saturn (formerly Candidate B)
 
 The unlabeled dump:
@@ -170,7 +184,7 @@ rides    = 130
 zero     = 8B1249F0
 ```
 
-That is exactly the same zero block inferred from Saturn's trusted 47 anchor. Testing all rotations 0..7 against both points selects **rotation 0 uniquely**. Independently, each observed anchor/post-ride pair for Saturn, C, and Jupiter also selects only rotation 0. This is strong evidence that blocks 1..4 are not inputs to this ride sequence.
+That is exactly the same zero block inferred from Saturn's trusted 47 anchor. Testing all rotations 0..7 against both points selects **rotation 0 uniquely**. Independently, observed anchor/post-ride pairs for Saturn, Uranus, Jupiter, and Neptune also select only rotation 0. This is strong evidence that blocks 1..4 are not inputs to this ride sequence.
 
 ### Historical Candidate-D capture is structured, not random
 
@@ -281,24 +295,25 @@ The current `baseLow XOR inferred-xor` synthesized values use rotation 4 and are
 | Saturn (registered) | `8B1249F0` | `8B1248F1` | `8B12C970` | `7812B60F` | `8B1349F1` | `8B13BD05` |
 | Uranus (registered) | `891249D0` | `891248D1` | `8912C950` | `7A12B62F` | `891349D1` | `8913BD25` |
 | Jupiter (registered) | `8C124980` | `8C124881` | `8C12C900` | `7F12B67F` | `8C134981` | `8C13BD75` |
+| Neptune (registered) | `8F1249B0` | `8F1248B1` | `8F12C930` | `7C12B64F` | `8F1349B1` | `8F13BD45` |
 
 Notably, Saturn's predicted 130 block is `8B12CB72`, exactly matching the independent unlabeled dump. Jupiter's predicted 256/255 blocks exactly match the historical EBFE states.
 
-Saturn and Uranus boundary tests listed above are hardware-validated.
+Saturn, Uranus, and Neptune boundary tests listed above are hardware-validated.
 
 ## Collision results
 
 `debug/ride-encoding-hypothesis.py` checks:
 
-- all eight registered sequences (five rotation-4 plus Jupiter, Saturn, and Uranus),
+- all nine registered sequences (five rotation-4 plus Jupiter, Saturn, Uranus, and Neptune),
 - every value 0..500,
 - and the complete 9-bit range 0..511.
 
 Results:
 
 ```text
-8 sequences × 501 values = 4008 distinct blocks (0..500)
-8 sequences × 512 values = 4096 distinct blocks (0..511)
+9 sequences × 501 values = 4509 distinct blocks (0..500)
+9 sequences × 512 values = 4608 distinct blocks (0..511)
 ```
 
 There are no self-collisions and no cross-sequence collisions among these hypotheses.
@@ -339,9 +354,9 @@ Blocks 5/6 are sufficient once the sequence parameters are known. Current eviden
 High confidence:
 
 - rotation 4 exactly replaces all registered family arithmetic;
-- rotation 0 exactly explains every trusted Saturn/C/Jupiter anchor and post-ride;
+- rotation 0 exactly explains every trusted Saturn/Uranus/Jupiter/Neptune anchor and post-ride;
 - Saturn's separate `8B12CB72` dump and Jupiter's historical data independently corroborate rotation 0;
-- Saturn and Uranus boundary transitions and `1 -> 0` are hardware-validated; reset images are known; hardware `reset --profile uranus` smoke test passed 2026-07-22 on sacrificial Saturn card;
+- Saturn and Uranus boundary transitions and `1 -> 0` are hardware-validated; Neptune's 128/256/384 boundaries and 500→497 decrement are hardware-validated; all four reset images are known; hardware `reset --profile uranus` smoke test passed 2026-07-22 on a sacrificial Saturn card;
 - previous Earth/Pluto 256+ tests did not test the constant-zero-block XOR predictions.
 
 Still hypotheses:

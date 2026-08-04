@@ -25,4 +25,18 @@ public class ResetPage0BlocksLoaderTests
                 $"Profile '{profile.FriendlyName}' reset image block 4 must match profile identity.");
         }
     }
+
+    [Test]
+    public void Neptune_reset_image_is_the_canonical_zero_ride_capture()
+    {
+        var blocks = ResetPage0BlocksLoader.Load(TokenIdentityProfiles.Neptune);
+
+        Assert.That(blocks.Select(block => block.ToHex()), Is.EqualTo(new[]
+        {
+            "00148040", "8BFE002A", "F100C6A2", "95D15917",
+            "95D15917", "8F1249B0", "8F1249B0", "57F674C3",
+        }));
+        Assert.That(blocks[5], Is.EqualTo(EncodingSequences.Neptune.Encode(0)));
+        Assert.That(blocks[6], Is.EqualTo(EncodingSequences.Neptune.Encode(0)));
+    }
 }

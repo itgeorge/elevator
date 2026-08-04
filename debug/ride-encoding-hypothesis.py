@@ -2,9 +2,9 @@
 """Reproduce the generalized ride-encoding hypotheses from the 2026-07-21 dumps.
 
 This is intentionally an exploration tool, not production encoding code. It:
-- expresses every registered sequence as zero_block XOR counter_delta(rides, rotation=4),
-- expresses unregistered candidates B/C and registered Jupiter as the same algorithm with rotation=0,
-- checks trusted observations and the independent Candidate-B 8B12CB72 dump,
+- expresses every registered sequence as zero_block XOR counter_delta(rides, rotation),
+- covers the rotation-4 family and the registered rotation-0 sequences,
+- checks trusted observations, including Neptune hardware captures,
 - checks self/cross-sequence collisions over 0..500 and the full 9-bit 0..511 range.
 """
 
@@ -66,6 +66,7 @@ SEQUENCES = (
     SequenceHypothesis("jupiter", 0x8C124980, 0),
     SequenceHypothesis("saturn", 0x8B1249F0, 0),
     SequenceHypothesis("uranus", 0x891249D0, 0),
+    SequenceHypothesis("neptune", 0x8F1249B0, 0),
 )
 
 # Earth and Pluto are hardware-validated through the corrected 256/384 boundaries.
@@ -172,6 +173,15 @@ OBSERVATIONS = (
     ("jupiter historical 247", "jupiter", 247, 0x8C12BE77),
     ("jupiter historical 240", "jupiter", 240, 0x8C12B970),
     ("jupiter historical 238", "jupiter", 238, 0x7F12A76E),
+    ("neptune zero", "neptune", 0, 0x8F1249B0),
+    ("neptune 128 boundary", "neptune", 128, 0x8F12C930),
+    ("neptune 127 post-ride", "neptune", 127, 0x7C1236CF),
+    ("neptune 256 boundary", "neptune", 256, 0x8F1349B1),
+    ("neptune 255 post-ride", "neptune", 255, 0x7C12B64F),
+    ("neptune 384 boundary", "neptune", 384, 0x8F13C931),
+    ("neptune 383 post-ride", "neptune", 383, 0x7C1336CE),
+    ("neptune 497 post-rides", "neptune", 497, 0x8F13B840),
+    ("neptune 500 boundary", "neptune", 500, 0x8F13BD45),
 )
 
 
@@ -208,6 +218,7 @@ def assert_candidate_rotations() -> None:
         "saturn decrement": ((47, 0x781266DF), (46, 0x781267DE)),
         "uranus decrement": ((107, 0x7A1222BB), (106, 0x7A1223BA)),
         "jupiter decrement": ((57, 0x7F1270B9), (56, 0x7F1271B8)),
+        "neptune high-count decrement": ((500, 0x8F13BD45), (497, 0x8F13B840)),
     }
     for label, points in point_sets.items():
         matching_rotations = []
@@ -253,7 +264,7 @@ def main() -> None:
     print("PASS: generalized ride-encoding hypothesis")
     print("  every currently registered encoding matched over its full range")
     print(f"  trusted/independent observations matched: {len(OBSERVATIONS)}")
-    print("  B/C/Jupiter independent point pairs uniquely select rotation 0")
+    print("  Saturn/Uranus/Jupiter/Neptune point pairs uniquely select rotation 0")
     print(f"  sequences checked: {len(SEQUENCES)}")
     print("  no self- or cross-sequence collisions over 0..500 or 0..511")
     print()
@@ -265,6 +276,7 @@ def main() -> None:
         "saturn",
         "uranus",
         "jupiter",
+        "neptune",
     ):
         sequence = by_name[name]
         values = " ".join(

@@ -19,6 +19,7 @@ public class TokenBlockUtilsTest
         (EncodingSequences.Jupiter, 0x8C124980, 0),
         (EncodingSequences.Saturn, 0x8B1249F0, 0),
         (EncodingSequences.Uranus, 0x891249D0, 0),
+        (EncodingSequences.Neptune, 0x8F1249B0, 0),
     ];
 
     [Test]
@@ -135,6 +136,25 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.Uranus.Encode(rides).Value, Is.EqualTo(block));
         Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
         Assert.That(sequence, Is.EqualTo(EncodingSequences.Uranus));
+        Assert.That(decoded, Is.EqualTo(rides));
+    }
+
+    [TestCase(0u, 0x8F1249B0u)]
+    [TestCase(1u, 0x8F1248B1u)]
+    [TestCase(127u, 0x7C1236CFu)]
+    [TestCase(128u, 0x8F12C930u)]
+    [TestCase(255u, 0x7C12B64Fu)]
+    [TestCase(256u, 0x8F1349B1u)]
+    [TestCase(383u, 0x7C1336CEu)]
+    [TestCase(384u, 0x8F13C931u)]
+    [TestCase(497u, 0x8F13B840u)]
+    [TestCase(499u, 0x8F13BA42u)]
+    [TestCase(500u, 0x8F13BD45u)]
+    public void Neptune_known_and_predicted_encodings_are_encoded_and_decoded(uint rides, uint block)
+    {
+        Assert.That(EncodingSequences.Neptune.Encode(rides).Value, Is.EqualTo(block));
+        Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Neptune));
         Assert.That(decoded, Is.EqualTo(rides));
     }
 
