@@ -389,6 +389,24 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_force_skips_current_token_read_and_decode_warning()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput());
+
+        handler.Execute(["reset", "-f", "--sequence", "mercury"]);
+
+        Assert.That(output.Lines, Has.None.Contains("Current token cannot be decoded"));
+        Assert.That(output.Lines, Has.None.Contains("Overwrite token with reset image"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
+        Assert.That(pm3.ReadPage0BlockCallCount, Is.EqualTo(6));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
+    }
+
+    [Test]
     public void Reset_cancelled_does_not_modify_token()
     {
         var output = new StringBuilderRidesOutput();

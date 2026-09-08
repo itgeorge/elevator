@@ -203,23 +203,34 @@ public sealed class RidesCommandHandler
 
     private bool ExecuteReset(string[] args)
     {
-        if (!TryParseResetArgs(args, out var profile, out var error))
+        if (!TryParseResetArgs(args, out var profile, out var force, out var error))
         {
             _output.WriteLine(error);
             return true;
         }
 
-        return ExecuteResetCore(profile!).GetAwaiter().GetResult();
+        return ExecuteResetCore(profile!, force).GetAwaiter().GetResult();
     }
 
-    private static bool TryParseResetArgs(string[] args, out TokenIdentityProfile? profile, out string error)
+    private static bool TryParseResetArgs(
+        string[] args,
+        out TokenIdentityProfile? profile,
+        out bool force,
+        out string error)
     {
         profile = null;
+        force = false;
         error = string.Empty;
         string? profileName = null;
 
         for (var i = 0; i < args.Length; i++)
         {
+            if (args[i] == "-f")
+            {
+                force = true;
+                continue;
+            }
+
             if ((args[i] == "--sequence" || args[i] == "--profile") && i + 1 < args.Length)
             {
                 profileName = args[++i];
@@ -252,7 +263,7 @@ public sealed class RidesCommandHandler
     }
 
     private static string FormatResetUsage() =>
-        $"Usage: reset --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
+        $"Usage: reset --sequence|--profile <name> [-f]   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
 
     private async Task<bool> ExecuteTuneCore()
     {
@@ -309,31 +320,33 @@ public sealed class RidesCommandHandler
         }
     }
 
-    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile)
+    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile, bool force)
     {
         _rides = null;
         _encodingSequence = null;
 
-        IReadOnlyList<T55Block> currentBlocks;
-        try
+        IReadOnlyList<T55Block>? currentBlocks = null;
+        if (!force)
         {
-            currentBlocks = await ReadResetWritableBlocksAsync().ConfigureAwait(false);
-            var block5Hex = currentBlocks[5].ToHex();
-            var block6Hex = currentBlocks[6].ToHex();
-            var describe = RideBlockResolver.Resolve(currentBlocks[5], currentBlocks[6]);
+            try
+            {
+                currentBlocks = await ReadResetWritableBlocksAsync().ConfigureAwait(false);
+                var block5Hex = currentBlocks[5].ToHex();
+                var describe = RideBlockResolver.Resolve(currentBlocks[5], currentBlocks[6]);
 
-            if (describe.Status == RideReadStatus.Success)
-                _output.WriteLine($"current token rides: {describe.Rides!.Value}");
-            else
-                _output.WriteLine($"Current token cannot be decoded: unknown ride encoding sequence in block 5 ({block5Hex}).");
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"Error: no token detected. {ex.Message}");
-            return true;
+                if (describe.Status == RideReadStatus.Success)
+                    _output.WriteLine($"current token rides: {describe.Rides!.Value}");
+                else
+                    _output.WriteLine($"Current token cannot be decoded: unknown ride encoding sequence in block 5 ({block5Hex}).");
+            }
+            catch (Exception ex)
+            {
+                _output.WriteLine($"Error: no token detected. {ex.Message}");
+                return true;
+            }
         }
 
-        if (!PromptForYesNo($"Overwrite token with reset image and set rides to 0 using profile '{profile.FriendlyName}'? [y/N]"))
+        if (!force && !PromptForYesNo($"Overwrite token with reset image and set rides to 0 using profile '{profile.FriendlyName}'? [y/N]"))
         {
             _output.WriteLine("Cancelled.");
             return true;
@@ -344,11 +357,15 @@ public sealed class RidesCommandHandler
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var targetBlockNumbers = IsSameResetProfile(currentBlocks, resetBlocks, profile)
-            ? new[] { 5u, 6u }
-            : Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
+        var targetBlockNumbers = force
+            ? Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
                 .Select(static block => (uint)block)
-                .ToArray();
+                .ToArray()
+            : IsSameResetProfile(currentBlocks!, resetBlocks, profile)
+                ? new[] { 5u, 6u }
+                : Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
+                    .Select(static block => (uint)block)
+                    .ToArray();
 
         if (targetBlockNumbers.Length == 2 && targetBlockNumbers[0] == 5 && targetBlockNumbers[1] == 6)
             _output.WriteLine("Token already matches requested reset identity; resetting ride blocks only.");
@@ -409,7 +426,7 @@ public sealed class RidesCommandHandler
         EncodingSequences.TryGetSequenceFromBlock(block, out var found) && ReferenceEquals(found, sequence);
 
     private async Task<ResetWriteResult> WriteResetBlocksSafelyAsync(
-        IReadOnlyList<T55Block> originalBlocks,
+        IReadOnlyList<T55Block>? originalBlocks,
         IReadOnlyList<T55Block> targetBlocks,
         IReadOnlyList<uint> targetBlockNumbers,
         CancellationToken ct = default)
@@ -418,12 +435,20 @@ public sealed class RidesCommandHandler
         {
             ValidateResetWritableBlock(block);
             var target = targetBlocks[(int)block];
-            if (originalBlocks[(int)block].Value == target.Value)
+            if (originalBlocks is not null && originalBlocks[(int)block].Value == target.Value)
                 continue;
 
             var write = await WriteAndVerifyBlockWithRetryAsync(block, target, ct).ConfigureAwait(false);
             if (write.Success)
                 continue;
+
+            if (originalBlocks is null)
+            {
+                return new ResetWriteResult(
+                    Success: false,
+                    FailedBlock: block,
+                    ErrorMessage: write.ErrorMessage);
+            }
 
             var rollback = await RollBackResetBlocksAsync(originalBlocks, ct).ConfigureAwait(false);
             return new ResetWriteResult(
@@ -783,7 +808,8 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
-        _output.WriteLine($"  reset --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
+        _output.WriteLine($"  reset [-f] --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
+        _output.WriteLine("                -f skips the current-token read, decode warning, and confirmation prompt");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token [0-500]");
         _output.WriteLine("  price set <number>   Preview cost for set");

@@ -30,6 +30,7 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     public int DumpCallCount { get; private set; }
     public int TuneCallCount { get; private set; }
+    public int ReadPage0BlockCallCount { get; private set; }
     public int WriteAndVerifyPage0BlocksCallCount { get; private set; }
     public List<uint> WrittenBlocks { get; } = [];
     public Dictionary<uint, int> RemainingWriteFailuresByBlock { get; } = new();
@@ -113,6 +114,7 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
 
     public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)
     {
+        ReadPage0BlockCallCount++;
         EnsureTokenPresent();
         var b = _image.GetBlock(0, (int)block);
         return Task.FromResult(b.ToHex());
