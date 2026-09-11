@@ -18,7 +18,13 @@ public sealed record RideReadResult(
 
 /// <summary>
 /// Resolves ride count from mirrored page-0 blocks 5 and 6.
-/// When both blocks decode but differ, block 6 is preferred — confirmed elevator behavior (2026-07-20 hardware test).
+/// Hardware-confirmed page-0 behavior:
+/// <list type="bullet">
+/// <item>When valid ride blocks 5 and 6 differ, the elevator uses block 6 (2026-07-20).</item>
+/// <item>Block 4 may differ from block 3 and is preserved across rides: tested with
+/// Mercury values <c>00000000</c>/<c>00000045</c> and Neptune-sequence value
+/// <c>FFFEFDFC</c> (2026-09-11). Profile reset still overwrites block 4.</item>
+/// </list>
 /// </summary>
 public static class RideBlockResolver
 {

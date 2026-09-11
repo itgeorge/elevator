@@ -30,6 +30,18 @@ A single trusted `(ride count, block5/6)` point can still generate an exploratio
 
 ---
 
+## Hardware-observed page-0 authority and storage
+
+| Blocks | Observed behavior | Evidence |
+|--------|-------------------|----------|
+| 5 and 6 | Mirrored ride words; when both decode but differ, **block 6 is authoritative**. | 2026-07-20 elevator mismatch test decremented from block 6. Production `RideBlockResolver` therefore prefers block 6. |
+| 4 | May differ from block 3, accepts values in every byte, and is not rewritten during a ride on the tested elevator. | 2026-09-11 Mercury: `00000000` survived 499→498 and `00000045` survived 498→497. Saturn identity with Neptune sequence: `FFFEFDFC` survived 325→324. Blocks 5/6 matched after every accepted ride. |
+| 3 | Do not use as custom storage. | Zeroing block 3 caused a silent rejection in the tested identity experiment. |
+
+These tests strongly support page-0 **block 4** as custom application storage on the tested elevator, including a 10-bit identifier. Scope is limited to the tested system and identity/sequence combinations; other installations could validate it differently. `RidesCli reset` currently treats blocks 1..4 as profile data and will overwrite a custom block 4 with the profile's nominal mirror value.
+
+---
+
 ## Registered sequences (production)
 
 | Name | Range | Families (high16/xor) | Identity example | Notes |
@@ -254,3 +266,4 @@ printf 'connect\nwrite 5 <hex>\nwrite 6 <hex>\nread 5\nread 6\nexit\n' | dotnet 
 | 2026-07-21 | Validated Earth `256 -> 255` and `384 -> 383`; extended production Earth to 500 |
 | 2026-07-21 | Validated Pluto `256 -> 255` and `384 -> 383`; extended production Pluto to 500 |
 | 2026-08-04 | Documented Neptune registration/reset image and validated 128/256/384 and 500→497 hardware evidence |
+| 2026-09-11 | Confirmed block 6 authority alongside block 5 mirror behavior; validated block 4 custom values `00000000`, `00000045`, and `FFFEFDFC` across successful Mercury and Neptune-sequence rides |
