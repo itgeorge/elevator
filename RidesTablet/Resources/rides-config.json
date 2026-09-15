@@ -1,0 +1,6 @@
+{
+  "currencyCode": "EUR",
+  "pricePerRideEUR": 0.03,
+  "cashIncrementEUR": 1.50,
+  "maxRides": 500
+}

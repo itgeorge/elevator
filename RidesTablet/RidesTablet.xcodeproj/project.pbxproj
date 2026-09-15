@@ -1,0 +1,105 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* RidesTabletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* RidesTabletApp.swift */; };
+		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ContentView.swift */; };
+		A10000000000000000000003 /* RideEncoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* RideEncoding.swift */; };
+		A10000000000000000000004 /* Token.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* Token.swift */; };
+		A10000000000000000000005 /* ResetSequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ResetSequence.swift */; };
+		A10000000000000000000006 /* RidesConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* RidesConfiguration.swift */; };
+		A10000000000000000000007 /* Proxmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Proxmark.swift */; };
+		A10000000000000000000008 /* UnknownDumpStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* UnknownDumpStore.swift */; };
+		A10000000000000000000009 /* RidesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* RidesViewModel.swift */; };
+		A10000000000000000000010 /* rides-config.json in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* rides-config.json */; };
+		B10000000000000000000001 /* RideEncodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* RideEncodingTests.swift */; };
+		B10000000000000000000002 /* DomainStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* DomainStateTests.swift */; };
+		B10000000000000000000003 /* FakeProxmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* FakeProxmarkTests.swift */; };
+		B10000000000000000000004 /* ResetSequenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* ResetSequenceTests.swift */; };
+		B10000000000000000000005 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* ConfigurationTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* RidesTabletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidesTabletApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* RideEncoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideEncoding.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* Token.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Token.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* ResetSequence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResetSequence.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* RidesConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidesConfiguration.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* Proxmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proxmark.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* UnknownDumpStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnknownDumpStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* RidesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidesViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* rides-config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = rides-config.json; sourceTree = "<group>"; };
+		A30000000000000000000001 /* RidesTablet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RidesTablet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000002 /* RidesTabletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RidesTabletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000001 /* RideEncodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideEncodingTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* DomainStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainStateTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000003 /* FakeProxmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeProxmarkTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000004 /* ResetSequenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResetSequenceTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000005 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A40000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		B40000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A50000000000000000000001 = {isa = PBXGroup; children = (A50000000000000000000002, A50000000000000000000003, A50000000000000000000004, A50000000000000000000005, A50000000000000000000006, A50000000000000000000007, A50000000000000000000008); sourceTree = "<group>"; };
+		A50000000000000000000002 /* App */ = {isa = PBXGroup; children = (A20000000000000000000001); path = App; sourceTree = "<group>"; };
+		A50000000000000000000003 /* Domain */ = {isa = PBXGroup; children = (A20000000000000000000003, A20000000000000000000004, A20000000000000000000005, A20000000000000000000006, A20000000000000000000007, A20000000000000000000008); path = Domain; sourceTree = "<group>"; };
+		A50000000000000000000004 /* Features */ = {isa = PBXGroup; children = (A20000000000000000000009); path = Features; sourceTree = "<group>"; };
+		A50000000000000000000005 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000010); path = Resources; sourceTree = "<group>"; };
+		A50000000000000000000006 /* Views */ = {isa = PBXGroup; children = (A20000000000000000000002); path = Views; sourceTree = "<group>"; };
+		A50000000000000000000007 /* RidesTabletTests */ = {isa = PBXGroup; children = (B20000000000000000000001, B20000000000000000000002, B20000000000000000000003, B20000000000000000000004, B20000000000000000000005); path = ../RidesTabletTests; sourceTree = "<group>"; };
+		A50000000000000000000008 /* Products */ = {isa = PBXGroup; children = (A30000000000000000000001, A30000000000000000000002); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A60000000000000000000001 /* RidesTablet */ = {isa = PBXNativeTarget; buildConfigurationList = A70000000000000000000001; buildPhases = (A80000000000000000000001, A40000000000000000000001, A90000000000000000000001); buildRules = (); dependencies = (); name = RidesTablet; productName = RidesTablet; productReference = A30000000000000000000001; productType = "com.apple.product-type.application"; };
+		A60000000000000000000002 /* RidesTabletTests */ = {isa = PBXNativeTarget; buildConfigurationList = A70000000000000000000002; buildPhases = (A80000000000000000000002, B40000000000000000000001); buildRules = (); dependencies = (A61000000000000000000001); name = RidesTabletTests; productName = RidesTabletTests; productReference = A30000000000000000000002; productType = "com.apple.product-type.bundle.unit-test"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = { LastUpgradeCheck = 2630; ORGANIZATIONNAME = Prototype; TargetAttributes = { A60000000000000000000001 = { CreatedOnToolsVersion = 26.3; }; A60000000000000000000002 = { CreatedOnToolsVersion = 26.3; TestTargetID = A60000000000000000000001; }; }; }; buildConfigurationList = A70000000000000000000000; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A50000000000000000000001; productRefGroup = A50000000000000000000008; projectDirPath = ""; projectRoot = ""; targets = (A60000000000000000000001, A60000000000000000000002); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A90000000000000000000001 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000010); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A80000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A10000000000000000000009); runOnlyForDeploymentPostprocessing = 0; };
+		A80000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A61000000000000000000001 = {isa = PBXTargetDependency; target = A60000000000000000000001; targetProxy = A62000000000000000000001; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		A62000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A00000000000000000000001; proxyType = 1; remoteGlobalIDString = A60000000000000000000001; remoteInfo = RidesTablet; };
+/* End PBXContainerItemProxy section */
+
+/* Begin XCBuildConfiguration section */
+		A71000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; ENABLE_TESTABILITY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTablet; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; }; name = Debug; };
+		A71000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTablet; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; }; name = Release; };
+		A71000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTabletTests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RidesTablet.app/RidesTablet"; }; name = Debug; };
+		A71000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTabletTests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RidesTablet.app/RidesTablet"; }; name = Release; };
+		A71000000000000000000005 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A71000000000000000000006 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A70000000000000000000000 /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000005, A71000000000000000000006); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A70000000000000000000001 /* Build configuration list for RidesTablet */ = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000001, A71000000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A70000000000000000000002 /* Build configuration list for RidesTabletTests */ = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000003, A71000000000000000000004); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000001 /* Project object */;
+}
