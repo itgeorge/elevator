@@ -322,7 +322,7 @@ public class Pm3IntegrationTests
         await pm3.ConnectAsync();
 
         Assert.ThrowsAsync<Pm3TimeoutException>(async () =>
-            await pm3.ExecuteRawCommandAsync("lf t55 dump"));
+            await pm3.ExecuteRawCommandAsync("lf t55 dump --ns"));
     }
 
     [Test]

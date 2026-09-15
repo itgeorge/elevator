@@ -81,6 +81,10 @@ public class CaptureScannerTests
             Assert.That(scan.EncodedState, Is.EqualTo("18121218-18121218"));
             Assert.That(scan.SignalMv, Is.EqualTo(24552));
             Assert.That(scan.WeakSignal, Is.False);
+            Assert.That(scan.CopiedDumpRelativePath, Does.EndWith("-native-page0-dump.bin"));
+            var fallbackPath = Path.Combine(config.OutputRootDirectory, scan.CopiedDumpRelativePath);
+            Assert.That(File.Exists(fallbackPath), Is.True);
+            Assert.That(new FileInfo(fallbackPath).Length, Is.EqualTo(8 * sizeof(uint)));
         }
         finally
         {

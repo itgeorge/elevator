@@ -42,7 +42,7 @@ Each successful scan:
 - identifies the token from blocks `1..4`
 - tracks the current state from blocks `5..6`
 - appends/updates `ride-capture-data/captures.csv` for normal sequence commands, or `ride-capture-data/other-captures.csv` for `other`
-- copies the proxmark-created `.bin` dump into `ride-capture-data/dumps/yyyy-MM-dd/`, or writes a native page-0 `.bin` fallback when running through direct USB
+- writes a page-0 `.bin` into `ride-capture-data/dumps/yyyy-MM-dd/` from the parsed dump output; legacy externally saved PM3 dumps found in the configured search directory are copied instead
 
 ## Generated files
 

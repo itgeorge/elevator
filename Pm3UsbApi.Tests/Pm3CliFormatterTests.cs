@@ -42,7 +42,7 @@ public class Pm3CliFormatterTests
     [Test]
     public void Format_T55Dump_ReturnsCliString()
     {
-        Assert.That(Pm3CliFormatter.Format(new T55DumpCommand()), Is.EqualTo("lf t55 dump"));
+        Assert.That(Pm3CliFormatter.Format(new T55DumpCommand()), Is.EqualTo("lf t55 dump --ns"));
     }
 
     [Test]

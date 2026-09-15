@@ -14,7 +14,7 @@ internal static class Pm3CliFormatter
         T55DetectCommand => "lf t55 detect",
         T55ReadBlockCommand read => $"lf t55 read -b {read.Block}",
         T55WriteBlockCommand write => $"lf t55 write -b {write.Block} -d {write.Data.ToHex()}",
-        T55DumpCommand => "lf t55 dump",
+        T55DumpCommand => "lf t55 dump --ns",
         CliPassthroughCommand passthrough => passthrough.CliText,
         _ => throw new ArgumentException($"Unsupported command type: {command.GetType().Name}", nameof(command))
     };

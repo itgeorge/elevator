@@ -22,8 +22,9 @@ public record Pm3Options
     public const string DevRunsDirectoryName = "proxmark-runs";
 
     /// <summary>
-    /// Working directory for the proxmark3 process. When set, the process runs here (output files
-    /// like lf-t55xx-*.bin go here). When null, the process uses the current directory.
+    /// Working directory for the proxmark3 process. When set, the process runs here; when null,
+    /// it uses the current directory. Typed T55 dump commands disable PM3's automatic file saves,
+    /// but raw passthrough and other PM3 commands can still create output files here.
     /// Set to <see cref="DevRunsDirectoryName"/> (or full path) for test/dev to avoid clutter.
     /// Leave null for published executables.
     /// </summary>

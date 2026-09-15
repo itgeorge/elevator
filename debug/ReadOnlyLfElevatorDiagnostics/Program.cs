@@ -124,10 +124,10 @@ static void PrintReadOnlyPlan()
         Console.WriteLine($"{command.GetType().Name,-24}  {FormatReadOnlyCommand(command)}");
 
     Console.WriteLine();
-    Console.WriteLine("Suggested noninteractive order: hw version; lf t55 detect; lf t55 dump or individual lf t55 read -b 0..7.");
+    Console.WriteLine("Suggested noninteractive order: hw version; lf t55 detect; lf t55 dump --ns or individual lf t55 read -b 0..7.");
     Console.WriteLine("IMPORTANT: lf tune is manual/interactive-only; pm3 -c \"lf tune\" waits for Enter and is intentionally omitted here.");
     Console.WriteLine("For a process client, keep detect and its T55 follow-up in one session, e.g.:");
-    Console.WriteLine("  pm3 -p <PORT> -c \"lf t55 detect; lf t55 dump\"");
+    Console.WriteLine("  pm3 -p <PORT> -c \"lf t55 detect; lf t55 dump --ns\"");
     Console.WriteLine("  pm3 -p <PORT> -c \"lf t55 detect; lf t55 read -b 0\"");
     Console.WriteLine("The native API performs capture/download and ASK/Manchester demodulation locally.");
 }
@@ -136,7 +136,7 @@ static string FormatReadOnlyCommand(IPm3DeviceCommand command) => command switch
 {
     HwVersionCommand => "hw version",
     T55DetectCommand => "lf t55 detect",
-    T55DumpCommand => "lf t55 dump",
+    T55DumpCommand => "lf t55 dump --ns",
     T55ReadBlockCommand read when read.Block <= 7 => $"lf t55 read -b {read.Block}",
     _ => throw new InvalidOperationException($"Command is outside the read-only diagnostic allow-list: {command.GetType().Name}"),
 };

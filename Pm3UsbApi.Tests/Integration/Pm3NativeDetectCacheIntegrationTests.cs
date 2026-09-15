@@ -70,7 +70,7 @@ public class Pm3NativeDetectCacheIntegrationTests
         Assert.That(dump1, Does.Contain("blk").Or.Contain("Page 0"));
         LogStep("after cached dump");
         Assert.That(CacheHitCount(), Is.EqualTo(2));
-        Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 dump"));
+        Assert.That(LastCommandBatch(), Is.EqualTo(">>> lf t55 dump --ns"));
 
         // 4) LF tune — invalidates cache
         await pm3.StartLfTuneAsync();
