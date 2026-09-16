@@ -24,6 +24,9 @@
 		A10000000000000000000015 /* BridgeConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* BridgeConnectionView.swift */; };
 		A10000000000000000000017 /* BridgePhysicalAcceptanceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* BridgePhysicalAcceptanceCoordinator.swift */; };
 		A10000000000000000000016 /* MercuryRideCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* MercuryRideCodec.swift */; };
+		A10000000000000000000018 /* BridgePairingPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* BridgePairingPayload.swift */; };
+		A10000000000000000000019 /* BridgePairingQRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* BridgePairingQRScanner.swift */; };
+		B10000000000000000000011 /* BridgePairingQRScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000011 /* BridgePairingQRScannerTests.swift */; };
 		B10000000000000000000008 /* MercuryBridgeWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000008 /* MercuryBridgeWorkflowTests.swift */; };
 		B10000000000000000000009 /* BridgePhysicalAcceptanceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000009 /* BridgePhysicalAcceptanceCoordinatorTests.swift */; };
 		B10000000000000000000001 /* RideEncodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* RideEncodingTests.swift */; };
@@ -33,6 +36,7 @@
 		B10000000000000000000005 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* ConfigurationTests.swift */; };
 		B10000000000000000000006 /* BridgeClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* BridgeClientTests.swift */; };
 		B10000000000000000000007 /* MercuryRideCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* MercuryRideCodecTests.swift */; };
+		B10000000000000000000010 /* BridgePairingPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000010 /* BridgePairingPayloadTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +58,8 @@
 		A20000000000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000017 /* MercuryRideCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MercuryRideCodec.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* BridgePhysicalAcceptanceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePhysicalAcceptanceCoordinator.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* BridgePairingPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePairingPayload.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* BridgePairingQRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePairingQRScanner.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* RidesTablet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RidesTablet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A30000000000000000000002 /* RidesTabletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RidesTabletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000001 /* RideEncodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideEncodingTests.swift; sourceTree = "<group>"; };
@@ -65,6 +71,8 @@
 		B20000000000000000000007 /* MercuryRideCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MercuryRideCodecTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000008 /* MercuryBridgeWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MercuryBridgeWorkflowTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000009 /* BridgePhysicalAcceptanceCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePhysicalAcceptanceCoordinatorTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000010 /* BridgePairingPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePairingPayloadTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000011 /* BridgePairingQRScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePairingQRScannerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,9 +87,9 @@
 		A50000000000000000000004 /* Features */ = {isa = PBXGroup; children = (A20000000000000000000009); path = Features; sourceTree = "<group>"; };
 		A50000000000000000000005 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000010, A20000000000000000000016); path = Resources; sourceTree = "<group>"; };
 		A50000000000000000000006 /* Views */ = {isa = PBXGroup; children = (A20000000000000000000002, A20000000000000000000015); path = Views; sourceTree = "<group>"; };
-		A50000000000000000000007 /* RidesTabletTests */ = {isa = PBXGroup; children = (B20000000000000000000001, B20000000000000000000002, B20000000000000000000003, B20000000000000000000004, B20000000000000000000005, B20000000000000000000006, B20000000000000000000007, B20000000000000000000008, B20000000000000000000009); path = ../RidesTabletTests; sourceTree = "<group>"; };
+		A50000000000000000000007 /* RidesTabletTests */ = {isa = PBXGroup; children = (B20000000000000000000001, B20000000000000000000002, B20000000000000000000003, B20000000000000000000004, B20000000000000000000005, B20000000000000000000006, B20000000000000000000007, B20000000000000000000008, B20000000000000000000009, B20000000000000000000010, B20000000000000000000011); path = ../RidesTabletTests; sourceTree = "<group>"; };
 		A50000000000000000000008 /* Products */ = {isa = PBXGroup; children = (A30000000000000000000001, A30000000000000000000002); name = Products; sourceTree = "<group>"; };
-		A50000000000000000000009 /* Bridge */ = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013, A20000000000000000000014, A20000000000000000000018); path = Bridge; sourceTree = "<group>"; };
+		A50000000000000000000009 /* Bridge */ = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013, A20000000000000000000014, A20000000000000000000018, A20000000000000000000019, A20000000000000000000020); path = Bridge; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -98,8 +106,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A80000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A10000000000000000000009, A10000000000000000000011, A10000000000000000000012, A10000000000000000000013, A10000000000000000000014, A10000000000000000000015, A10000000000000000000016, A10000000000000000000017); runOnlyForDeploymentPostprocessing = 0; };
-		A80000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005, B10000000000000000000006, B10000000000000000000007, B10000000000000000000008, B10000000000000000000009); runOnlyForDeploymentPostprocessing = 0; };
+		A80000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A10000000000000000000009, A10000000000000000000011, A10000000000000000000012, A10000000000000000000013, A10000000000000000000014, A10000000000000000000015, A10000000000000000000016, A10000000000000000000017, A10000000000000000000018, A10000000000000000000019); runOnlyForDeploymentPostprocessing = 0; };
+		A80000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005, B10000000000000000000006, B10000000000000000000007, B10000000000000000000008, B10000000000000000000009, B10000000000000000000010, B10000000000000000000011); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */

@@ -68,6 +68,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private let credentialStore: any BridgeCredentialStore
     private let session: URLSession
     private let healthRetryDelay: @Sendable () async throws -> Void
+    private let now: @Sendable () -> Date
     private var client: BridgeClient?
     private var mercuryWriteSnapshot: MercuryWriteSnapshot?
     private var launchAddressOverrideApplied = false
@@ -81,11 +82,13 @@ public final class BridgeConnectionModel: ObservableObject {
         defaultBridgeURL: String = "",
         healthRetryDelay: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(nanoseconds: 100_000_000)
-        }
+        },
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.credentialStore = credentialStore
         self.session = session
         self.healthRetryDelay = healthRetryDelay
+        self.now = now
         self.bridgeURLText = defaultBridgeURL
         self.state = .unconfigured
         self.message = nil
@@ -162,6 +165,18 @@ public final class BridgeConnectionModel: ObservableObject {
     }
 
     public func pair(pin: String) async {
+        await pair(pin: pin, bridgeId: nil, retryHealthOnUnreachable: true)
+    }
+
+    /// Pairs once with an optional stable bridge identity. Manual pairing passes nil; QR pairing
+    /// supplies the parsed identity so the initial Keychain save is complete and transactional.
+    public func pair(pin: String, bridgeId: String?) async {
+        // Supplying a bridge identity denotes QR pairing. Keep the legacy health
+        // transition retry only for the manual, identity-less entry point.
+        await pair(pin: pin, bridgeId: bridgeId, retryHealthOnUnreachable: bridgeId == nil)
+    }
+
+    private func pair(pin: String, bridgeId: String?, retryHealthOnUnreachable: Bool) async {
         guard !isBusy else { return }
         guard !isPaired else {
             state = .connected
@@ -186,7 +201,11 @@ public final class BridgeConnectionModel: ObservableObject {
         }
 
         do {
-            let credential = try await newClient.pair(pin: pin)
+            let credential = try await newClient.pair(
+                pin: pin,
+                bridgeId: bridgeId,
+                retryHealthOnUnreachable: retryHealthOnUnreachable
+            )
             do {
                 try credentialStore.save(credential)
             } catch {
@@ -220,6 +239,45 @@ public final class BridgeConnectionModel: ObservableObject {
             message = "Paired with the local bridge."
         } catch is CancellationError {
             restoreStateAfterCancellation()
+        } catch {
+            fail(with: error)
+        }
+    }
+
+    /// Imports one strict backend QR payload and immediately uses the existing one-shot health
+    /// preflight plus PIN pairing path. A parsed payload is never replayed by this method.
+    public func importPairingPayload(_ json: String) async {
+        guard !isBusy else { return }
+        guard !isPaired else {
+            state = .connected
+            message = "This iPad is already paired. Use Forget before importing another pairing QR."
+            return
+        }
+
+        do {
+            let payload = try BridgePairingPayload.parse(json, now: now())
+            await importPairingPayload(payload)
+        } catch {
+            fail(with: error)
+        }
+    }
+
+    /// Import overload used by scanner seams and deterministic tests. The value is revalidated
+    /// before any URL or PIN state is changed.
+    public func importPairingPayload(_ payload: BridgePairingPayload) async {
+        guard !isBusy else { return }
+        guard !isPaired else {
+            state = .connected
+            message = "This iPad is already paired. Use Forget before importing another pairing QR."
+            return
+        }
+
+        do {
+            let validated = try payload.validated(now: now())
+            bridgeURLText = validated.bridgeURL.absoluteString
+            // A QR is one-time input. Do not replay even the readiness preflight if
+            // the local-network permission transition reports an initial unreachable.
+            await pair(pin: validated.pin, bridgeId: validated.bridgeId, retryHealthOnUnreachable: false)
         } catch {
             fail(with: error)
         }
@@ -270,6 +328,7 @@ public final class BridgeConnectionModel: ObservableObject {
             return
         }
 
+        let previousBridgeURLText = oldClient.baseURL.absoluteString
         state = .relocating
         message = nil
 
@@ -281,7 +340,8 @@ public final class BridgeConnectionModel: ObservableObject {
             let candidateCredential = BridgeCredential(
                 baseURL: candidateURL,
                 accessToken: savedCredential.accessToken,
-                tokenType: savedCredential.tokenType
+                tokenType: savedCredential.tokenType,
+                bridgeId: savedCredential.bridgeId
             )
             let candidateClient = try BridgeClient(
                 baseURL: candidateURL,
@@ -297,12 +357,14 @@ public final class BridgeConnectionModel: ObservableObject {
             state = .connected
             message = "Bridge address updated. The saved pairing was kept."
         } catch is CancellationError {
+            bridgeURLText = previousBridgeURLText
             state = .connected
             message = "Address change was cancelled. The previous bridge address remains active."
         } catch {
             // oldClient is intentionally retained; it remains the recovery path for every
             // candidate network, authentication, response, and Keychain failure.
             _ = oldClient
+            bridgeURLText = previousBridgeURLText
             fail(with: error)
         }
     }
@@ -580,6 +642,8 @@ public final class BridgeConnectionModel: ObservableObject {
             actionable = bridgeError.localizedDescription
         } else if let storeError = error as? BridgeCredentialStoreError {
             actionable = storeError.localizedDescription
+        } else if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            actionable = description
         } else {
             actionable = "Bridge operation failed. Check the local connection and try again."
         }

@@ -4,11 +4,15 @@ public struct BridgeCredential: Codable, Equatable, Sendable {
     public let baseURL: URL
     public let accessToken: String
     public let tokenType: String
+    /// Stable bridge identity carried by QR pairing. It is optional so credentials saved by
+    /// earlier app versions continue to decode and manual pairing remains unchanged.
+    public let bridgeId: String?
 
-    public init(baseURL: URL, accessToken: String, tokenType: String = "Bearer") {
+    public init(baseURL: URL, accessToken: String, tokenType: String = "Bearer", bridgeId: String? = nil) {
         self.baseURL = baseURL
         self.accessToken = accessToken
         self.tokenType = tokenType
+        self.bridgeId = bridgeId
     }
 }
 
@@ -71,7 +75,7 @@ public final class BridgeClient: @unchecked Sendable {
                   credential.tokenType.caseInsensitiveCompare("Bearer") == .orderedSame else {
                 throw BridgeClientError.invalidResponse
             }
-            self.credential = BridgeCredential(baseURL: self.baseURL, accessToken: credential.accessToken, tokenType: credential.tokenType)
+            self.credential = BridgeCredential(baseURL: self.baseURL, accessToken: credential.accessToken, tokenType: credential.tokenType, bridgeId: credential.bridgeId)
         } else {
             self.credential = nil
         }
@@ -161,7 +165,7 @@ public final class BridgeClient: @unchecked Sendable {
               credential.tokenType.caseInsensitiveCompare("Bearer") == .orderedSame else {
             throw BridgeClientError.invalidResponse
         }
-        let normalizedCredential = BridgeCredential(baseURL: baseURL, accessToken: credential.accessToken, tokenType: credential.tokenType)
+        let normalizedCredential = BridgeCredential(baseURL: baseURL, accessToken: credential.accessToken, tokenType: credential.tokenType, bridgeId: credential.bridgeId)
         withCredentialLock { self.credential = normalizedCredential }
     }
 
@@ -204,7 +208,8 @@ public final class BridgeClient: @unchecked Sendable {
         let candidateCredential = BridgeCredential(
             baseURL: normalizedURL,
             accessToken: current.accessToken,
-            tokenType: current.tokenType
+            tokenType: current.tokenType,
+            bridgeId: current.bridgeId
         )
         let candidate = try BridgeClient(
             baseURL: normalizedURL,
@@ -219,9 +224,13 @@ public final class BridgeClient: @unchecked Sendable {
     }
 
     @discardableResult
-    public func pair(pin: String) async throws -> BridgeCredential {
+    public func pair(
+        pin: String,
+        bridgeId: String? = nil,
+        retryHealthOnUnreachable: Bool = true
+    ) async throws -> BridgeCredential {
         guard Self.isSixDigitPIN(pin) else { throw BridgeClientError.invalidPIN }
-        try await preflightHealth()
+        try await preflightHealth(retryOnUnreachable: retryHealthOnUnreachable)
         let body = try JSONEncoder().encode(BridgePairRequest(pin: pin))
         let data = try await send(
             path: "api/v1/pair",
@@ -231,7 +240,7 @@ public final class BridgeClient: @unchecked Sendable {
             ephemeralSecrets: [pin]
         )
         let response = try decode(BridgePairResponse.self, data: data)
-        let newCredential = BridgeCredential(baseURL: baseURL, accessToken: response.accessToken, tokenType: response.tokenType)
+        let newCredential = BridgeCredential(baseURL: baseURL, accessToken: response.accessToken, tokenType: response.tokenType, bridgeId: bridgeId)
         withCredentialLock { credential = newCredential }
         return newCredential
     }
@@ -370,13 +379,13 @@ public final class BridgeClient: @unchecked Sendable {
         }
     }
 
-    private func preflightHealth() async throws {
+    private func preflightHealth(retryOnUnreachable: Bool) async throws {
         do {
             _ = try await health()
-        } catch BridgeClientError.unreachable {
-            // iOS may report the first local-network request as unreachable while
-            // the permission prompt transitions. Only readiness is retried; the
-            // one-time PIN endpoint is deliberately never retried.
+        } catch BridgeClientError.unreachable where retryOnUnreachable {
+            // Manual pairing retains the existing local-network permission transition
+            // workaround. QR import disables this branch: one scan means one readiness
+            // check and one PIN attempt, never a network replay.
             try await healthRetryDelay()
             _ = try await health()
         }
