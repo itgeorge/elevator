@@ -10,13 +10,10 @@ builder.Services.AddRidesBridge(options);
 var app = builder.Build();
 app.MapRidesBridge();
 
-// PairingCodeService is the intentional operator-facing issuance API. Write this only to
-// the terminal; never send the PIN or its bearer token counterpart through ILogger.
+// PairingCodeService and BridgeIdentityService are intentional operator-facing APIs. Write
+// pairing material only to the terminal QR/manual display; never send it through ILogger.
 var pairing = app.Services.GetRequiredService<PairingCodeService>();
-var pairingCode = pairing.IssueCode();
-Console.WriteLine($"RidesBridge API {BridgeOptions.ApiVersion} listening.");
-Console.WriteLine($"Pairing PIN: {pairingCode.Value} (expires {pairingCode.ExpiresAt:O})");
-foreach (var uri in options.GetReportedUrls())
-    Console.WriteLine($"Reachable private URL: {uri}");
+var bridgeIdentity = app.Services.GetRequiredService<BridgeIdentityService>();
+BridgeTerminalDisplay.Write(options, pairing, bridgeIdentity.Id, Console.Out);
 
 await app.RunAsync();

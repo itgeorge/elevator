@@ -363,8 +363,8 @@ Remove routine typing only after the direct-IP/authentication skeleton is proven
 
 ## Todos
 
-- [ ] Define and test a versioned pairing payload, e.g. URL plus one-time pairing code/nonce; never encode a long-lived bearer token in reusable QR output.
-- [ ] Add bridge-side QR generation/display suitable for a terminal or small local status page; choose the smallest dependency with deterministic tests.
+- [x] Define and test a versioned pairing payload, e.g. URL plus one-time pairing code/nonce; never encode a long-lived bearer token in reusable QR output.
+- [x] Add bridge-side QR generation/display suitable for a terminal or small local status page; choose the smallest dependency with deterministic tests.
 - [ ] Add iPad QR scan/import with explicit camera permission text and parser validation:
   - correct scheme/version;
   - local/private URL policy;
@@ -387,7 +387,9 @@ Remove routine typing only after the direct-IP/authentication skeleton is proven
 ## Agent notes / assumptions
 
 - Notes: Deferred on 2026-09-16 at the user's direction to proceed with Slice 2 functional Mercury work first. Manual direct-IP pairing remains the supported diagnostic path; no Slice 1B convenience work is mixed into Slice 2.
-- Assumptions: Resume this slice after Mercury physical acceptance unless the user reprioritizes it.
+- QR backend checkpoint (2026-09-16): added a strict `ridesbridge-pairing` / `v1` JSON payload containing only a private IPv4 bridge URL, the current short-lived one-time PIN and expiration, stable non-secret 128-bit bridge ID, and API version. Unknown/duplicate fields, hostile URLs, missing/wrong type or version, and expired payloads are rejected. Reuse remains authoritatively rejected by the existing server-owned one-time PIN endpoint; no bearer/verifier is encoded. Bridge identity creation uses a crash-released cross-process lock, flushed same-directory temporary file, and atomic no-overwrite publication; malformed final identities fail closed.
+- Terminal QR checkpoint: QRCoder 1.6.0 emits the payload at ECC-M. The renderer uses explicit ANSI black/white foreground/background plus Unicode half-block packing, retaining QRCoder's four-module quiet zone while fitting the full production payload in 65 visible columns by 33 terminal rows. Deterministic tests reconstruct the logical matrix from terminal output, exercise concurrent identity creation and replay, and preserve the manual PIN fallback. Bridge tests passed 104/104; the full non-integration .NET suite passed 522 with 1 skipped; warnings-as-errors and `git diff --check` passed. Physical camera decode remains open with the iPad importer.
+- Assumptions: Continue with iPad QR import, then Bonjour/reconnect. Direct IP remains available throughout.
 
 ---
 
