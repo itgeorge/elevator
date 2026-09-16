@@ -6,4 +6,7 @@ namespace RidesCli;
 public interface IRidesInput
 {
     string? ReadLine();
+
+    /// <summary>Read a line without echoing characters (for secrets).</summary>
+    string? ReadSecretLine();
 }

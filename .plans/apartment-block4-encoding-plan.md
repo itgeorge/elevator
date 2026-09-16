@@ -183,22 +183,22 @@ Support blind secret entry and process-lifetime caching, without env/.env loadin
 
 ## Todos
 
-- [ ] Extend `IRidesInput` with `ReadSecretLine()` (name may vary; update plan if renamed).
-- [ ] Implement no-echo console secret read in `ConsoleRidesInput`.
-- [ ] Extend `ScriptedRidesInput` so tests can script secret prompts.
-- [ ] Add an in-memory secret store used by `RidesCommandHandler` (new type or private field + helpers).
-- [ ] Add failing tests for:
+- [x] Extend `IRidesInput` with `ReadSecretLine()` (name may vary; update plan if renamed).
+- [x] Implement no-echo console secret read in `ConsoleRidesInput`.
+- [x] Extend `ScriptedRidesInput` so tests can script secret prompts.
+- [x] Add an in-memory secret store used by `RidesCommandHandler` (new type or private field + helpers).
+- [x] Add failing tests for:
   - missing secret ⇒ ensure prompts once, caches value
   - second ensure ⇒ no second prompt
   - empty/cancelled secret input ⇒ clear error, secret remains unset
   - secret value never appears in `IRidesOutput` lines
-- [ ] Implement `aptsecret` command wiring (can be thin in this phase, fully exercised in Phase 2) or a shared ensure helper first if that yields a smaller TDD step.
-- [ ] Run targeted `RidesCli.Tests` for the new secret behavior.
+- [x] Implement `aptsecret` command wiring (can be thin in this phase, fully exercised in Phase 2) or a shared ensure helper first if that yields a smaller TDD step.
+- [x] Run targeted `RidesCli.Tests` for the new secret behavior.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes: Added `ApartmentSecretStore` (`HasSecret`, `SetSecret`, `SetSecretFromUtf8`, `TryGetSecret`, `Clear`), `ApartmentSecretEnsurer.EnsureSecret`, and handler wiring via optional `ApartmentSecretStore` ctor injection plus private `EnsureApartmentSecret()` for Phase 2 `apt`. `IRidesInput.ReadSecretLine()` implemented in `ConsoleRidesInput` (no-echo `ReadKey` loop; Enter submits, Backspace edits, Escape cancels with `null`). `ScriptedRidesInput` uses a **separate** `secretResponses` queue from ordinary `ReadLine` responses; overload `ScriptedRidesInput(IReadOnlyList<string?> responses, IReadOnlyList<string?> secretResponses)` plus `ReadSecretLineCallCount` for assertions. `aptsecret` prompts, stores UTF-8 bytes, confirms with `Apartment secret stored.` without echoing the value. Tests in `RidesCli.Tests/ApartmentSecretTests.cs`. Full `RidesCli.Tests`: 148 passed.
+- Assumptions: Secret bytes are UTF-8 encoding of the entered string (same as Phase 0 codec test literals). Cancelled entry is `null` from `ReadSecretLine` (Escape in console; scripted `null`). Empty string is rejected and does not cache.
 
 ---
 

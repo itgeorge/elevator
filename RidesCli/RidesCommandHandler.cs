@@ -14,6 +14,8 @@ public sealed class RidesCommandHandler
     private readonly IRidesOutput _output;
     private readonly RidesConfig _config;
     private readonly IRidesInput _input;
+    private readonly ApartmentSecretStore _apartmentSecretStore;
+    private readonly ApartmentSecretEnsurer _apartmentSecretEnsurer;
 
     private const int ResetFirstWritableBlock = 1;
     private const int ResetLastWritableBlock = 6;
@@ -33,12 +35,19 @@ public sealed class RidesCommandHandler
         bool RollbackSucceeded = false,
         IReadOnlyList<string>? RollbackErrors = null);
 
-    public RidesCommandHandler(IRidesPm3Api pm3, IRidesOutput output, RidesConfig config, IRidesInput? input = null)
+    public RidesCommandHandler(
+        IRidesPm3Api pm3,
+        IRidesOutput output,
+        RidesConfig config,
+        IRidesInput? input = null,
+        ApartmentSecretStore? apartmentSecretStore = null)
     {
         _pm3 = pm3 ?? throw new ArgumentNullException(nameof(pm3));
         _output = output ?? throw new ArgumentNullException(nameof(output));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _input = input ?? new ConsoleRidesInput();
+        _apartmentSecretStore = apartmentSecretStore ?? new ApartmentSecretStore();
+        _apartmentSecretEnsurer = new ApartmentSecretEnsurer(_apartmentSecretStore, _input, _output);
     }
 
     /// <summary>Execute a command. Returns false to signal exit.</summary>
@@ -60,6 +69,7 @@ public sealed class RidesCommandHandler
                 "add" => ExecuteAdd(args[1..]),
                 "price" => ExecutePrice(args[1..]),
                 "money" => ExecuteMoney(args[1..]),
+                "aptsecret" => ExecuteAptSecret(args[1..]),
                 "exit" => false,
                 "help" => ExecuteHelp(),
                 _ => ExecuteUnknown(cmd)
@@ -820,6 +830,36 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  exit");
         return true;
     }
+
+    private bool ExecuteAptSecret(string[] args)
+    {
+        if (args.Length > 0)
+        {
+            _output.WriteLine("Usage: aptsecret");
+            return true;
+        }
+
+        _output.WriteLine("Enter apartment secret:");
+        var secret = _input.ReadSecretLine();
+        if (secret is null)
+        {
+            _output.WriteLine("Error: apartment secret entry cancelled.");
+            return true;
+        }
+
+        if (secret.Length == 0)
+        {
+            _output.WriteLine("Error: apartment secret cannot be empty.");
+            return true;
+        }
+
+        _apartmentSecretStore.SetSecretFromUtf8(secret);
+        _output.WriteLine("Apartment secret stored.");
+        return true;
+    }
+
+    private bool EnsureApartmentSecret(out ReadOnlySpan<byte> secret) =>
+        _apartmentSecretEnsurer.EnsureSecret(out secret);
 
     private bool ExecuteUnknown(string cmd)
     {
