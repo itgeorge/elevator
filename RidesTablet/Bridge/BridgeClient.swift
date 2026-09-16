@@ -212,6 +212,50 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
+    /// Reads exactly the two Mercury ride mirrors. This request is intentionally a
+    /// one-shot hardware read: `send` has no retry path for hardware endpoints.
+    public func readMercuryMirrors() async throws -> BridgeMercuryMirrorResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(
+            path: "api/v1/hardware/mercury/mirrors",
+            method: "GET",
+            body: nil,
+            requiresAuthentication: true
+        )
+        return try decode(BridgeMercuryMirrorResponse.self, data: data)
+    }
+
+    /// Sends one conditional mutation request. The bridge owns preflight, write,
+    /// verification, and rollback; the client never replays this call.
+    public func mutateMercury(_ request: BridgeMercuryMutationRequest) async throws -> BridgeMercuryMutationResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let body: Data
+        do {
+            body = try JSONEncoder().encode(request)
+        } catch {
+            throw BridgeClientError.invalidResponse
+        }
+        let data = try await send(
+            path: "api/v1/hardware/mercury/mutations",
+            method: "POST",
+            body: body,
+            requiresAuthentication: true
+        )
+        let response = try decode(BridgeMercuryMutationResponse.self, data: data)
+        // The response is also an optimistic-concurrency acknowledgement. Do not
+        // let a syntactically valid response for a different mutation update state.
+        guard Set(response.results.map(\.block)) == Set(request.mutations.map(\.block)),
+              response.results.count == request.mutations.count,
+              response.results.allSatisfy({ result in
+                  request.mutations.contains {
+                      $0.block == result.block && $0.expected == result.expected && $0.desired == result.desired
+                  }
+              }) else {
+            throw BridgeClientError.invalidResponse
+        }
+        return response
+    }
+
     private func send(
         path: String,
         method: String,
@@ -231,6 +275,7 @@ public final class BridgeClient: @unchecked Sendable {
         }
 
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.timeoutInterval = 30
 
         let data: Data

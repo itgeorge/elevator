@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Temporary Slice 1 diagnostic screen. Concept A remains in ContentView for later integration.
+/// Temporary Slice 2 Mercury diagnostic screen. Concept A remains in ContentView for later integration.
 public struct BridgeConnectionView: View {
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
@@ -70,6 +70,55 @@ public struct BridgeConnectionView: View {
                             .fontDesign(.monospaced)
                     }
                 }
+
+                Section("Mercury rides") {
+                    Button {
+                        Task { await model.readMercuryRides() }
+                    } label: {
+                        Label("Read Mercury rides", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(model.isBusy || !model.isPaired)
+
+                    if let value = model.lastMercuryBlock5Value {
+                        LabeledContent("Raw block 5", value: value)
+                            .fontDesign(.monospaced)
+                    }
+                    if let value = model.lastMercuryBlock6Value {
+                        LabeledContent("Raw block 6", value: value)
+                            .fontDesign(.monospaced)
+                    }
+                    if let rides = model.resolvedMercuryRides {
+                        LabeledContent("Resolved rides", value: String(rides))
+                    } else if model.lastMercuryRead != nil {
+                        Text("Resolved rides: unknown encoding")
+                            .foregroundStyle(.secondary)
+                    }
+                    if model.lastMercuryRead != nil {
+                        LabeledContent(
+                            "Source",
+                            value: model.mercurySourceBlockNumber.map { "block \($0)" } ?? "unknown"
+                        )
+                        LabeledContent(
+                            "Mirrors",
+                            value: model.mercuryBlocksMatch == true ? "matched" : "mismatched"
+                        )
+                        LabeledContent("Warning", value: model.mercuryWarningDisplay ?? "None")
+                            .foregroundStyle(.orange)
+                    }
+
+                    TextField("Target rides (0–500)", text: $model.targetMercuryRidesText)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    Button {
+                        Task { await model.setMercuryRides() }
+                    } label: {
+                        Label("Set Mercury rides", systemImage: "arrow.up.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!model.canSetMercuryRides)
+                }
             }
             .navigationTitle("Bridge Diagnostic")
         }
@@ -78,7 +127,7 @@ public struct BridgeConnectionView: View {
     private var statusSymbol: String {
         switch model.state {
         case .connected, .restored: "checkmark.circle.fill"
-        case .pairing, .reading, .forgetting: "arrow.triangle.2.circlepath"
+        case .pairing, .reading, .readingMercury, .settingMercury, .forgetting: "arrow.triangle.2.circlepath"
         case .failed, .authenticationRequired: "exclamationmark.triangle.fill"
         case .unconfigured: "link.badge.plus"
         }

@@ -24,6 +24,10 @@ public static class BridgeApplication
             services.AddSingleton<IBridgePm3Device, Pm3BridgeDeviceAdapter>();
         else
             services.AddSingleton(device);
+        services.AddSingleton<MercuryConditionalWriter>(serviceProvider =>
+            new MercuryConditionalWriter(
+                serviceProvider.GetRequiredService<IBridgePm3Device>(),
+                serviceProvider.GetRequiredService<BridgeOptions>().HardwareRecoveryTimeout));
         services.AddHostedService<BridgeLifecycleService>();
         return services;
     }
@@ -103,6 +107,103 @@ public static class BridgeApplication
                 if (!IsBlockHex(value))
                     throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
                 return Results.Ok(new BlockReadResponse(5, value.ToUpperInvariant()));
+            }
+            catch (BridgeHardwareException ex)
+            {
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (ObjectDisposedException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (InvalidOperationException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+        });
+
+        app.MapGet("/api/v1/hardware/mercury/mirrors", async (
+            IBridgePm3Device device,
+            BridgeOperationGate gate,
+            BridgeOptions options,
+            HttpContext context) =>
+        {
+            try
+            {
+                var mirrors = await gate.ExecuteAsync(
+                    operationCt => device.ReadMercuryMirrorAsync(operationCt),
+                    context.RequestAborted,
+                    waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                if (!IsBlockHex(mirrors.Block5Hex) || !IsBlockHex(mirrors.Block6Hex))
+                    throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
+                return Results.Ok(new MercuryMirrorReadResponse(
+                    BridgeOptions.ApiVersion,
+                    mirrors.Block5Hex.ToUpperInvariant(),
+                    mirrors.Block6Hex.ToUpperInvariant()));
+            }
+            catch (BridgeHardwareException ex)
+            {
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (ObjectDisposedException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (InvalidOperationException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+        });
+
+        app.MapPost("/api/v1/hardware/mercury/mutations", async (
+            MercuryMutationRequest? request,
+            MercuryConditionalWriter writer,
+            BridgeOperationGate gate,
+            BridgeOptions options,
+            HttpContext context) =>
+        {
+            if (!MercuryMutationValidator.TryValidate(request, out _, out var validationError))
+                return Results.BadRequest(validationError);
+
+            try
+            {
+                // The request token is used only while waiting for the gate. Once acquired,
+                // the server owns the operation so disconnect cannot skip verification/rollback.
+                var result = await gate.ExecuteDetachedAsync(
+                    operationCt => writer.ExecuteAsync(request!, operationCt),
+                    context.RequestAborted,
+                    waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                return Results.Ok(result);
+            }
+            catch (MercuryMutationValidationException ex)
+            {
+                return Results.BadRequest(ex.Error);
             }
             catch (BridgeHardwareException ex)
             {

@@ -386,8 +386,8 @@ Remove routine typing only after the direct-IP/authentication skeleton is proven
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions: This slice may be deferred until after Mercury if the user prefers functional ride progress over onboarding polish; update ordering in the plan rather than silently mixing it into Slice 1.
+- Notes: Deferred on 2026-09-16 at the user's direction to proceed with Slice 2 functional Mercury work first. Manual direct-IP pairing remains the supported diagnostic path; no Slice 1B convenience work is mixed into Slice 2.
+- Assumptions: Resume this slice after Mercury physical acceptance unless the user reprioritizes it.
 
 ---
 
@@ -420,9 +420,9 @@ Do not hand-maintain two independent fixture copies.
 
 ## TDD todos — Mercury codec/resolver
 
-- [ ] Add/extend C# tests that export or validate the immutable shared Mercury fixture from `Tokens`/`RideBlockResolver` behavior.
-- [ ] Add Swift fixture-loading tests before implementing the Mercury network workflow.
-- [ ] Add a narrow Mercury-only Swift codec/resolver with no family registry abstraction. Suggested temporary shape:
+- [x] Add/extend C# tests that export or validate the immutable shared Mercury fixture from `Tokens`/`RideBlockResolver` behavior.
+- [x] Add Swift fixture-loading tests before implementing the Mercury network workflow.
+- [x] Add a narrow Mercury-only Swift codec/resolver with no family registry abstraction. Suggested temporary shape:
 
   ```swift
   enum MercuryRideCodec {
@@ -435,46 +435,46 @@ Do not hand-maintain two independent fixture copies.
   }
   ```
 
-- [ ] Prove exact Swift/C# encode parity for all `0...500` fixture entries.
-- [ ] Prove exact structural rejection and `>500` rejection.
-- [ ] Match C# mirror semantics exactly:
+- [x] Prove exact Swift/C# encode parity for all `0...500` fixture entries.
+- [x] Prove exact structural rejection and `>500` rejection.
+- [x] Match C# mirror semantics exactly:
   - matching valid mirrors use block 5 as source;
   - if both differ and are valid, block 6 wins;
   - if only one is valid, use it;
   - neither valid is unknown/failure;
   - preserve useful mismatch metadata for the UI/logs.
-- [ ] Avoid silently routing Mercury tests through the existing generalized Swift enum; the slice should be reviewably Mercury-specific.
+- [x] Avoid silently routing Mercury tests through the existing generalized Swift enum; the slice should be reviewably Mercury-specific.
 
 ## TDD todos — bridge ride endpoints and conditional writer
 
-- [ ] Add fake-device tests for a Mercury mirror-read endpoint that reads only blocks 5 and 6 and returns raw values; the iPad performs decode.
-- [ ] Define a versioned conditional mutation request/response contract with statuses such as:
+- [x] Add fake-device tests for a Mercury mirror-read endpoint that reads only blocks 5 and 6 and returns raw values; the iPad performs decode.
+- [x] Define a versioned conditional mutation request/response contract with statuses such as:
   - `written`;
   - `alreadyApplied`;
   - `conflict` with actual block values;
   - `verifyFailed`;
   - `rollbackSucceeded` / `rollbackIncomplete`.
-- [ ] Test request validation:
+- [x] Test request validation:
   - only distinct blocks 1...6 may appear;
   - blocks 0/7/out-of-range rejected before hardware access;
   - hex must be exact 32-bit values;
   - duplicate mutations rejected;
   - Slice 2 ride endpoint permits only 5 and 6.
-- [ ] Test preflight-all-before-write behavior for every expected/desired/conflict combination.
-- [ ] Test desired-state retry semantics, including one mirror already desired after a partial prior operation.
-- [ ] Test write order, immediate read-back verification, stop-on-failure, and best-effort rollback to `expected` only for blocks changed by this operation.
-- [ ] Test client cancellation/disconnect does not abandon in-progress verification/rollback.
-- [ ] Reuse existing `Pm3` block methods and proven delays/retries rather than duplicating native protocol logic.
-- [ ] Do not use full dumps or read blocks other than 5/6 in this slice.
+- [x] Test preflight-all-before-write behavior for every expected/desired/conflict combination.
+- [x] Test desired-state retry semantics, including one mirror already desired after a partial prior operation.
+- [x] Test write order, immediate read-back verification, stop-on-failure, and best-effort rollback to `expected` only for blocks changed by this operation.
+- [x] Test client cancellation/disconnect does not abandon in-progress verification/rollback.
+- [x] Reuse existing `Pm3` block methods and proven delays/retries rather than duplicating native protocol logic.
+- [x] Do not use full dumps or read blocks other than 5/6 in this slice.
 
 ## TDD todos — temporary iPad Mercury screen
 
-- [ ] Extend the diagnostic screen with `Read Mercury rides` while keeping transport state explicit.
-- [ ] Show raw block 5/6 values, resolved rides, and mismatch/source information.
-- [ ] Add a bounded target-rides input `0...500` and `Set Mercury rides` action.
-- [ ] Build conditional mutations using the last-read raw 5/6 as `expected` and Mercury encoding as `desired`.
-- [ ] On conflict or ambiguous network timeout, do not automatically replay; force a fresh mirror read and explain the state.
-- [ ] Test model behavior with fake bridge responses for success, already applied, conflict, verify failure, rollback outcomes, no chip, and network loss.
+- [x] Extend the diagnostic screen with `Read Mercury rides` while keeping transport state explicit.
+- [x] Show raw block 5/6 values, resolved rides, and mismatch/source information.
+- [x] Add a bounded target-rides input `0...500` and `Set Mercury rides` action.
+- [x] Build conditional mutations using the last-read raw 5/6 as `expected` and Mercury encoding as `desired`.
+- [x] On conflict or ambiguous network timeout, do not automatically replay; force a fresh mirror read and explain the state.
+- [x] Test model behavior with fake bridge responses for success, already applied, conflict, verify failure, rollback outcomes, no chip, and network loss.
 
 ## Physical acceptance — approved black card
 
@@ -497,8 +497,12 @@ Do not hand-maintain two independent fixture copies.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes (software checkpoint, 2026-09-16): added the single checked-in `TestFixtures/RideEncoding/mercury-v1.json` fixture with all 501 application-valid encodings, 501...511 application-range rejections, structural failures, boundaries, and mirror-resolution cases. Independent C# and Swift tests consume this one fixture. The new Swift `MercuryRideCodec`/`MercuryMirrorResolver` is deliberately Mercury-only and does not route through the preliminary generalized registry.
+- Bridge contract: authenticated `GET /api/v1/hardware/mercury/mirrors` returns only uppercase raw blocks 5/6. Authenticated `POST /api/v1/hardware/mercury/mutations` accepts a `v1` list restricted to distinct blocks 5/6 and returns `written`, `alreadyApplied`, `conflict`, or `verifyFailed` with bounded rollback details. Validation precedes hardware access; preflight reads every target; writes are block-ordered and immediately verified; rollback is reverse-ordered and includes uncertain writes whose response may have been lost.
+- Safety hardening: client disconnect is detached only after the hardware gate is acquired; mutation recovery has an independent four-second server-owned bound. Defaults total 29 seconds (5-second queue + 20-second execution + 4-second recovery), strictly below the iPad's 30-second request deadline. Transport-fatal failures discard the dirty PM3 session. Native BigBuf cancellation is rethrown rather than converted into a retry/failure. Unknown/non-Mercury mirrors remain visible diagnostically but can never authorize a write. The iPad never retries a hardware read or mutation and invalidates stale write snapshots after ambiguous/failure outcomes.
+- Deterministic validation (2026-09-16): full non-integration .NET suite passed 507 with 1 skipped and 0 failed; full Swift simulator suite passed 68/68; `dotnet build ElevatorTokens.sln --no-restore -warnaserror` completed with 0 warnings/errors. Bridge-focused tests passed 88/88, native cancellation tests 3/3, fixture schema checks, plist lint, Xcode project listing, and `git diff --check` passed.
+- Hardware pause (2026-09-16): no PM3, physical iPad, card read, or card write occurred during Slice 2 implementation because the user needed the PM3 and was away from the iPad. Every physical-acceptance checkbox intentionally remains open. Do not begin the physical run until the user confirms both are available.
+- Assumptions: Mercury hardcoding is deliberate. Generalization belongs in Slice 3.
 
 ---
 

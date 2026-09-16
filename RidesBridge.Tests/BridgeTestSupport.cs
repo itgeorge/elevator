@@ -38,6 +38,27 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
         return await _read(ct);
     }
 
+    public Task<string> ReadPage0Block6Async(CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref ReadCalls);
+        return Task.FromResult(Value);
+    }
+
+    public Task<(string Block5Hex, string Block6Hex)> ReadMercuryMirrorAsync(CancellationToken ct = default) =>
+        Task.FromResult((Value, Value));
+
+    public Task WritePage0Block5Async(string value, CancellationToken ct = default)
+    {
+        Value = value;
+        return Task.CompletedTask;
+    }
+
+    public Task WritePage0Block6Async(string value, CancellationToken ct = default)
+    {
+        Value = value;
+        return Task.CompletedTask;
+    }
+
     public ValueTask DisposeAsync()
     {
         Disposed = true;
@@ -85,8 +106,14 @@ internal sealed class FakeBridgePm3Session : IBridgePm3Session
 
     public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)
     {
-        _calls.Add("read");
+        _calls.Add(block == 5 ? "read" : $"read{block}");
         return _read(ct);
+    }
+
+    public Task WritePage0BlockAsync(uint block, Tokens.T55Block data, CancellationToken ct = default)
+    {
+        _calls.Add($"write{block}:{data.ToHex()}");
+        return Task.CompletedTask;
     }
 
     public ValueTask DisposeAsync()
