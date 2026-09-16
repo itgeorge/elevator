@@ -478,15 +478,15 @@ Do not hand-maintain two independent fixture copies.
 
 ## Physical acceptance — approved black card
 
-- [ ] Read-only preflight blocks 5/6 and record exact raw values.
-- [ ] Choose a valid Mercury test value different from the current values; document why it is safe.
-- [ ] Execute the write from the physical iPad through the bridge.
-- [ ] Confirm bridge preflight read only 5/6, wrote only 5/6, and verified both.
-- [ ] Repeat the same desired request and confirm `alreadyApplied` without a rewrite.
-- [ ] Exercise one safe stale-expected conflict without writing.
-- [ ] Restore the original raw block 5/6 values and verify them.
-- [ ] Run no full dump and write no other block.
-- [ ] Record PM3 diagnostic log locations and final card state without committing generated logs.
+- [x] Read-only preflight blocks 5/6 and record exact raw values.
+- [x] Choose a valid Mercury test value different from the current values; document why it is safe.
+- [x] Execute the write from the physical iPad through the bridge.
+- [x] Confirm bridge preflight read only 5/6, wrote only 5/6, and verified both.
+- [x] Repeat the same desired request and confirm `alreadyApplied` without a rewrite.
+- [x] Exercise one safe stale-expected conflict without writing.
+- [x] Restore the original raw block 5/6 values and verify them.
+- [x] Run no full dump and write no other block.
+- [x] Record PM3 diagnostic log locations and final card state without committing generated logs.
 
 ## Acceptance
 
@@ -500,8 +500,10 @@ Do not hand-maintain two independent fixture copies.
 - Notes (software checkpoint, 2026-09-16): added the single checked-in `TestFixtures/RideEncoding/mercury-v1.json` fixture with all 501 application-valid encodings, 501...511 application-range rejections, structural failures, boundaries, and mirror-resolution cases. Independent C# and Swift tests consume this one fixture. The new Swift `MercuryRideCodec`/`MercuryMirrorResolver` is deliberately Mercury-only and does not route through the preliminary generalized registry.
 - Bridge contract: authenticated `GET /api/v1/hardware/mercury/mirrors` returns only uppercase raw blocks 5/6. Authenticated `POST /api/v1/hardware/mercury/mutations` accepts a `v1` list restricted to distinct blocks 5/6 and returns `written`, `alreadyApplied`, `conflict`, or `verifyFailed` with bounded rollback details. Validation precedes hardware access; preflight reads every target; writes are block-ordered and immediately verified; rollback is reverse-ordered and includes uncertain writes whose response may have been lost.
 - Safety hardening: client disconnect is detached only after the hardware gate is acquired; mutation recovery has an independent four-second server-owned bound. Defaults total 29 seconds (5-second queue + 20-second execution + 4-second recovery), strictly below the iPad's 30-second request deadline. Transport-fatal failures discard the dirty PM3 session. Native BigBuf cancellation is rethrown rather than converted into a retry/failure. Unknown/non-Mercury mirrors remain visible diagnostically but can never authorize a write. The iPad never retries a hardware read or mutation and invalidates stale write snapshots after ambiguous/failure outcomes.
-- Deterministic validation (2026-09-16): full non-integration .NET suite passed 507 with 1 skipped and 0 failed; full Swift simulator suite passed 68/68; `dotnet build ElevatorTokens.sln --no-restore -warnaserror` completed with 0 warnings/errors. Bridge-focused tests passed 88/88, native cancellation tests 3/3, fixture schema checks, plist lint, Xcode project listing, and `git diff --check` passed.
-- Hardware pause (2026-09-16): no PM3, physical iPad, card read, or card write occurred during Slice 2 implementation because the user needed the PM3 and was away from the iPad. Every physical-acceptance checkbox intentionally remains open. Do not begin the physical run until the user confirms both are available.
+- Address migration (2026-09-16): the physical iPad retained its existing one-way-verifier-backed bearer while moving from the proven iPhone hotspot to home Wi-Fi. A launch-only `RIDES_BRIDGE_ADDRESS_OVERRIDE=192.168.0.163:5080` caused one authenticated, no-hardware `GET /api/v1/pair/status` (HTTP 200), then transactionally updated the Keychain URL. No new PIN, pairing token, revocation, or PM3 operation was required. Manual `Use entered address` remains the fallback.
+- Physical acceptance (2026-09-16): the bridge bound explicitly to `http://192.168.0.163:5080` on the shared home router and used `/dev/cu.usbmodem1301`. A DEBUG-only, exact seven-request iPad acceptance runner first recorded `block5=3FC6B8C3`, `block6=3FC6B8C3` (Mercury 497), then selected adjacent in-range Mercury 498 (`3FC6BBF3`). The authenticated iPad request wrote and immediately verified only blocks 5/6. Repeating the same desired request returned `alreadyApplied`; a stale request for a distinct value returned `conflict`; neither caused a write. A fresh read confirmed 498 before an exact raw restore, and the final fresh read confirmed `3FC6B8C3` / `3FC6B8C3` byte-for-byte.
+- Physical audit evidence: PM3 session log `/var/folders/ty/cs9d984d4s926vpqm0df5_sc0000gn/T/elevator/pm3-65644-20260916175351-session.log` records exactly four writes: block 5 then 6 to `3FC6BBF3`, followed by block 5 then 6 to `3FC6B8C3`. Its only explicit block operands are 5 and 6; it contains no dump or tune command. The app console emitted `RIDES_PHASE2_ACCEPTANCE_SUCCESS original5=3FC6B8C3 original6=3FC6B8C3 targetRides=498`. Generated logs remain outside the repository. Graceful shutdown released both TCP port 5080 and `/dev/cu.usbmodem1301`.
+- Final deterministic validation (2026-09-16): full non-integration .NET suite passed 508 with 1 skipped and 0 failed; full Swift simulator suite passed 80/80; `dotnet build ElevatorTokens.sln --no-restore -warnaserror` completed with 0 warnings/errors. Bridge-focused tests passed 89/89, guarded physical-runner tests passed 4/4, fixture schema checks, plist lint, Xcode project listing, and `git diff --check` passed.
 - Assumptions: Mercury hardcoding is deliberate. Generalization belongs in Slice 3.
 
 ---
