@@ -179,8 +179,8 @@ Start implementation from a reproducible, reviewed baseline while retaining the 
 - [x] Preserve `iPadHotspotProbe/` in source control with its physical test evidence and reproduction instructions.
 - [x] Update hotspot-probe wording so it is clearly committed evidence rather than disposable untracked work.
 - [x] Remove the untracked `iPadAccessoryProbe/`; do not commit its generated signing/build logs or recreate it.
-- [ ] At execution start, confirm branch/head and record the current working tree in these notes.
-- [ ] Read completely before implementation:
+- [x] At execution start, confirm branch/head and record the current working tree in these notes.
+- [x] Read completely before implementation:
   - this plan;
   - `iPadHotspotProbe/README.md` and source;
   - `.plans/pm3-native-integration.md`;
@@ -189,7 +189,7 @@ Start implementation from a reproducible, reviewed baseline while retaining the 
   - `RidesCli/IRidesPm3Api.cs`, `RideBlockResolver.cs`, reset/write safety code;
   - `Tokens/RideCounterCodec.cs`, `EncodingSequence.cs`, `TokenIdentityProfile.cs`;
   - `RidesTablet/Domain`, `Features/RidesViewModel.swift`, current Concept A view, and tests.
-- [ ] Run and record baseline deterministic tests without hardware integration:
+- [x] Run and record baseline deterministic tests without hardware integration:
 
   ```bash
   dotnet test ElevatorTokens.sln --filter 'Category!=Integration&Category!=IntegrationParity'
@@ -199,8 +199,8 @@ Start implementation from a reproducible, reviewed baseline while retaining the 
     -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'
   ```
 
-- [ ] Confirm the physical iPad still appears through `xcrun devicectl list devices` before the first physical slice, without launching a simulator during physical testing.
-- [ ] Confirm PM3 port ownership is free and perform a read-only native connect before Slice 1's hardware checkpoint.
+- [x] Confirm the physical iPad still appears through `xcrun devicectl list devices` before the first physical slice, without launching a simulator during physical testing.
+- [x] Confirm PM3 port ownership is free and perform a read-only native connect before Slice 1's hardware checkpoint.
 
 ## Acceptance
 
@@ -212,7 +212,11 @@ Start implementation from a reproducible, reviewed baseline while retaining the 
 ## Agent notes / assumptions
 
 - Notes: Plan-creation baseline was `1aac5b9` on branch `ipad-rides`/`master`. Only the known unrelated `debug/` paths and the two probe directories were untracked. `iPadAccessoryProbe/` was removed; `iPadHotspotProbe/` was selected for commit.
-- Assumptions:
+- Execution baseline (2026-09-16): branch `ipad-rides`, HEAD `9132691873e0ffb4f2c059b6d51b2c9b65ba838c`; `master` remained `1aac5b937254f910c1c24d604d2d4cbb12fd8988`. The working tree contained only the five documented unrelated untracked `debug/` paths, which remained untouched.
+- Deterministic baseline: `dotnet test ElevatorTokens.sln --filter 'Category!=Integration&Category!=IntegrationParity'` exited 0 across six test projects (409 passed, 1 skipped, 0 failed). The documented `xcodebuild test` command exited 0 on the `RidesTablet iPad Air 4` simulator (19 passed, 0 failed; 11 build warnings plus the existing UIKit orientation advisory).
+- Hardware-readiness baseline: `xcrun devicectl list devices` showed the physical `itgeorge iPad Air 4th Gen` as `available (paired)`, model `iPad Air (4th generation) (iPad13,2)`. Current CoreDevice identifier is `494BBD09-0DEB-5B41-B915-3B4258F1DBA2`; the older hardware UDID recorded by the hotspot probe is not displayed by the current list format. No simulator was launched for this check.
+- PM3 readiness: native port `/dev/cu.usbmodem11301` had no `lsof`/`fuser` owner and no competing PM3 process. A connect/version-only `Pm3Cli` run exited 0, logged `hw version` OK in 106 ms, then disconnected. Session log: `/var/folders/ty/cs9d984d4s926vpqm0df5_sc0000gn/T/elevator/pm3-50230-20260916131417-session.log`. No tune, detect, card read, dump, or write was issued.
+- Assumptions: The available paired CoreDevice entry is the same physical iPad Air 4 used by the hotspot probe; CoreDevice's displayed identifier is allowed to differ from the hardware UDID.
 
 ---
 
