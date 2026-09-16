@@ -155,7 +155,7 @@ Land the encode/decode algorithm with no PM3/CLI dependencies.
 
 ## Todos
 
-- [ ] Add failing unit tests for `ApartmentBlockCodec` covering:
+- [x] Add failing unit tests for `ApartmentBlockCodec` covering:
   - round-trip encode/decode with fixed test secret, `building=0`, various apt values
   - wrong block3 ⇒ decode failure
   - wrong secret ⇒ decode failure
@@ -164,14 +164,14 @@ Land the encode/decode algorithm with no PM3/CLI dependencies.
   - same payload + different block3 ⇒ different block4
   - different apt ⇒ different block4
   - building is present in the payload (decode returns `Building == 0` for v1 encodes)
-- [ ] Implement `ApartmentPayload` + `ApartmentBlockCodec` using HMAC-SHA256 PRF, version `"apt-v1"`, layout `seal:16 | obfuscated_payload:16`.
-- [ ] Export only what CLI needs; keep PRF helpers private unless tests require internals.
-- [ ] Run `dotnet test Tokens.Tests` and fix until green.
+- [x] Implement `ApartmentPayload` + `ApartmentBlockCodec` using HMAC-SHA256 PRF, version `"apt-v1"`, layout `seal:16 | obfuscated_payload:16`.
+- [x] Export only what CLI needs; keep PRF helpers private unless tests require internals.
+- [x] Run `dotnet test Tokens.Tests` and fix until green.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes: Implemented `ApartmentPayload` (readonly record struct) and public static `ApartmentBlockCodec` with `Encode` / `TryDecode` as proposed. PRF helpers (`ComputeTrunc16`, block3 byte packing, HMAC truncation) are private to `ApartmentBlockCodec`. Block3 is serialized big-endian (4 bytes) for HMAC input; seal/mask/plaintext use big-endian 16-bit packing; `block4` layout is `seal` in the high 16 bits and obfuscated payload in the low 16 bits.
+- Assumptions: `trunc16` is the first two bytes of HMAC-SHA256 interpreted as big-endian uint16. Factory-mirror rejection is implicit via seal mismatch (no special-case check).
 
 ---
 
