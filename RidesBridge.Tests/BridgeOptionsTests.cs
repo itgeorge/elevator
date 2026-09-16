@@ -120,6 +120,18 @@ public sealed class BridgeOptionsTests
     }
 
     [Test]
+    public void Validate_RejectsRelativeBridgeIdentityPath()
+    {
+        var ex = Assert.Throws<BridgeConfigurationException>(() => new BridgeOptions
+        {
+            BindUrl = "http://127.0.0.1:5080",
+            DataDirectory = Path.GetTempPath(),
+            BridgeIdentityPath = "bridge-id",
+        }.Validate());
+        Assert.That(ex!.Message, Does.Contain("BridgeIdentityPath"));
+    }
+
+    [Test]
     public void Validate_RequiresExplicitPortWhenAutoDiscoveryDisabled()
     {
         var ex = Assert.Throws<BridgeConfigurationException>(() => new BridgeOptions

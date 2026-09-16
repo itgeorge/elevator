@@ -19,6 +19,7 @@ public static class BridgeApplication
         services.AddSingleton(options);
         services.AddSingleton<PairingCodeService>(_ => new PairingCodeService(options.PairingLifetime));
         services.AddSingleton<IPairedClientStore>(_ => new FilePairedClientStore(options.EffectivePairedClientsPath));
+        services.AddSingleton<BridgeIdentityService>(_ => new BridgeIdentityService(options.EffectiveBridgeIdentityPath));
         services.AddSingleton<BridgeOperationGate>(_ => new BridgeOperationGate(options.OperationWaitTimeout));
         if (device is null)
             services.AddSingleton<IBridgePm3Device, Pm3BridgeDeviceAdapter>();
