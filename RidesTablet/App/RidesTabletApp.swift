@@ -4,7 +4,7 @@ import SwiftUI
 struct RidesTabletApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            BridgeConnectionView()
         }
     }
 }

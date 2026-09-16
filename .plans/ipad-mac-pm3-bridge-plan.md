@@ -296,28 +296,28 @@ Use a temporary root screen from `RidesTabletApp`; do not delete or redesign Con
 
 ## TDD todos — iPad
 
-- [ ] Add request/response contract tests before networking implementation:
+- [x] Add request/response contract tests before networking implementation:
   - eight-character uppercase block hex;
   - version/error decoding;
   - malformed response rejection.
-- [ ] Add `BridgeClient` tests with injected `URLSession`/`URLProtocol`:
+- [x] Add `BridgeClient` tests with injected `URLSession`/`URLProtocol`:
   - URL normalization and direct-IP base URL;
   - pairing request encoding;
   - bearer header injection after pairing;
   - 401 clears/requires re-pairing without leaking the token;
   - timeout, unreachable host, invalid JSON, and server error mapping;
   - no retries for hardware requests.
-- [ ] Put Keychain calls behind `BridgeCredentialStore`; test connection-state logic with an in-memory store.
-- [ ] Add the local-network usage description and narrowly scoped ATS local-network allowance proven by `iPadHotspotProbe`; do not add a global arbitrary-load exemption.
-- [ ] Implement the temporary SwiftUI connection screen:
+- [x] Put Keychain calls behind `BridgeCredentialStore`; test connection-state logic with an in-memory store.
+- [x] Add the local-network usage description and narrowly scoped ATS local-network allowance proven by `iPadHotspotProbe`; do not add a global arbitrary-load exemption.
+- [x] Implement the temporary SwiftUI connection screen:
   - bridge URL;
   - six-digit PIN;
   - Pair/Forget controls;
   - connection/authentication state;
   - one `Read block 5` button;
   - returned hex or actionable error.
-- [ ] Temporarily route `RidesTabletApp` to the diagnostic screen while leaving Concept A intact for Slice 5.
-- [ ] Keep simulator/unit tests independent of the physical Mac and PM3.
+- [x] Temporarily route `RidesTabletApp` to the diagnostic screen while leaving Concept A intact for Slice 5.
+- [x] Keep simulator/unit tests independent of the physical Mac and PM3.
 
 ## Physical acceptance
 
@@ -343,6 +343,9 @@ Use a temporary root screen from `RidesTabletApp`; do not delete or redesign Con
 - Binding/configuration: the safe default is loopback and reports no fake LAN URL. An explicit private IPv4 bind reports only that URL; wildcard bind reports active private non-loopback IPv4 URLs. PM3 port and auto-discovery are configurable through `Bridge`/`Pm3` settings or documented environment keys in `BridgeOptions`.
 - Lifecycle: `BridgeOperationGate` serializes requests and drains before idempotent adapter disposal. The production adapter directly owns `Pm3UsbApi.Pm3`, uses the native executor, and exposes only block 5. Expected PM3/serial failures map to stable secret-free HTTP error contracts.
 - Tests (2026-09-16): `dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --no-restore` passed 41/41. The full non-integration solution run passed 450 with 1 skipped and 0 failed. A warnings-as-errors solution build completed with 0 warnings/0 errors; `git diff --check` passed. No USB/card operation occurred.
+- iPad client (2026-09-16): added strict v1 DTO decoding, local direct-IP URL validation, an injected `URLSession` client with bearer authorization, explicit 30-second/no-cache/no-retry requests, cancellation/error mapping, and synchronized credential access. Keychain persistence is behind `BridgeCredentialStore`; save failures revoke the newly issued bearer or retain it only for an explicit Forget retry. Forget calls the authenticated server revocation endpoint and keeps credentials when revocation fails so a live bearer is not silently orphaned.
+- Temporary iPad UI (2026-09-16): app startup now routes to a diagnostic URL/PIN Pair/Forget/read-block-5 screen while the Concept A `ContentView` remains intact. The app plist contains `NSLocalNetworkUsageDescription` and only `NSAllowsLocalNetworking`; there is no global arbitrary-load exemption. The URL field starts blank and directs the operator to the private URL printed by the Mac bridge.
+- iPad tests (2026-09-16): the focused bridge suite passed 21/21 and an independent full `xcodebuild test -project RidesTablet/RidesTablet.xcodeproj -scheme RidesTablet -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'` passed 40/40, preserving the original 19 tests. The independent full non-integration .NET run again passed 450 with 1 skipped. `plutil -lint`, Xcode project listing, and `git diff --check` passed; only AppIntents metadata notices were emitted. No physical device, USB, PM3, or card operation occurred.
 - Assumptions: Manual URL + PIN is intentionally first. Bonjour/QR convenience must not block this slice. Physical runs will explicitly bind the current hotspot/private Mac address (or intentionally choose wildcard); loopback remains the safe development default.
 
 ---
