@@ -841,7 +841,7 @@ final class BridgeConnectionModelTests: XCTestCase {
             await model.useEnteredBridgeAddress()
 
             XCTAssertEqual(store.credential, oldCredential, String(describing: failure))
-            XCTAssertEqual(model.bridgeURLText, newURL.absoluteString, String(describing: failure))
+            XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString, String(describing: failure))
             XCTAssertTrue(model.isPaired, String(describing: failure))
             XCTAssertFalse(model.message?.contains(token) == true, String(describing: failure))
             guard case .failed = model.state else {
@@ -854,6 +854,48 @@ final class BridgeConnectionModelTests: XCTestCase {
             XCTAssertEqual(model.lastBlock5Value, "A1B2C3D4", String(describing: failure))
             XCTAssertEqual(paths.last, "/api/v1/hardware/page0/block5", String(describing: failure))
         }
+    }
+
+    func testNonNilBridgeIdentitySurvivesRestoreAndAddressMigration() async throws {
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let newURL = URL(string: "http://192.168.1.20:8080")!
+        let bridgeID = "0123456789ABCDEF0123456789ABCDEF"
+        let token = "identity-migration-token"
+        let credential = BridgeCredential(baseURL: oldURL, accessToken: token, bridgeId: bridgeID)
+        let store = InMemoryBridgeCredentialStore(credential: credential)
+        StubBridgeURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/pair/status" {
+                return (response(for: request), Data(#"{"version":"v1","paired":true}"#.utf8))
+            }
+            XCTFail("Unexpected hardware request")
+            return (response(for: request, status: 500), Data())
+        }
+
+        let restored = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        XCTAssertEqual(restored.state, .restored)
+        restored.bridgeURLText = newURL.absoluteString
+        await restored.useEnteredBridgeAddress()
+
+        XCTAssertEqual(store.credential, BridgeCredential(baseURL: newURL, accessToken: token, bridgeId: bridgeID))
+        let secondRestore = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        XCTAssertEqual(secondRestore.state, .restored)
+        XCTAssertEqual(store.credential?.bridgeId, bridgeID)
+    }
+
+    func testCancelledAddressMigrationRestoresThePreviouslyActiveURL() async throws {
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let newURL = URL(string: "http://192.168.1.20:8080")!
+        let token = "cancelled-migration-token"
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(baseURL: oldURL, accessToken: token))
+        StubBridgeURLProtocol.handler = { _ in throw CancellationError() }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        model.bridgeURLText = newURL.absoluteString
+
+        await model.useEnteredBridgeAddress()
+
+        XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
     }
 
     func testLaunchAddressOverrideAutoRelocatesExactlyOnceWithNoPairRevokeOrHardware() async throws {

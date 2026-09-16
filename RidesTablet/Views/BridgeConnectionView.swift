@@ -40,15 +40,20 @@ public struct BridgeConnectionView: View {
     @State private var pin = ""
     @State private var didApplyLaunchAddressOverride = false
     @State private var didRunLaunchPhysicalAcceptance = false
+    @State private var isScannerPresented = false
+    @State private var scannerImportInFlight = false
     private let launchConfiguration: BridgeConnectionLaunchConfiguration
+    private let scannerCoordinator: any BridgePairingScannerCoordinator
 
     @MainActor
     public init(
         environmentLookup: @escaping @Sendable () -> String? = {
             ProcessInfo.processInfo.environment[BridgeConnectionView.addressOverrideEnvironmentKey]
-        }
+        },
+        scannerCoordinator: (any BridgePairingScannerCoordinator)? = nil
     ) {
         _model = StateObject(wrappedValue: BridgeConnectionModel())
+        self.scannerCoordinator = scannerCoordinator ?? NativeBridgePairingScannerCoordinator()
         launchConfiguration = BridgeConnectionLaunchConfiguration(
             addressOverride: environmentLookup(),
             physicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey] == "1"
@@ -56,20 +61,34 @@ public struct BridgeConnectionView: View {
     }
 
     @MainActor
-    public init(environmentLookup: @escaping @Sendable (String) -> String?) {
+    public init(
+        environmentLookup: @escaping @Sendable (String) -> String?,
+        scannerCoordinator: (any BridgePairingScannerCoordinator)? = nil
+    ) {
         _model = StateObject(wrappedValue: BridgeConnectionModel())
+        self.scannerCoordinator = scannerCoordinator ?? NativeBridgePairingScannerCoordinator()
         launchConfiguration = BridgeConnectionLaunchConfiguration(environmentLookup: environmentLookup)
     }
 
     @MainActor
-    public init(model: BridgeConnectionModel, launchAddressOverride: String? = nil) {
+    public init(
+        model: BridgeConnectionModel,
+        launchAddressOverride: String? = nil,
+        scannerCoordinator: (any BridgePairingScannerCoordinator)? = nil
+    ) {
         _model = StateObject(wrappedValue: model)
+        self.scannerCoordinator = scannerCoordinator ?? NativeBridgePairingScannerCoordinator()
         launchConfiguration = BridgeConnectionLaunchConfiguration(addressOverride: launchAddressOverride)
     }
 
     @MainActor
-    public init(model: BridgeConnectionModel, launchConfiguration: BridgeConnectionLaunchConfiguration) {
+    public init(
+        model: BridgeConnectionModel,
+        launchConfiguration: BridgeConnectionLaunchConfiguration,
+        scannerCoordinator: (any BridgePairingScannerCoordinator)? = nil
+    ) {
         _model = StateObject(wrappedValue: model)
+        self.scannerCoordinator = scannerCoordinator ?? NativeBridgePairingScannerCoordinator()
         self.launchConfiguration = launchConfiguration
     }
 
@@ -85,6 +104,14 @@ public struct BridgeConnectionView: View {
                     Text("Enter the Mac's private IPv4 address or localhost. Port defaults to 5080.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+
+                    Button {
+                        scannerImportInFlight = false
+                        isScannerPresented = true
+                    } label: {
+                        Label("Scan pairing QR", systemImage: "qrcode.viewfinder")
+                    }
+                    .disabled(model.isBusy || model.isPaired || scannerImportInFlight)
 
                     if model.hasSavedCredential && model.isPaired && model.hasEnteredBridgeAddressChange {
                         Button("Use entered address") {
@@ -187,6 +214,11 @@ public struct BridgeConnectionView: View {
             }
             .navigationTitle("Bridge Diagnostic")
         }
+        .sheet(isPresented: $isScannerPresented) {
+            BridgePairingScannerView(coordinator: scannerCoordinator) { payload in
+                handleScannedPairingPayload(payload)
+            }
+        }
         .task {
             guard !didApplyLaunchAddressOverride else { return }
             didApplyLaunchAddressOverride = true
@@ -198,6 +230,17 @@ public struct BridgeConnectionView: View {
             guard launchConfiguration.physicalAcceptanceEnabled else { return }
             await model.runLaunchPhysicalAcceptanceIfRequested()
 #endif
+        }
+    }
+
+    private func handleScannedPairingPayload(_ payload: String) {
+        guard !scannerImportInFlight else { return }
+        scannerImportInFlight = true
+        // The scanner model stopped before invoking this one-shot callback.
+        isScannerPresented = false
+        Task { @MainActor in
+            await model.importPairingPayload(payload)
+            scannerImportInFlight = false
         }
     }
 

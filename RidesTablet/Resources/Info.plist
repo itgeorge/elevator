@@ -16,6 +16,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>RidesTablet connects to your local RidesBridge to read the token.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>RidesTablet uses the camera to scan a local RidesBridge pairing QR code.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
