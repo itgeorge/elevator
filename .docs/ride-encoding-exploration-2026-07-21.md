@@ -38,7 +38,9 @@ A single trusted `(ride count, block5/6)` point can still generate an exploratio
 | 4 | May differ from block 3, accepts values in every byte, and is not rewritten during a ride on the tested elevator. | 2026-09-11 Mercury: `00000000` survived 499→498 and `00000045` survived 498→497. Saturn identity with Neptune sequence: `FFFEFDFC` survived 325→324. Blocks 5/6 matched after every accepted ride. |
 | 3 | Do not use as custom storage. | Zeroing block 3 caused a silent rejection in the tested identity experiment. |
 
-These tests strongly support page-0 **block 4** as custom application storage on the tested elevator, including a 10-bit identifier. Scope is limited to the tested system and identity/sequence combinations; other installations could validate it differently. `RidesCli reset` currently treats blocks 1..4 as profile data and will overwrite a custom block 4 with the profile's nominal mirror value.
+These tests strongly support page-0 **block 4** as custom application storage on the tested elevator, including a 10-bit identifier. Scope is limited to the tested system and identity/sequence combinations; other installations could validate it differently.
+
+**Software follow-up:** sealed apartment encoding for block 4 is implemented in `Tokens.ApartmentBlockCodec` and exposed via `RidesCli` (`apt`, `aptsecret`, `reset --resetapt`). Design and behavior live in `.plans/apartment-block4-encoding-plan.md`. Default `reset` preserves a sealed apartment in block 4; pass `--resetapt` to restore the profile mirror.
 
 ---
 

@@ -288,16 +288,16 @@ Leave the repo coherent for the next agent/human smoke test without doing device
 
 ## Todos
 
-- [ ] Update `RidesCli` help output / any command list so `apt`, `aptsecret`, and `reset ... [--resetapt]` are discoverable.
-- [ ] Add a short design note pointer in `.docs/ride-encoding-exploration-2026-07-21.md` (or a tiny sibling doc if cleaner) that block 4 apartment encoding is implemented per this plan — keep it brief; no need to paste the whole algorithm twice.
-- [ ] Run broader targeted test sets: `dotnet test Tokens.Tests` and `dotnet test RidesCli.Tests`.
-- [ ] Final plan pass: all in-scope TODOs `[x]`, notes filled, deviations recorded.
-- [ ] Stop for human hardware smoke later (not part of this plan’s completion gate): write apt → ride → confirm block 4 survives → reset without `--resetapt` → apt remains → reset with `--resetapt` clears it.
+- [x] Update `RidesCli` help output / any command list so `apt`, `aptsecret`, and `reset ... [--resetapt]` are discoverable.
+- [x] Add a short design note pointer in `.docs/ride-encoding-exploration-2026-07-21.md` (or a tiny sibling doc if cleaner) that block 4 apartment encoding is implemented per this plan — keep it brief; no need to paste the whole algorithm twice.
+- [x] Run broader targeted test sets: `dotnet test Tokens.Tests` and `dotnet test RidesCli.Tests`.
+- [x] Final plan pass: all in-scope TODOs `[x]`, notes filled, deviations recorded.
+- [x] Stop for human hardware smoke later (not part of this plan’s completion gate): write apt → ride → confirm block 4 survives → reset without `--resetapt` → apt remains → reset with `--resetapt` clears it.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes: Help already listed `apt` / `aptsecret` / `reset [--resetapt]` from Phases 2–3. Exploration doc now points at this plan and the preserve/`--resetapt` reset behavior. No `.env` secret loading (intentional plan non-goal). Reviewer fixed same-identity junk block4 restore during Phase 3. Software validation: `Tokens.Tests` + `RidesCli.Tests` green on `apartment-block4` worktree.
+- Assumptions: Hardware smoke remains a human follow-up outside this plan’s completion gate.
 
 ---
 
