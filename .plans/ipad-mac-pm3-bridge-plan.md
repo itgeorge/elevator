@@ -268,31 +268,31 @@ Use a temporary root screen from `RidesTabletApp`; do not delete or redesign Con
 
 ## TDD todos — bridge
 
-- [ ] Add `RidesBridge.Tests` first with a fake `IBridgePm3Device`; no unit test may require USB hardware.
-- [ ] Characterize configuration validation:
+- [x] Add `RidesBridge.Tests` first with a fake `IBridgePm3Device`; no unit test may require USB hardware.
+- [x] Characterize configuration validation:
   - valid private/local bind URL and port;
   - malformed/unsupported URL rejected clearly;
   - startup lists usable non-loopback IPv4 URLs without treating internet reachability as required.
-- [ ] Test pairing-code behavior before endpoint implementation:
+- [x] Test pairing-code behavior before endpoint implementation:
   - six numeric digits;
   - expiration;
   - single successful use;
   - wrong/expired/reused code rejected;
   - concurrent attempts cannot redeem one code twice;
   - secrets never appear in structured request logs.
-- [ ] Test bearer issuance/storage/authentication:
+- [x] Test bearer issuance/storage/authentication:
   - generated from a cryptographically secure source;
   - only a one-way verifier/hash is persisted if practical;
   - valid token authorizes hardware endpoint;
   - missing/invalid/revoked token returns 401;
   - bridge restart persistence behavior is explicit and tested.
-- [ ] Test the operation gate so simultaneous hardware requests execute one at a time and cancellation while waiting does not enter the PM3 call.
-- [ ] Test `GET /api/v1/health` (or equivalent) returns bridge/API version without hardware access or secrets.
-- [ ] Test pairing endpoint contract and the authenticated hardcoded block-5 read endpoint using ASP.NET's in-memory test server.
-- [ ] Implement the minimal ASP.NET Core service to pass the tests.
-- [ ] Reference/reuse `Pm3UsbApi` directly in the production adapter; do not shell out to `Pm3Cli` or expose raw commands.
-- [ ] Make PM3 port/configuration explicit through bridge settings/environment while retaining existing safe auto-discovery where practical.
-- [ ] Add graceful startup/shutdown and clear states for PM3 unavailable, no chip, timeout, bridge busy, and malformed response.
+- [x] Test the operation gate so simultaneous hardware requests execute one at a time and cancellation while waiting does not enter the PM3 call.
+- [x] Test `GET /api/v1/health` (or equivalent) returns bridge/API version without hardware access or secrets.
+- [x] Test pairing endpoint contract and the authenticated hardcoded block-5 read endpoint using ASP.NET's in-memory test server.
+- [x] Implement the minimal ASP.NET Core service to pass the tests.
+- [x] Reference/reuse `Pm3UsbApi` directly in the production adapter; do not shell out to `Pm3Cli` or expose raw commands.
+- [x] Make PM3 port/configuration explicit through bridge settings/environment while retaining existing safe auto-discovery where practical.
+- [x] Add graceful startup/shutdown and clear states for PM3 unavailable, no chip, timeout, bridge busy, and malformed response.
 
 ## TDD todos — iPad
 
@@ -338,8 +338,12 @@ Use a temporary root screen from `RidesTabletApp`; do not delete or redesign Con
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions: Manual URL + PIN is intentionally first. Bonjour/QR convenience must not block this slice.
+- Notes: The first Slice 1 backend checkpoint added `RidesBridge` and `RidesBridge.Tests` to the solution. The API is `v1`: unauthenticated `GET /api/v1/health`, `POST /api/v1/pair`, authenticated `POST /api/v1/pair/revoke`, and authenticated hardcoded `GET /api/v1/hardware/page0/block5`. There is no generic block or raw-command endpoint.
+- Pairing/security: startup issues a CSPRNG six-digit PIN to the terminal with a two-minute lifetime; it is single-use, invalidates after 10 wrong attempts, and concurrent redemption is serialized. Pairing returns a 256-bit URL-safe bearer token. Only its SHA-256 verifier and revocation state persist in the configured JSON store, so credentials survive restart without plaintext bearer storage. Structured HTTP logs contain method/path/status only. Cleartext bearer transport remains limited to the plan's trusted local-network prototype scope.
+- Binding/configuration: the safe default is loopback and reports no fake LAN URL. An explicit private IPv4 bind reports only that URL; wildcard bind reports active private non-loopback IPv4 URLs. PM3 port and auto-discovery are configurable through `Bridge`/`Pm3` settings or documented environment keys in `BridgeOptions`.
+- Lifecycle: `BridgeOperationGate` serializes requests and drains before idempotent adapter disposal. The production adapter directly owns `Pm3UsbApi.Pm3`, uses the native executor, and exposes only block 5. Expected PM3/serial failures map to stable secret-free HTTP error contracts.
+- Tests (2026-09-16): `dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --no-restore` passed 41/41. The full non-integration solution run passed 450 with 1 skipped and 0 failed. A warnings-as-errors solution build completed with 0 warnings/0 errors; `git diff --check` passed. No USB/card operation occurred.
+- Assumptions: Manual URL + PIN is intentionally first. Bonjour/QR convenience must not block this slice. Physical runs will explicitly bind the current hotspot/private Mac address (or intentionally choose wildcard); loopback remains the safe development default.
 
 ---
 
