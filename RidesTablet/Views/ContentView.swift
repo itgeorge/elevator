@@ -2,25 +2,14 @@ import SwiftUI
 
 @MainActor
 struct ContentView: View {
-    enum Concept: String, CaseIterable, Identifiable {
-        case a = "A"
-        case b = "B"
-        var id: String { rawValue }
-    }
-
     @StateObject private var model: RidesViewModel
-    @State private var concept: Concept = .b
 
     init() {
         _model = StateObject(wrappedValue: RidesViewModel(configuration: .load()))
-        let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-concept") })
-        let requested = argument?.replacingOccurrences(of: "-concept", with: "").uppercased()
-        _concept = State(initialValue: Concept(rawValue: requested ?? "") ?? .b)
     }
 
     init(model: RidesViewModel) {
         _model = StateObject(wrappedValue: model)
-        _concept = State(initialValue: .b)
     }
 
     var body: some View {
@@ -28,7 +17,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(spacing: 22) {
                     topBar
-                    conceptContent
+                    OneScreenLayout(model: model)
                     Color.clear
                         .frame(height: BottomChargeAction.scrollReservation)
                         .accessibilityHidden(true)
@@ -48,13 +37,7 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Picker("Prototype concept", selection: $concept) {
-                        ForEach(Concept.allCases) { item in
-                            Text("Concept \(item.rawValue)").tag(item)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .accessibilityLabel("Choose prototype concept A or B")
+                    SimulationMenu(model: model)
                 }
             }
         }
@@ -64,49 +47,19 @@ struct ContentView: View {
     }
 
     private var topBar: some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Token rides")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                Text("Place one token on the reader, then tap Detect.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 12)
-            SimulationMenu(model: model)
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Token rides")
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+            Text("Place one token on the reader, then tap Detect.")
+                .font(.title3)
+                .foregroundStyle(.secondary)
         }
-    }
-
-    @ViewBuilder
-    private var conceptContent: some View {
-        switch concept {
-        case .a:
-            ConceptA(model: model)
-        case .b:
-            ConceptB(model: model)
-        }
-    }
-}
-
-private struct ConceptA: View {
-    @ObservedObject var model: RidesViewModel
-
-    var body: some View {
-        OneScreenLayout(model: model, showsDeltaEquation: true)
-    }
-}
-
-private struct ConceptB: View {
-    @ObservedObject var model: RidesViewModel
-
-    var body: some View {
-        OneScreenLayout(model: model, showsDeltaEquation: false)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct OneScreenLayout: View {
     @ObservedObject var model: RidesViewModel
-    let showsDeltaEquation: Bool
 
     var body: some View {
         // The landscape candidate has a real minimum width, so it cannot be
@@ -119,14 +72,14 @@ private struct OneScreenLayout: View {
                 }
                 .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
 
-                MainPanel(model: model, showsDeltaEquation: showsDeltaEquation)
+                MainPanel(model: model)
                     .frame(minWidth: 540, maxWidth: .infinity)
             }
             .frame(minWidth: 940, maxWidth: .infinity, alignment: .top)
 
             VStack(spacing: 14) {
                 DetectStrip(model: model, layout: .portrait)
-                MainPanel(model: model, showsDeltaEquation: showsDeltaEquation)
+                MainPanel(model: model)
                 AptControlRow(model: model)
             }
         }
@@ -168,14 +121,13 @@ private struct BottomChargeAction: View {
 
 private struct MainPanel: View {
     @ObservedObject var model: RidesViewModel
-    let showsDeltaEquation: Bool
 
     private static let statusMinimumHeight: CGFloat = 374
 
     var body: some View {
         Group {
             if case .known = model.state {
-                KnownControls(model: model, showsDeltaEquation: showsDeltaEquation)
+                KnownControls(model: model)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .top)
             } else {
@@ -192,7 +144,6 @@ private struct MainPanel: View {
 
 private struct KnownControls: View {
     @ObservedObject var model: RidesViewModel
-    let showsDeltaEquation: Bool
 
     var body: some View {
         VStack(spacing: 10) {
@@ -208,10 +159,9 @@ private struct KnownControls: View {
             PendingRidesCard(
                 model: model,
                 emphasized: true,
-                centered: true,
-                showsDeltaEquation: showsDeltaEquation
+                centered: true
             )
-            ConceptBEURCard(model: model)
+            EURCard(model: model)
                 .padding(.top, 24)
         }
         .frame(maxWidth: .infinity)
@@ -419,7 +369,6 @@ private struct PendingRidesCard: View {
     @ObservedObject var model: RidesViewModel
     var emphasized: Bool
     var centered = false
-    var showsDeltaEquation = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -434,8 +383,7 @@ private struct PendingRidesCard: View {
     private var pendingCenter: some View {
         PendingRidesDisplay(
             model: model,
-            emphasized: emphasized,
-            showsDeltaEquation: showsDeltaEquation
+            emphasized: emphasized
         )
         .frame(minWidth: 150, maxWidth: .infinity)
         .frame(height: AdjustmentButtonMetrics.railHeight)
@@ -445,19 +393,16 @@ private struct PendingRidesCard: View {
 private struct PendingRidesDisplay: View {
     @ObservedObject var model: RidesViewModel
     let emphasized: Bool
-    let showsDeltaEquation: Bool
 
     var body: some View {
         VStack(spacing: 4) {
             Text("PENDING")
                 .font(.caption.bold())
                 .tracking(1.2)
-            if showsDeltaEquation {
-                Text(equationText)
-                    .font(.title3.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.78))
-                    .accessibilityHidden(true)
-            }
+            Text(equationText)
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Color.white.opacity(0.78))
+                .accessibilityHidden(true)
             Text(model.hasKnownToken ? "\(model.pendingRides)" : "—")
                 .font(.system(size: emphasized ? 72 : 64, weight: .bold, design: .rounded).monospacedDigit())
                 .lineLimit(1)
@@ -487,8 +432,6 @@ private struct PendingRidesDisplay: View {
 
     private var accessibilityValue: String {
         guard model.hasKnownToken else { return "Not loaded" }
-        guard showsDeltaEquation else { return "\(model.pendingRides) rides" }
-
         let delta = Int(model.pendingRides) - Int(model.currentRides)
         let change: String
         if delta < 0 {
@@ -565,7 +508,7 @@ private struct AdjustmentRail: View {
     }
 }
 
-private struct ConceptBEURCard: View {
+private struct EURCard: View {
     @ObservedObject var model: RidesViewModel
 
     var body: some View {
@@ -738,12 +681,11 @@ private struct SimulationMenu: View {
                 }
             }
         } label: {
-            Label("SIMULATION", systemImage: "slider.horizontal.3")
-                .font(.caption.bold())
+            Label("Simulation", systemImage: "slider.horizontal.3")
+                .labelStyle(.iconOnly)
         }
-        .buttonStyle(.bordered)
         .disabled(model.isBusy)
-        .accessibilityLabel("SIMULATION scenarios")
+        .accessibilityLabel("Simulation scenarios")
         .accessibilityHint("Prototype-only fake reader scenarios")
     }
 }
