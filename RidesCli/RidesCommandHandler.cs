@@ -214,23 +214,25 @@ public sealed class RidesCommandHandler
 
     private bool ExecuteReset(string[] args)
     {
-        if (!TryParseResetArgs(args, out var profile, out var force, out var error))
+        if (!TryParseResetArgs(args, out var profile, out var force, out var resetApt, out var error))
         {
             _output.WriteLine(error);
             return true;
         }
 
-        return ExecuteResetCore(profile!, force).GetAwaiter().GetResult();
+        return ExecuteResetCore(profile!, force, resetApt).GetAwaiter().GetResult();
     }
 
     private static bool TryParseResetArgs(
         string[] args,
         out TokenIdentityProfile? profile,
         out bool force,
+        out bool resetApt,
         out string error)
     {
         profile = null;
         force = false;
+        resetApt = false;
         error = string.Empty;
         string? profileName = null;
 
@@ -239,6 +241,12 @@ public sealed class RidesCommandHandler
             if (args[i] == "-f")
             {
                 force = true;
+                continue;
+            }
+
+            if (args[i] == "--resetapt")
+            {
+                resetApt = true;
                 continue;
             }
 
@@ -274,7 +282,7 @@ public sealed class RidesCommandHandler
     }
 
     private static string FormatResetUsage() =>
-        $"Usage: reset --sequence|--profile <name> [-f]   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
+        $"Usage: reset --sequence|--profile <name> [-f] [--resetapt]   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
 
     private async Task<bool> ExecuteTuneCore()
     {
@@ -331,24 +339,28 @@ public sealed class RidesCommandHandler
         }
     }
 
-    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile, bool force)
+    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile, bool force, bool resetApt)
     {
         _rides = null;
         _encodingSequence = null;
 
+        var needsBlockRead = !force || !resetApt;
         IReadOnlyList<T55Block>? currentBlocks = null;
-        if (!force)
+        if (needsBlockRead)
         {
             try
             {
                 currentBlocks = await ReadResetWritableBlocksAsync().ConfigureAwait(false);
-                var block5Hex = currentBlocks[5].ToHex();
-                var describe = RideBlockResolver.Resolve(currentBlocks[5], currentBlocks[6]);
+                if (!force)
+                {
+                    var block5Hex = currentBlocks[5].ToHex();
+                    var describe = RideBlockResolver.Resolve(currentBlocks[5], currentBlocks[6]);
 
-                if (describe.Status == RideReadStatus.Success)
-                    _output.WriteLine($"current token rides: {describe.Rides!.Value}");
-                else
-                    _output.WriteLine($"Current token cannot be decoded: unknown ride encoding sequence in block 5 ({block5Hex}).");
+                    if (describe.Status == RideReadStatus.Success)
+                        _output.WriteLine($"current token rides: {describe.Rides!.Value}");
+                    else
+                        _output.WriteLine($"Current token cannot be decoded: unknown ride encoding sequence in block 5 ({block5Hex}).");
+                }
             }
             catch (Exception ex)
             {
@@ -368,17 +380,18 @@ public sealed class RidesCommandHandler
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var targetBlockNumbers = force
-            ? Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
-                .Select(static block => (uint)block)
-                .ToArray()
-            : IsSameResetProfile(currentBlocks!, resetBlocks, profile)
-                ? new[] { 5u, 6u }
-                : Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
-                    .Select(static block => (uint)block)
-                    .ToArray();
+        var includeBlock4 = resetApt
+            || currentBlocks is null
+            || ShouldWriteResetBlock4(currentBlocks, resetBlocks);
+        var targetBlockNumbers = SelectResetTargetBlockNumbers(
+            force,
+            resetApt,
+            includeBlock4,
+            currentBlocks,
+            resetBlocks,
+            profile);
 
-        if (targetBlockNumbers.Length == 2 && targetBlockNumbers[0] == 5 && targetBlockNumbers[1] == 6)
+        if (targetBlockNumbers.Count == 2 && targetBlockNumbers[0] == 5 && targetBlockNumbers[1] == 6)
             _output.WriteLine("Token already matches requested reset identity; resetting ride blocks only.");
 
         var result = await WriteResetBlocksSafelyAsync(currentBlocks, resetBlocks, targetBlockNumbers).ConfigureAwait(false);
@@ -423,7 +436,7 @@ public sealed class RidesCommandHandler
         IReadOnlyList<T55Block> resetBlocks,
         TokenIdentityProfile profile)
     {
-        for (var block = 1; block <= 4; block++)
+        for (var block = 1; block <= 3; block++)
         {
             if (currentBlocks[block].Value != resetBlocks[block].Value)
                 return false;
@@ -431,6 +444,74 @@ public sealed class RidesCommandHandler
 
         return IsBlockFromSequence(currentBlocks[5], profile.RideSequence)
             && IsBlockFromSequence(currentBlocks[6], profile.RideSequence);
+    }
+
+    private bool ShouldWriteResetBlock4(
+        IReadOnlyList<T55Block> currentBlocks,
+        IReadOnlyList<T55Block> resetBlocks)
+    {
+        var currentBlock3 = currentBlocks[3];
+        var currentBlock4 = currentBlocks[4];
+        var profileBlock4 = resetBlocks[4];
+
+        if (_apartmentSecretStore.TryGetSecret(out var secret))
+        {
+            if (ApartmentBlockCodec.TryDecode(secret, currentBlock3, currentBlock4, out _))
+            {
+                _output.WriteLine("Preserving apartment in block 4.");
+                return false;
+            }
+
+            return true;
+        }
+
+        if (currentBlock4.Value == currentBlock3.Value)
+            return true;
+
+        if (currentBlock4.Value != profileBlock4.Value)
+        {
+            _output.WriteLine("Warning: apartment secret not available; preserving block 4 (fail-safe).");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static IReadOnlyList<uint> SelectResetTargetBlockNumbers(
+        bool force,
+        bool resetApt,
+        bool includeBlock4,
+        IReadOnlyList<T55Block>? currentBlocks,
+        IReadOnlyList<T55Block> resetBlocks,
+        TokenIdentityProfile profile)
+    {
+        if (force && resetApt)
+        {
+            return Enumerable.Range(ResetFirstWritableBlock, ResetLastWritableBlock - ResetFirstWritableBlock + 1)
+                .Select(static block => (uint)block)
+                .ToArray();
+        }
+
+        if (currentBlocks is not null && IsSameResetProfile(currentBlocks, resetBlocks, profile))
+        {
+            // Block 4 is outside identity sameness. Only rewrite it when explicitly
+            // requested or when classification says it is safe/necessary to restore.
+            if (resetApt || (includeBlock4 && currentBlocks[4].Value != resetBlocks[4].Value))
+                return new[] { 4u, 5u, 6u };
+
+            return new[] { 5u, 6u };
+        }
+
+        var targets = new List<uint>();
+        for (var block = ResetFirstWritableBlock; block <= ResetLastWritableBlock; block++)
+        {
+            if (block == 4 && !includeBlock4)
+                continue;
+
+            targets.Add((uint)block);
+        }
+
+        return targets;
     }
 
     private static bool IsBlockFromSequence(T55Block block, EncodingSequence sequence) =>
@@ -819,7 +900,7 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
-        _output.WriteLine($"  reset [-f] --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
+        _output.WriteLine($"  reset [-f] [--resetapt] --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
         _output.WriteLine("                -f skips the current-token read, decode warning, and confirmation prompt");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token [0-500]");

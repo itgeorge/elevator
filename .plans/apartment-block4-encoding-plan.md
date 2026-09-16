@@ -260,23 +260,23 @@ Profile reset no longer casually wipes apartment data.
 
 ## Todos
 
-- [ ] Add failing reset tests:
+- [x] Add failing reset tests:
   - sealed apt present, no `--resetapt` ⇒ block 4 unchanged after reset; rides/identity otherwise reset
   - sealed apt present + `--resetapt` ⇒ block 4 becomes profile image value
   - no apt / profile-mirror block 4 ⇒ existing reset behavior remains
   - blocks 1..3 match profile but custom sealed block 4 ⇒ do not treat as reason to wipe apt; prefer rides-only or non-4 targets as appropriate
   - secret missing + divergent block 4 ⇒ preserve block 4 + warning
   - `-f` without `--resetapt` still preserves sealed apt
-- [ ] Update reset arg parsing for `--resetapt`; update usage/help.
-- [ ] Update `IsSameResetProfile` (or replacement) to ignore block 4 for identity sameness.
-- [ ] Implement target-block selection changes + operator messages (“preserving apartment in block 4”, etc.).
-- [ ] Ensure reset still only writes page-0 blocks in `1..6`.
-- [ ] Run targeted reset-related `RidesCli.Tests` until green.
+- [x] Update reset arg parsing for `--resetapt`; update usage/help.
+- [x] Update `IsSameResetProfile` (or replacement) to ignore block 4 for identity sameness.
+- [x] Implement target-block selection changes + operator messages (“preserving apartment in block 4”, etc.).
+- [x] Ensure reset still only writes page-0 blocks in `1..6`.
+- [x] Run targeted reset-related `RidesCli.Tests` until green.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes: Added `ResetApartmentTests.cs` and `FakeRidesPm3Api.WithPage0Block`. `TryParseResetArgs` accepts `--resetapt`; usage/help updated. `IsSameResetProfile` compares blocks **1..3** only (+ ride-sequence checks on 5/6). `ShouldWriteResetBlock4` + `SelectResetTargetBlockNumbers` implement block-4 target selection. Operator messages: `Preserving apartment in block 4.` when secret decodes sealed apt; `Warning: apartment secret not available; preserving block 4 (fail-safe).` when secret missing and block 4 is neither a factory mirror (`block4 == block3`) nor already equal to the target profile block 4. `-f` still skips confirmation/decode output but reads blocks when `!resetApt` for classification. `--resetapt` on same-identity token writes block 4 plus ride blocks `[4,5,6]`. Updated `Reset_force_skips_current_token_read_and_decode_warning` to use divergent block 4 (`DEADBEEF`) for fail-safe assertion. Review fix: same-identity path now restores divergent unsealed block 4 when classification says write (`includeBlock4 && current[4] != profile[4]`), covering junk-with-secret without breaking rides-only when block 4 already matches. Full `RidesCli.Tests`: 171 passed.
+- Assumptions: Fail-safe preservation without secret applies only when block 4 differs from block 3 and from the target profile block 4 (cannot classify as factory mirror or already-matching profile value). Factory mirror (`block4 == block3`) continues to allow block-4 writes on cross-profile reset even without secret.
 
 ---
 

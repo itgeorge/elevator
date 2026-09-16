@@ -392,16 +392,19 @@ public class RidesCommandHandlerTests
     public void Reset_force_skips_current_token_read_and_decode_warning()
     {
         var output = new StringBuilderRidesOutput();
-        var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+        var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5()
+            .WithPage0Block(4, T55Block.FromHex("DEADBEEF"));
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput());
 
         handler.Execute(["reset", "-f", "--sequence", "mercury"]);
 
         Assert.That(output.Lines, Has.None.Contains("Current token cannot be decoded"));
         Assert.That(output.Lines, Has.None.Contains("Overwrite token with reset image"));
+        Assert.That(output.Lines, Has.Some.Contains("apartment secret not available"));
         Assert.That(output.Lines, Has.Some.EqualTo("Success."));
-        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
-        Assert.That(pm3.ReadPage0BlockCallCount, Is.EqualTo(6));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 5, 6 }));
+        Assert.That(pm3.ReadPage0BlockCallCount, Is.GreaterThanOrEqualTo(6));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("DEADBEEF"));
         Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
         Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
     }
