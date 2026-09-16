@@ -117,7 +117,6 @@ final class DomainStateTests: XCTestCase {
         XCTAssertEqual(model.pendingRides, 50)
         model.round(.pendingRides)
         XCTAssertEqual(model.pendingRides, 50)
-
         await model.charge()
         XCTAssertEqual(fake.writeCallCount, 1)
         XCTAssertEqual(model.currentRides, 50)

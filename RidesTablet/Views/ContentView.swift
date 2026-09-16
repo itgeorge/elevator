@@ -5,7 +5,6 @@ struct ContentView: View {
     enum Concept: String, CaseIterable, Identifiable {
         case a = "A"
         case b = "B"
-        case c = "C"
         var id: String { rawValue }
     }
 
@@ -47,7 +46,7 @@ struct ContentView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .accessibilityLabel("Choose prototype concept A, B, or C")
+                    .accessibilityLabel("Choose prototype concept A or B")
                 }
             }
         }
@@ -77,8 +76,6 @@ struct ContentView: View {
             ConceptA(model: model)
         case .b:
             ConceptB(model: model)
-        case .c:
-            ConceptC(model: model)
         }
     }
 }
@@ -87,23 +84,7 @@ private struct ConceptA: View {
     @ObservedObject var model: RidesViewModel
 
     var body: some View {
-        VStack(spacing: 18) {
-            StatusPanel(model: model, compact: false)
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 18) {
-                    DetectPanel(model: model)
-                        .frame(minWidth: 320, idealWidth: 370, maxWidth: 390)
-                    RideEditor(model: model)
-                        .frame(minWidth: 350, maxWidth: .infinity)
-                }
-                VStack(spacing: 18) {
-                    DetectPanel(model: model)
-                    RideEditor(model: model)
-                }
-            }
-            AptControlRow(model: model)
-            ChargeButton(model: model)
-        }
+        OneScreenLayout(model: model, showsDeltaEquation: true)
     }
 }
 
@@ -111,46 +92,198 @@ private struct ConceptB: View {
     @ObservedObject var model: RidesViewModel
 
     var body: some View {
-        VStack(spacing: 18) {
-            ConceptBDetectStrip(model: model)
-            StatusPanel(model: model, compact: true)
-            ConceptBRideEditor(model: model)
-            AptControlRow(model: model)
-                .frame(maxWidth: 620)
-            ChargeButton(model: model)
-                .frame(maxWidth: 620)
+        OneScreenLayout(model: model, showsDeltaEquation: false)
+    }
+}
+
+private struct OneScreenLayout: View {
+    @ObservedObject var model: RidesViewModel
+    let showsDeltaEquation: Bool
+
+    var body: some View {
+        // The landscape candidate has a real minimum width, so it cannot be
+        // selected by a portrait iPad merely because its children are flexible.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                VStack(spacing: 14) {
+                    DetectStrip(model: model, layout: .landscape)
+                    AptControlRow(model: model)
+                }
+                .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
+
+                VStack(spacing: 14) {
+                    MainPanel(model: model, minHeight: 470, showsDeltaEquation: showsDeltaEquation)
+                    ChargeButton(model: model, showsReset: false)
+                }
+                .frame(minWidth: 540, maxWidth: .infinity)
+            }
+            .frame(minWidth: 940, maxWidth: .infinity, alignment: .top)
+
+            VStack(spacing: 14) {
+                DetectStrip(model: model, layout: .portrait)
+                MainPanel(model: model, minHeight: 470, showsDeltaEquation: showsDeltaEquation)
+                AptControlRow(model: model)
+                ChargeButton(model: model, showsReset: false)
+            }
         }
     }
 }
 
-private struct ConceptBRideEditor: View {
+private struct MainPanel: View {
     @ObservedObject var model: RidesViewModel
+    let minHeight: CGFloat
+    let showsDeltaEquation: Bool
 
     var body: some View {
-        VStack(spacing: 17) {
-            CurrentRidesCard(model: model, centered: true)
-            PendingRidesCard(model: model, emphasized: true, centered: true)
-            CostCard(model: model)
+        Group {
+            if case .known = model.state {
+                VStack(spacing: 0) {
+                    KnownControls(model: model, showsDeltaEquation: showsDeltaEquation)
+                    Spacer(minLength: 0)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, minHeight: minHeight, maxHeight: minHeight, alignment: .top)
+            } else {
+                StatusContent(model: model)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .center)
+            }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)))
+        .accessibilityElement(children: .contain)
     }
 }
 
-private struct ConceptBDetectStrip: View {
+private struct KnownControls: View {
+    @ObservedObject var model: RidesViewModel
+    let showsDeltaEquation: Bool
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                ResetButton(model: model)
+                    .frame(width: 72)
+                CurrentRidesCard(model: model, centered: true, showReadOnlyCaption: false)
+                Color.clear
+                    .frame(width: 72)
+                    .accessibilityHidden(true)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            PendingRidesCard(
+                model: model,
+                emphasized: true,
+                centered: true,
+                showsDeltaEquation: showsDeltaEquation
+            )
+            ConceptBEURCard(model: model)
+                .padding(.top, 24)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct StatusContent: View {
     @ObservedObject var model: RidesViewModel
 
     var body: some View {
-        HStack(spacing: 0) {
-            detectButton
-                .frame(maxWidth: .infinity, minHeight: 104)
-            SignalView(model: model)
-                .frame(maxWidth: .infinity, minHeight: 104)
-                .padding(.horizontal, 20)
+        VStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(iconColor)
+            Text(model.state.title)
+                .font(.title3.bold())
+                .multilineTextAlignment(.center)
+            if let message = model.message {
+                Text(message)
+                    .font(.body.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if case .idle = model.state {
+                Text("No token is loaded yet.")
+                    .foregroundStyle(.secondary)
+            }
+            if case .working = model.state {
+                ProgressView()
+                    .controlSize(.regular)
+                    .accessibilityLabel("Operation in progress")
+            }
+            if case .unknown(let token) = model.state {
+                Text(token.reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                if let url = model.lastDumpURL {
+                    Text("Dump saved: \(url.lastPathComponent)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .textSelection(.enabled)
+                }
+            }
+            if case .failed = model.state, let token = model.loadedToken {
+                Text("Family: \(token.sequence.rawValue.capitalized)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if case .unknown = model.state {
+                ResetButton(model: model)
+                    .padding(.top, 3)
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 104)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .multilineTextAlignment(.center)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Operation status")
+        .accessibilityValue([model.state.title, model.message].compactMap { $0 }.joined(separator: ". "))
+    }
+
+    private var icon: String {
+        switch model.state {
+        case .known: return "checkmark.circle.fill"
+        case .unknown: return "questionmark.circle.fill"
+        case .noChip: return "exclamationmark.triangle.fill"
+        case .failed: return "xmark.octagon.fill"
+        case .working: return "hourglass"
+        default: return "info.circle.fill"
+        }
+    }
+
+    private var iconColor: Color {
+        switch model.state {
+        case .known: return .green
+        case .unknown, .noChip, .failed: return .orange
+        default: return .blue
+        }
+    }
+}
+
+private struct DetectStrip: View {
+    enum Layout { case portrait, landscape }
+
+    @ObservedObject var model: RidesViewModel
+    let layout: Layout
+
+    var body: some View {
+        Group {
+            if layout == .portrait {
+                HStack(spacing: 0) {
+                    detectButton
+                    SignalView(model: model)
+                        .padding(.horizontal, 16)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    detectButton
+                    SignalView(model: model)
+                        .padding(14)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: layout == .portrait ? 92 : 184)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay {
@@ -166,79 +299,10 @@ private struct ConceptBDetectStrip: View {
             Label(model.isBusy ? "Working…" : "Detect token", systemImage: model.isBusy ? "hourglass" : "dot.radiowaves.left.and.right")
                 .font(.title2.bold())
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 104)
+                .frame(maxWidth: .infinity, minHeight: layout == .portrait ? 92 : 82)
                 .background(Color.blue)
         }
         .buttonStyle(.plain)
-        .disabled(model.isBusy)
-        .accessibilityLabel("Detect token")
-        .accessibilityHint("Detects, tunes, and reads the token in one step")
-    }
-}
-
-private struct ConceptC: View {
-    @ObservedObject var model: RidesViewModel
-
-    var body: some View {
-        VStack(spacing: 18) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(spacing: 18) {
-                        DetectPanel(model: model)
-                        StatusPanel(model: model, compact: true)
-                    }
-                    .frame(minWidth: 320, idealWidth: 370, maxWidth: 390)
-                    RideEditor(model: model, emphasized: true)
-                        .frame(minWidth: 350, maxWidth: .infinity)
-                }
-                VStack(spacing: 18) {
-                    DetectPanel(model: model)
-                    StatusPanel(model: model, compact: true)
-                    RideEditor(model: model, emphasized: true)
-                }
-            }
-            HStack(spacing: 18) {
-                AptControlRow(model: model)
-                ChargeButton(model: model)
-            }
-        }
-    }
-}
-
-private struct DetectPanel: View {
-    @ObservedObject var model: RidesViewModel
-    var horizontal = false
-
-    var body: some View {
-        Group {
-            if horizontal {
-                HStack(spacing: 18) {
-                    detectButton
-                    SignalView(model: model)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 15) {
-                    detectButton
-                    SignalView(model: model)
-                }
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: horizontal ? .infinity : 390, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)))
-    }
-
-    private var detectButton: some View {
-        Button {
-            Task { await model.detect() }
-        } label: {
-            Label(model.isBusy ? "Working…" : "Detect token", systemImage: model.isBusy ? "hourglass" : "dot.radiowaves.left.and.right")
-                .font(.title2.bold())
-                .frame(maxWidth: .infinity, minHeight: 72)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(.blue)
         .disabled(model.isBusy)
         .accessibilityLabel("Detect token")
         .accessibilityHint("Detects, tunes, and reads the token in one step")
@@ -292,99 +356,10 @@ private struct SignalView: View {
     }
 }
 
-private struct StatusPanel: View {
-    @ObservedObject var model: RidesViewModel
-    var compact: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 13) {
-            Image(systemName: icon)
-                .font(.title)
-                .foregroundStyle(iconColor)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.state.title)
-                    .font(compact ? .headline : .title3.bold())
-                if let message = model.message {
-                    Text(message)
-                        .font(.body.weight(.semibold))
-                } else if !compact {
-                    Text("No token is loaded yet.")
-                        .foregroundStyle(.secondary)
-                }
-                if let url = model.lastDumpURL {
-                    Text("Dump saved: \(url.lastPathComponent)")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-                if let token = model.loadedToken {
-                    Text("Family: \(token.sequence.rawValue.capitalized)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Operation status")
-        .accessibilityValue([model.state.title, model.message].compactMap { $0 }.joined(separator: ". "))
-    }
-
-    private var icon: String {
-        switch model.state {
-        case .known: return "checkmark.circle.fill"
-        case .unknown: return "questionmark.circle.fill"
-        case .noChip: return "exclamationmark.triangle.fill"
-        case .failed: return "xmark.octagon.fill"
-        case .working: return "hourglass"
-        default: return "info.circle.fill"
-        }
-    }
-
-    private var iconColor: Color {
-        switch model.state {
-        case .known: return .green
-        case .unknown, .noChip, .failed: return .orange
-        default: return .blue
-        }
-    }
-}
-
-private struct RideEditor: View {
-    @ObservedObject var model: RidesViewModel
-    var emphasized = false
-
-    var body: some View {
-        VStack(spacing: 17) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 16) {
-                    CurrentRidesCard(model: model)
-                        .frame(width: 174, alignment: .leading)
-                    PendingRidesCard(model: model, emphasized: emphasized)
-                        .frame(minWidth: 308, maxWidth: .infinity)
-                }
-                VStack(alignment: .leading, spacing: 16) {
-                    CurrentRidesCard(model: model)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    PendingRidesCard(model: model, emphasized: emphasized)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            CostCard(model: model)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)))
-    }
-}
-
 private struct CurrentRidesCard: View {
     @ObservedObject var model: RidesViewModel
     var centered = false
+    var showReadOnlyCaption = true
 
     var body: some View {
         VStack(alignment: centered ? .center : .leading, spacing: 8) {
@@ -392,13 +367,15 @@ private struct CurrentRidesCard: View {
                 .font(.headline)
             Text(model.hasKnownToken ? "\(model.currentRides)" : "—")
                 .font(.system(size: 52, weight: .bold, design: .rounded).monospacedDigit())
-            Text("Read-only")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            if showReadOnlyCaption {
+                Text("Read-only")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Current rides, read-only")
+        .accessibilityLabel(showReadOnlyCaption ? "Current rides, read-only" : "Current rides")
         .accessibilityValue(model.hasKnownToken ? "\(model.currentRides)" : "Not loaded")
     }
 }
@@ -407,69 +384,126 @@ private struct PendingRidesCard: View {
     @ObservedObject var model: RidesViewModel
     var emphasized: Bool
     var centered = false
+    var showsDeltaEquation = false
 
     var body: some View {
-        VStack(alignment: centered ? .center : .leading, spacing: 8) {
-            Text("Pending rides")
-                .font(.headline)
-            HStack(alignment: .top, spacing: 12) {
-                AdjustmentRail(model: model, direction: -1)
-                pendingCenter
-                AdjustmentRail(model: model, direction: 1)
-            }
-            Text("Tap − or + by 1, 10, or 100")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            AdjustmentRail(model: model, direction: -1)
+            pendingCenter
+            AdjustmentRail(model: model, direction: 1)
         }
         .frame(minWidth: 308, maxWidth: .infinity, alignment: centered ? .center : .leading)
         .accessibilityElement(children: .contain)
     }
 
     private var pendingCenter: some View {
-        VStack(spacing: 8) {
-            VStack(spacing: 2) {
-                Text("PENDING")
-                    .font(.caption.bold())
-                    .tracking(1.2)
-                Text(model.hasKnownToken ? "\(model.pendingRides)" : "—")
-                    .font(.system(size: emphasized ? 64 : 58, weight: .bold, design: .rounded).monospacedDigit())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity, minHeight: 76)
-                    .layoutPriority(2)
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 108)
-            .background(Color.blue, in: RoundedRectangle(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.8), lineWidth: 2)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Pending rides")
-            .accessibilityValue(pendingAccessibilityValue)
-            .accessibilityIdentifier("pending-rides-display")
-
-            RoundingControl(
-                caption: "Nearest 50 rides",
-                accessibilityLabel: "Round pending rides",
-                accessibilityHint: "Rounds the pending target directly to the nearest 50 rides",
-                disabled: !model.canAdjust
-            ) {
-                model.round(.pendingRides)
-            }
-        }
-        .padding(10)
+        PendingRidesDisplay(
+            model: model,
+            emphasized: emphasized,
+            showsDeltaEquation: showsDeltaEquation
+        )
         .frame(minWidth: 150, maxWidth: .infinity)
-        .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.blue.opacity(0.35), lineWidth: 1.5)
+        .frame(height: AdjustmentButtonMetrics.railHeight)
+    }
+}
+
+private struct PendingRidesDisplay: View {
+    @ObservedObject var model: RidesViewModel
+    let emphasized: Bool
+    let showsDeltaEquation: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("PENDING")
+                .font(.caption.bold())
+                .tracking(1.2)
+            if showsDeltaEquation {
+                Text(equationText)
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.78))
+                    .accessibilityHidden(true)
+            }
+            Text(model.hasKnownToken ? "\(model.pendingRides)" : "—")
+                .font(.system(size: emphasized ? 72 : 64, weight: .bold, design: .rounded).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity)
+                .layoutPriority(2)
         }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: AdjustmentButtonMetrics.railHeight, maxHeight: AdjustmentButtonMetrics.railHeight, alignment: .center)
+        .background(Color.blue, in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.85), lineWidth: 2)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Pending rides")
+        .accessibilityValue(accessibilityValue)
+        .accessibilityIdentifier("pending-rides-display")
     }
 
-    private var pendingAccessibilityValue: String {
-        model.hasKnownToken ? "\(model.pendingRides) rides" : "Not loaded"
+    private var equationText: String {
+        let delta = Int(model.pendingRides) - Int(model.currentRides)
+        return delta < 0 ? "− \(-delta) =" : "+ \(delta) ="
+    }
+
+    private var accessibilityValue: String {
+        guard model.hasKnownToken else { return "Not loaded" }
+        guard showsDeltaEquation else { return "\(model.pendingRides) rides" }
+
+        let delta = Int(model.pendingRides) - Int(model.currentRides)
+        let change: String
+        if delta < 0 {
+            change = "Decrease of \(-delta) rides"
+        } else if delta > 0 {
+            change = "Increase of \(delta) rides"
+        } else {
+            change = "No ride change"
+        }
+        return "\(change). Pending total \(model.pendingRides) rides"
+    }
+}
+
+private enum AdjustmentButtonMetrics {
+    static let width: CGFloat = 92
+    static let height: CGFloat = 48
+    static let spacing: CGFloat = 7
+    static let railHeight = height * 3 + spacing * 2
+}
+
+private struct AdjustmentButton: View {
+    let title: String
+    let tint: Color
+    let isDisabled: Bool
+    let action: () -> Void
+    let accessibilityLabel: String
+    let accessibilityValue: String
+    let accessibilityHint: String
+    var accessibilityIdentifier: String?
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.headline.monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(.plain)
+        .frame(width: AdjustmentButtonMetrics.width, height: AdjustmentButtonMetrics.height)
+        .foregroundStyle(tint)
+        .background(tint.opacity(0.16), in: Capsule())
+        .overlay(Capsule().stroke(tint.opacity(0.08)))
+        .clipShape(Capsule())
+        .opacity(isDisabled ? 0.4 : 1)
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(accessibilityHint)
+        .accessibilityIdentifier(accessibilityIdentifier ?? "")
     }
 }
 
@@ -478,97 +512,110 @@ private struct AdjustmentRail: View {
     let direction: Int
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: AdjustmentButtonMetrics.spacing) {
             ForEach([1, 10, 100], id: \.self) { amount in
-                Button {
-                    model.adjustRides(by: direction * amount)
-                } label: {
-                    Text(direction < 0 ? "−\(amount)" : "+\(amount)")
-                        .font(.headline.monospacedDigit())
-                        .frame(width: 67, height: 45)
-                }
-                .buttonStyle(.bordered)
-                .tint(direction < 0 ? .orange : .blue)
-                .disabled(!model.canAdjust)
-                .accessibilityLabel(direction < 0 ? "Remove \(amount) rides" : "Add \(amount) rides")
-                .accessibilityValue(model.hasKnownToken ? "Pending rides: \(model.pendingRides)" : "Pending rides not loaded")
-                .accessibilityHint("Adjusts the pending ride count by \(amount)")
-                .accessibilityIdentifier("pending-rides-\(direction < 0 ? "minus" : "plus")-\(amount)")
+                AdjustmentButton(
+                    title: direction < 0 ? "−\(amount)" : "+\(amount)",
+                    tint: direction < 0 ? .orange : .blue,
+                    isDisabled: !model.canAdjust,
+                    action: { model.adjustRides(by: direction * amount) },
+                    accessibilityLabel: direction < 0 ? "Remove \(amount) rides" : "Add \(amount) rides",
+                    accessibilityValue: model.hasKnownToken ? "Pending rides: \(model.pendingRides)" : "Pending rides not loaded",
+                    accessibilityHint: "Adjusts the pending ride count by \(amount)",
+                    accessibilityIdentifier: "pending-rides-\(direction < 0 ? "minus" : "plus")-\(amount)"
+                )
             }
         }
+        .frame(height: AdjustmentButtonMetrics.railHeight)
     }
 }
 
-private struct CostCard: View {
+private struct ConceptBEURCard: View {
     @ObservedObject var model: RidesViewModel
 
     var body: some View {
-        VStack(spacing: 9) {
-            HStack {
-                Label("Change in cost", systemImage: "eurosign.circle")
-                    .font(.headline)
-                Spacer()
-                Text(model.costText)
-                    .font(.system(size: 35, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(model.costEUR < 0 ? .green : .primary)
+        HStack(alignment: .center, spacing: 10) {
+            eurButton(title: "−€1.50", amount: -model.configuration.cashIncrementEUR)
+            HStack(spacing: 5) {
+                VStack(spacing: 0) {
+                    Text("EUR")
+                        .font(.caption2.bold())
+                        .tracking(1.1)
+                    Text(model.costText)
+                        .font(.system(size: 28, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(model.costEUR < 0 ? .green : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                RoundingControl(
+                    accessibilityLabel: "Round cost change",
+                    accessibilityHint: "Rounds the signed ride delta directly to the nearest 1.50 euros, or 50 rides",
+                    disabled: !model.canAdjust
+                ) {
+                    model.round(.costDelta)
+                }
             }
-            RoundingControl(
-                caption: "Nearest €1.50",
-                accessibilityLabel: "Round cost change",
-                accessibilityHint: "Rounds the signed ride delta directly to the nearest 1.50 euros, or 50 rides",
-                disabled: !model.canAdjust
-            ) {
-                model.round(.costDelta)
-            }
-            Text(model.costEUR < 0 ? "Refund / decrease" : "Amount to charge")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                costButton(title: "− €1.50", amount: -model.configuration.cashIncrementEUR)
-                costButton(title: "+ €1.50", amount: model.configuration.cashIncrementEUR)
-            }
+            .frame(maxWidth: .infinity)
+            .frame(height: AdjustmentButtonMetrics.height)
+            eurButton(title: "+€1.50", amount: model.configuration.cashIncrementEUR)
         }
-        .padding(.top, 4)
+        .frame(height: AdjustmentButtonMetrics.height)
         .accessibilityElement(children: .contain)
     }
 
-    private func costButton(title: String, amount: Decimal) -> some View {
-        Button(title) {
-            model.adjustCost(by: amount)
+    private func eurButton(title: String, amount: Decimal) -> some View {
+        AdjustmentButton(
+            title: title,
+            tint: amount < 0 ? RidesPalette.eurMinus : RidesPalette.eurPlus,
+            isDisabled: !model.canAdjust,
+            action: { model.adjustCost(by: amount) },
+            accessibilityLabel: "Adjust EUR by \(title)",
+            accessibilityValue: model.costText,
+            accessibilityHint: "Adjusts the pending ride count by 50 rides"
+        )
+    }
+}
+
+private enum RidesPalette {
+    static let eurMinus = Color(red: 0.80, green: 0.22, blue: 0.20)
+    static let eurPlus = Color(red: 0.05, green: 0.42, blue: 0.48)
+}
+
+private struct ResetButton: View {
+    @ObservedObject var model: RidesViewModel
+
+    var body: some View {
+        Button("RESET") {
+            model.openReset()
         }
-        .font(.headline)
-        .frame(maxWidth: .infinity, minHeight: 48)
+        .font(.caption.bold())
+        .frame(minWidth: 64, minHeight: 44)
         .buttonStyle(.bordered)
-        .disabled(!model.canAdjust)
-        .accessibilityLabel("Adjust cost by \(title.replacingOccurrences(of: "€", with: "euros "))")
+        .disabled(model.isBusy)
+        .accessibilityLabel("Reset token")
+        .accessibilityHint("Opens reset profiles without selecting one")
     }
 }
 
 private struct RoundingControl: View {
-    let caption: String
     let accessibilityLabel: String
     let accessibilityHint: String
     let disabled: Bool
     let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 3) {
-            Button(action: action) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.title3.bold())
-                    .frame(width: 48, height: 48)
-            }
-            .buttonStyle(.bordered)
-            .clipShape(Circle())
-            .disabled(disabled)
-            .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint(accessibilityHint)
-            Text(caption)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Button(action: action) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.callout.bold())
+                .frame(width: 32, height: 32)
+                .background(Color.secondary.opacity(0.12), in: Circle())
         }
-        .frame(maxWidth: .infinity)
+        .frame(width: 44, height: 44)
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .disabled(disabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(accessibilityHint)
     }
 }
 
@@ -609,6 +656,7 @@ private struct AptControlRow: View {
 
 private struct ChargeButton: View {
     @ObservedObject var model: RidesViewModel
+    var showsReset = true
 
     var body: some View {
         VStack(spacing: 8) {
@@ -624,13 +672,16 @@ private struct ChargeButton: View {
             .disabled(!model.canCharge)
             .accessibilityLabel("Charge token")
             .accessibilityHint("Writes the pending ride count to the token")
-            Button("RESET") {
-                model.openReset()
+
+            if showsReset {
+                Button("RESET") {
+                    model.openReset()
+                }
+                .font(.caption.bold())
+                .buttonStyle(.borderless)
+                .disabled(model.isBusy)
+                .accessibilityLabel("Reset token")
             }
-            .font(.caption.bold())
-            .buttonStyle(.borderless)
-            .disabled(model.isBusy)
-            .accessibilityLabel("Reset token")
         }
     }
 }

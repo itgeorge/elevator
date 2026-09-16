@@ -69,8 +69,12 @@ public final class RidesViewModel: ObservableObject {
 
     public var hasKnownToken: Bool { loadedToken != nil }
     public var hasRideChange: Bool { hasKnownToken && pendingRides != currentRides }
-    public var canCharge: Bool { hasRideChange && !isBusy }
-    public var canAdjust: Bool { hasKnownToken && !isBusy }
+    public var canCharge: Bool { hasRideChange && canAdjust }
+    public var canAdjust: Bool {
+        guard hasKnownToken, !isBusy else { return false }
+        if case .known = state { return true }
+        return false
+    }
     public var costEUR: Decimal {
         Decimal(Int(pendingRides) - Int(currentRides)) * configuration.pricePerRideEUR
     }
