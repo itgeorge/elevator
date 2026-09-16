@@ -218,25 +218,25 @@ apt <0-255>           Ensure secret; read block 3; encode building=0 + apt; writ
 
 ## Todos
 
-- [ ] Add failing handler tests for `aptsecret` happy path and replace-existing-secret path.
-- [ ] Add failing handler tests for `apt` read:
+- [x] Add failing handler tests for `aptsecret` happy path and replace-existing-secret path.
+- [x] Add failing handler tests for `apt` read:
   - sealed value decodes and prints apt (and building 0)
   - mirror/junk ⇒ not encoded message
   - missing secret ⇒ prompts/ensure path then decodes (scripted)
   - if secret entry fails ⇒ warning/error, no crash, no write
-- [ ] Add failing handler tests for `apt <n>` write:
+- [x] Add failing handler tests for `apt <n>` write:
   - writes only block 4
   - uses current block 3 in the codec
   - readback round-trips
   - rejects non-integer / out-of-range values with usage error and no write
-- [ ] Implement command parsing + handler methods; update help/usage strings.
-- [ ] Keep building hard-coded to `0` on write; do not accept building CLI args.
-- [ ] Run targeted `RidesCli.Tests` until green.
+- [x] Implement command parsing + handler methods; update help/usage strings.
+- [x] Keep building hard-coded to `0` on write; do not accept building CLI args.
+- [x] Run targeted `RidesCli.Tests` until green.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes: Added `ApartmentCommandTests.cs` (14 tests) covering `aptsecret` replace, `apt` read (sealed/mirror/junk/missing secret/failed secret), and `apt <n>` write (block 4 only, block3 binding, round-trip, invalid args, failed secret). Extended `FakeRidesPm3Api.WithBlocks3And4`. Implemented `ExecuteApt`, `ExecuteAptReadCore`, `ExecuteAptWriteCore`, `TryParseApartmentNumber`; wired `apt` in command switch. Output lines: read success `building: {n}, apt: {n}`; not encoded `Apartment not encoded in block 4.`; write success `Apartment encoded: building 0, apt {n}.`; invalid arg `Usage: apt [<0-255>]`. Help lists `apt` and `aptsecret`. Secret span copied to `byte[]` before await to satisfy CS4007. Full `RidesCli.Tests`: 163 passed.
+- Assumptions: Write path reuses existing `WriteAndVerifyBlockWithRetryAsync` for block 4 (blocks 1..6 validation). Invalid apartment numbers use usage message rather than a separate error string.
 
 ---
 

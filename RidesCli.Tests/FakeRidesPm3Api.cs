@@ -69,6 +69,14 @@ public sealed class FakeRidesPm3Api : IRidesPm3Api
         return new FakeRidesPm3Api(new T55xxImage(blocks));
     }
 
+    public static FakeRidesPm3Api WithBlocks3And4(T55Block block3, T55Block block4)
+    {
+        var blocks = CreatePage0Blocks(0);
+        blocks[3] = block3;
+        blocks[4] = block4;
+        return new FakeRidesPm3Api(new T55xxImage(blocks));
+    }
+
     public static FakeRidesPm3Api WithInvalidBlock5()
     {
         var blocks = CreatePage0Blocks(0);

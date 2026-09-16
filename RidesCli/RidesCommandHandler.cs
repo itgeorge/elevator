@@ -70,6 +70,7 @@ public sealed class RidesCommandHandler
                 "price" => ExecutePrice(args[1..]),
                 "money" => ExecuteMoney(args[1..]),
                 "aptsecret" => ExecuteAptSecret(args[1..]),
+                "apt" => ExecuteApt(args[1..]),
                 "exit" => false,
                 "help" => ExecuteHelp(),
                 _ => ExecuteUnknown(cmd)
@@ -825,6 +826,8 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  price set <number>   Preview cost for set");
         _output.WriteLine("  price add <addnum>   Preview cost for add");
         _output.WriteLine("  money <amount>       Rides purchasable for amount (e.g. 4.00)");
+        _output.WriteLine("  apt [<0-255>]       Read apartment from block 4, or encode apt into block 4");
+        _output.WriteLine("  aptsecret            Set or replace the in-memory apartment secret");
         _output.WriteLine("  config [key value]   Configure (e.g. config pricePer100 4.00)");
         _output.WriteLine("  help");
         _output.WriteLine("  exit");
@@ -856,6 +859,94 @@ public sealed class RidesCommandHandler
         _apartmentSecretStore.SetSecretFromUtf8(secret);
         _output.WriteLine("Apartment secret stored.");
         return true;
+    }
+
+    private bool ExecuteApt(string[] args)
+    {
+        if (args.Length > 1)
+        {
+            _output.WriteLine("Usage: apt [<0-255>]");
+            return true;
+        }
+
+        if (args.Length == 1)
+        {
+            if (!TryParseApartmentNumber(args[0], out var apt))
+            {
+                _output.WriteLine("Usage: apt [<0-255>]");
+                return true;
+            }
+
+            return ExecuteAptWriteCore(apt).GetAwaiter().GetResult();
+        }
+
+        return ExecuteAptReadCore().GetAwaiter().GetResult();
+    }
+
+    private static bool TryParseApartmentNumber(string value, out byte apt)
+    {
+        apt = 0;
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            return false;
+        if (parsed is < 0 or > 255)
+            return false;
+        apt = (byte)parsed;
+        return true;
+    }
+
+    private async Task<bool> ExecuteAptReadCore(CancellationToken ct = default)
+    {
+        if (!EnsureApartmentSecret(out var secretSpan))
+            return true;
+
+        var secret = secretSpan.ToArray();
+
+        try
+        {
+            var block3 = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(3, ct).ConfigureAwait(false));
+            var block4 = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(4, ct).ConfigureAwait(false));
+            if (!ApartmentBlockCodec.TryDecode(secret, block3, block4, out var payload))
+            {
+                _output.WriteLine("Apartment not encoded in block 4.");
+                return true;
+            }
+
+            _output.WriteLine($"building: {payload.Building}, apt: {payload.Apt}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Error: {ex.Message}");
+            return true;
+        }
+    }
+
+    private async Task<bool> ExecuteAptWriteCore(byte apt, CancellationToken ct = default)
+    {
+        if (!EnsureApartmentSecret(out var secretSpan))
+            return true;
+
+        var secret = secretSpan.ToArray();
+
+        try
+        {
+            var block3 = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(3, ct).ConfigureAwait(false));
+            var encoded = ApartmentBlockCodec.Encode(secret, block3, building: 0, apt);
+            var write = await WriteAndVerifyBlockWithRetryAsync(4, encoded, ct).ConfigureAwait(false);
+            if (!write.Success)
+            {
+                _output.WriteLine($"Error: block 4 write/verify failed. {write.ErrorMessage}");
+                return true;
+            }
+
+            _output.WriteLine($"Apartment encoded: building 0, apt {apt}.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Error: {ex.Message}");
+            return true;
+        }
     }
 
     private bool EnsureApartmentSecret(out ReadOnlySpan<byte> secret) =>
