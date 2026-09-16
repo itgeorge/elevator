@@ -1,0 +1,2176 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "mercury-v1",
+  "sequence": {
+    "name": "mercury",
+    "zeroBlock": "CCC749CC",
+    "rotation": 4,
+    "minRides": 0,
+    "maxRides": 500
+  },
+  "boundaries": [
+    0,
+    1,
+    7,
+    8,
+    127,
+    128,
+    255,
+    256,
+    383,
+    384,
+    500
+  ],
+  "encodings": [
+    {
+      "rides": 0,
+      "block": "CCC749CC"
+    },
+    {
+      "rides": 1,
+      "block": "CCC748DC"
+    },
+    {
+      "rides": 2,
+      "block": "CCC74BEC"
+    },
+    {
+      "rides": 3,
+      "block": "CCC74AFC"
+    },
+    {
+      "rides": 4,
+      "block": "CCC74D8C"
+    },
+    {
+      "rides": 5,
+      "block": "CCC74C9C"
+    },
+    {
+      "rides": 6,
+      "block": "CCC74FAC"
+    },
+    {
+      "rides": 7,
+      "block": "CCC74EBC"
+    },
+    {
+      "rides": 8,
+      "block": "CCC7414C"
+    },
+    {
+      "rides": 9,
+      "block": "CCC7405C"
+    },
+    {
+      "rides": 10,
+      "block": "CCC7436C"
+    },
+    {
+      "rides": 11,
+      "block": "CCC7427C"
+    },
+    {
+      "rides": 12,
+      "block": "CCC7450C"
+    },
+    {
+      "rides": 13,
+      "block": "CCC7441C"
+    },
+    {
+      "rides": 14,
+      "block": "CCC7472C"
+    },
+    {
+      "rides": 15,
+      "block": "CCC7463C"
+    },
+    {
+      "rides": 16,
+      "block": "CCC759CD"
+    },
+    {
+      "rides": 17,
+      "block": "CCC758DD"
+    },
+    {
+      "rides": 18,
+      "block": "CCC75BED"
+    },
+    {
+      "rides": 19,
+      "block": "CCC75AFD"
+    },
+    {
+      "rides": 20,
+      "block": "CCC75D8D"
+    },
+    {
+      "rides": 21,
+      "block": "CCC75C9D"
+    },
+    {
+      "rides": 22,
+      "block": "CCC75FAD"
+    },
+    {
+      "rides": 23,
+      "block": "CCC75EBD"
+    },
+    {
+      "rides": 24,
+      "block": "CCC7514D"
+    },
+    {
+      "rides": 25,
+      "block": "CCC7505D"
+    },
+    {
+      "rides": 26,
+      "block": "CCC7536D"
+    },
+    {
+      "rides": 27,
+      "block": "CCC7527D"
+    },
+    {
+      "rides": 28,
+      "block": "CCC7550D"
+    },
+    {
+      "rides": 29,
+      "block": "CCC7541D"
+    },
+    {
+      "rides": 30,
+      "block": "CCC7572D"
+    },
+    {
+      "rides": 31,
+      "block": "CCC7563D"
+    },
+    {
+      "rides": 32,
+      "block": "CCC769CE"
+    },
+    {
+      "rides": 33,
+      "block": "CCC768DE"
+    },
+    {
+      "rides": 34,
+      "block": "CCC76BEE"
+    },
+    {
+      "rides": 35,
+      "block": "CCC76AFE"
+    },
+    {
+      "rides": 36,
+      "block": "CCC76D8E"
+    },
+    {
+      "rides": 37,
+      "block": "CCC76C9E"
+    },
+    {
+      "rides": 38,
+      "block": "CCC76FAE"
+    },
+    {
+      "rides": 39,
+      "block": "CCC76EBE"
+    },
+    {
+      "rides": 40,
+      "block": "CCC7614E"
+    },
+    {
+      "rides": 41,
+      "block": "CCC7605E"
+    },
+    {
+      "rides": 42,
+      "block": "CCC7636E"
+    },
+    {
+      "rides": 43,
+      "block": "CCC7627E"
+    },
+    {
+      "rides": 44,
+      "block": "CCC7650E"
+    },
+    {
+      "rides": 45,
+      "block": "CCC7641E"
+    },
+    {
+      "rides": 46,
+      "block": "CCC7672E"
+    },
+    {
+      "rides": 47,
+      "block": "CCC7663E"
+    },
+    {
+      "rides": 48,
+      "block": "CCC779CF"
+    },
+    {
+      "rides": 49,
+      "block": "CCC778DF"
+    },
+    {
+      "rides": 50,
+      "block": "CCC77BEF"
+    },
+    {
+      "rides": 51,
+      "block": "CCC77AFF"
+    },
+    {
+      "rides": 52,
+      "block": "CCC77D8F"
+    },
+    {
+      "rides": 53,
+      "block": "CCC77C9F"
+    },
+    {
+      "rides": 54,
+      "block": "CCC77FAF"
+    },
+    {
+      "rides": 55,
+      "block": "CCC77EBF"
+    },
+    {
+      "rides": 56,
+      "block": "CCC7714F"
+    },
+    {
+      "rides": 57,
+      "block": "CCC7705F"
+    },
+    {
+      "rides": 58,
+      "block": "CCC7736F"
+    },
+    {
+      "rides": 59,
+      "block": "CCC7727F"
+    },
+    {
+      "rides": 60,
+      "block": "CCC7750F"
+    },
+    {
+      "rides": 61,
+      "block": "CCC7741F"
+    },
+    {
+      "rides": 62,
+      "block": "CCC7772F"
+    },
+    {
+      "rides": 63,
+      "block": "CCC7763F"
+    },
+    {
+      "rides": 64,
+      "block": "CCC709C8"
+    },
+    {
+      "rides": 65,
+      "block": "CCC708D8"
+    },
+    {
+      "rides": 66,
+      "block": "CCC70BE8"
+    },
+    {
+      "rides": 67,
+      "block": "CCC70AF8"
+    },
+    {
+      "rides": 68,
+      "block": "CCC70D88"
+    },
+    {
+      "rides": 69,
+      "block": "CCC70C98"
+    },
+    {
+      "rides": 70,
+      "block": "CCC70FA8"
+    },
+    {
+      "rides": 71,
+      "block": "CCC70EB8"
+    },
+    {
+      "rides": 72,
+      "block": "CCC70148"
+    },
+    {
+      "rides": 73,
+      "block": "CCC70058"
+    },
+    {
+      "rides": 74,
+      "block": "CCC70368"
+    },
+    {
+      "rides": 75,
+      "block": "CCC70278"
+    },
+    {
+      "rides": 76,
+      "block": "CCC70508"
+    },
+    {
+      "rides": 77,
+      "block": "CCC70418"
+    },
+    {
+      "rides": 78,
+      "block": "CCC70728"
+    },
+    {
+      "rides": 79,
+      "block": "CCC70638"
+    },
+    {
+      "rides": 80,
+      "block": "CCC719C9"
+    },
+    {
+      "rides": 81,
+      "block": "CCC718D9"
+    },
+    {
+      "rides": 82,
+      "block": "CCC71BE9"
+    },
+    {
+      "rides": 83,
+      "block": "CCC71AF9"
+    },
+    {
+      "rides": 84,
+      "block": "CCC71D89"
+    },
+    {
+      "rides": 85,
+      "block": "CCC71C99"
+    },
+    {
+      "rides": 86,
+      "block": "CCC71FA9"
+    },
+    {
+      "rides": 87,
+      "block": "CCC71EB9"
+    },
+    {
+      "rides": 88,
+      "block": "CCC71149"
+    },
+    {
+      "rides": 89,
+      "block": "CCC71059"
+    },
+    {
+      "rides": 90,
+      "block": "CCC71369"
+    },
+    {
+      "rides": 91,
+      "block": "CCC71279"
+    },
+    {
+      "rides": 92,
+      "block": "CCC71509"
+    },
+    {
+      "rides": 93,
+      "block": "CCC71419"
+    },
+    {
+      "rides": 94,
+      "block": "CCC71729"
+    },
+    {
+      "rides": 95,
+      "block": "CCC71639"
+    },
+    {
+      "rides": 96,
+      "block": "CCC729CA"
+    },
+    {
+      "rides": 97,
+      "block": "CCC728DA"
+    },
+    {
+      "rides": 98,
+      "block": "CCC72BEA"
+    },
+    {
+      "rides": 99,
+      "block": "CCC72AFA"
+    },
+    {
+      "rides": 100,
+      "block": "CCC72D8A"
+    },
+    {
+      "rides": 101,
+      "block": "CCC72C9A"
+    },
+    {
+      "rides": 102,
+      "block": "CCC72FAA"
+    },
+    {
+      "rides": 103,
+      "block": "CCC72EBA"
+    },
+    {
+      "rides": 104,
+      "block": "CCC7214A"
+    },
+    {
+      "rides": 105,
+      "block": "CCC7205A"
+    },
+    {
+      "rides": 106,
+      "block": "CCC7236A"
+    },
+    {
+      "rides": 107,
+      "block": "CCC7227A"
+    },
+    {
+      "rides": 108,
+      "block": "CCC7250A"
+    },
+    {
+      "rides": 109,
+      "block": "CCC7241A"
+    },
+    {
+      "rides": 110,
+      "block": "CCC7272A"
+    },
+    {
+      "rides": 111,
+      "block": "CCC7263A"
+    },
+    {
+      "rides": 112,
+      "block": "CCC739CB"
+    },
+    {
+      "rides": 113,
+      "block": "CCC738DB"
+    },
+    {
+      "rides": 114,
+      "block": "CCC73BEB"
+    },
+    {
+      "rides": 115,
+      "block": "CCC73AFB"
+    },
+    {
+      "rides": 116,
+      "block": "CCC73D8B"
+    },
+    {
+      "rides": 117,
+      "block": "CCC73C9B"
+    },
+    {
+      "rides": 118,
+      "block": "CCC73FAB"
+    },
+    {
+      "rides": 119,
+      "block": "CCC73EBB"
+    },
+    {
+      "rides": 120,
+      "block": "CCC7314B"
+    },
+    {
+      "rides": 121,
+      "block": "CCC7305B"
+    },
+    {
+      "rides": 122,
+      "block": "CCC7336B"
+    },
+    {
+      "rides": 123,
+      "block": "CCC7327B"
+    },
+    {
+      "rides": 124,
+      "block": "CCC7350B"
+    },
+    {
+      "rides": 125,
+      "block": "CCC7341B"
+    },
+    {
+      "rides": 126,
+      "block": "CCC7372B"
+    },
+    {
+      "rides": 127,
+      "block": "CCC7363B"
+    },
+    {
+      "rides": 128,
+      "block": "3FC7C9C4"
+    },
+    {
+      "rides": 129,
+      "block": "3FC7C8D4"
+    },
+    {
+      "rides": 130,
+      "block": "3FC7CBE4"
+    },
+    {
+      "rides": 131,
+      "block": "3FC7CAF4"
+    },
+    {
+      "rides": 132,
+      "block": "3FC7CD84"
+    },
+    {
+      "rides": 133,
+      "block": "3FC7CC94"
+    },
+    {
+      "rides": 134,
+      "block": "3FC7CFA4"
+    },
+    {
+      "rides": 135,
+      "block": "3FC7CEB4"
+    },
+    {
+      "rides": 136,
+      "block": "3FC7C144"
+    },
+    {
+      "rides": 137,
+      "block": "3FC7C054"
+    },
+    {
+      "rides": 138,
+      "block": "3FC7C364"
+    },
+    {
+      "rides": 139,
+      "block": "3FC7C274"
+    },
+    {
+      "rides": 140,
+      "block": "3FC7C504"
+    },
+    {
+      "rides": 141,
+      "block": "3FC7C414"
+    },
+    {
+      "rides": 142,
+      "block": "3FC7C724"
+    },
+    {
+      "rides": 143,
+      "block": "3FC7C634"
+    },
+    {
+      "rides": 144,
+      "block": "3FC7D9C5"
+    },
+    {
+      "rides": 145,
+      "block": "3FC7D8D5"
+    },
+    {
+      "rides": 146,
+      "block": "3FC7DBE5"
+    },
+    {
+      "rides": 147,
+      "block": "3FC7DAF5"
+    },
+    {
+      "rides": 148,
+      "block": "3FC7DD85"
+    },
+    {
+      "rides": 149,
+      "block": "3FC7DC95"
+    },
+    {
+      "rides": 150,
+      "block": "3FC7DFA5"
+    },
+    {
+      "rides": 151,
+      "block": "3FC7DEB5"
+    },
+    {
+      "rides": 152,
+      "block": "3FC7D145"
+    },
+    {
+      "rides": 153,
+      "block": "3FC7D055"
+    },
+    {
+      "rides": 154,
+      "block": "3FC7D365"
+    },
+    {
+      "rides": 155,
+      "block": "3FC7D275"
+    },
+    {
+      "rides": 156,
+      "block": "3FC7D505"
+    },
+    {
+      "rides": 157,
+      "block": "3FC7D415"
+    },
+    {
+      "rides": 158,
+      "block": "3FC7D725"
+    },
+    {
+      "rides": 159,
+      "block": "3FC7D635"
+    },
+    {
+      "rides": 160,
+      "block": "3FC7E9C6"
+    },
+    {
+      "rides": 161,
+      "block": "3FC7E8D6"
+    },
+    {
+      "rides": 162,
+      "block": "3FC7EBE6"
+    },
+    {
+      "rides": 163,
+      "block": "3FC7EAF6"
+    },
+    {
+      "rides": 164,
+      "block": "3FC7ED86"
+    },
+    {
+      "rides": 165,
+      "block": "3FC7EC96"
+    },
+    {
+      "rides": 166,
+      "block": "3FC7EFA6"
+    },
+    {
+      "rides": 167,
+      "block": "3FC7EEB6"
+    },
+    {
+      "rides": 168,
+      "block": "3FC7E146"
+    },
+    {
+      "rides": 169,
+      "block": "3FC7E056"
+    },
+    {
+      "rides": 170,
+      "block": "3FC7E366"
+    },
+    {
+      "rides": 171,
+      "block": "3FC7E276"
+    },
+    {
+      "rides": 172,
+      "block": "3FC7E506"
+    },
+    {
+      "rides": 173,
+      "block": "3FC7E416"
+    },
+    {
+      "rides": 174,
+      "block": "3FC7E726"
+    },
+    {
+      "rides": 175,
+      "block": "3FC7E636"
+    },
+    {
+      "rides": 176,
+      "block": "3FC7F9C7"
+    },
+    {
+      "rides": 177,
+      "block": "3FC7F8D7"
+    },
+    {
+      "rides": 178,
+      "block": "3FC7FBE7"
+    },
+    {
+      "rides": 179,
+      "block": "3FC7FAF7"
+    },
+    {
+      "rides": 180,
+      "block": "3FC7FD87"
+    },
+    {
+      "rides": 181,
+      "block": "3FC7FC97"
+    },
+    {
+      "rides": 182,
+      "block": "3FC7FFA7"
+    },
+    {
+      "rides": 183,
+      "block": "3FC7FEB7"
+    },
+    {
+      "rides": 184,
+      "block": "3FC7F147"
+    },
+    {
+      "rides": 185,
+      "block": "3FC7F057"
+    },
+    {
+      "rides": 186,
+      "block": "3FC7F367"
+    },
+    {
+      "rides": 187,
+      "block": "3FC7F277"
+    },
+    {
+      "rides": 188,
+      "block": "3FC7F507"
+    },
+    {
+      "rides": 189,
+      "block": "3FC7F417"
+    },
+    {
+      "rides": 190,
+      "block": "3FC7F727"
+    },
+    {
+      "rides": 191,
+      "block": "3FC7F637"
+    },
+    {
+      "rides": 192,
+      "block": "3FC789C0"
+    },
+    {
+      "rides": 193,
+      "block": "3FC788D0"
+    },
+    {
+      "rides": 194,
+      "block": "3FC78BE0"
+    },
+    {
+      "rides": 195,
+      "block": "3FC78AF0"
+    },
+    {
+      "rides": 196,
+      "block": "3FC78D80"
+    },
+    {
+      "rides": 197,
+      "block": "3FC78C90"
+    },
+    {
+      "rides": 198,
+      "block": "3FC78FA0"
+    },
+    {
+      "rides": 199,
+      "block": "3FC78EB0"
+    },
+    {
+      "rides": 200,
+      "block": "3FC78140"
+    },
+    {
+      "rides": 201,
+      "block": "3FC78050"
+    },
+    {
+      "rides": 202,
+      "block": "3FC78360"
+    },
+    {
+      "rides": 203,
+      "block": "3FC78270"
+    },
+    {
+      "rides": 204,
+      "block": "3FC78500"
+    },
+    {
+      "rides": 205,
+      "block": "3FC78410"
+    },
+    {
+      "rides": 206,
+      "block": "3FC78720"
+    },
+    {
+      "rides": 207,
+      "block": "3FC78630"
+    },
+    {
+      "rides": 208,
+      "block": "3FC799C1"
+    },
+    {
+      "rides": 209,
+      "block": "3FC798D1"
+    },
+    {
+      "rides": 210,
+      "block": "3FC79BE1"
+    },
+    {
+      "rides": 211,
+      "block": "3FC79AF1"
+    },
+    {
+      "rides": 212,
+      "block": "3FC79D81"
+    },
+    {
+      "rides": 213,
+      "block": "3FC79C91"
+    },
+    {
+      "rides": 214,
+      "block": "3FC79FA1"
+    },
+    {
+      "rides": 215,
+      "block": "3FC79EB1"
+    },
+    {
+      "rides": 216,
+      "block": "3FC79141"
+    },
+    {
+      "rides": 217,
+      "block": "3FC79051"
+    },
+    {
+      "rides": 218,
+      "block": "3FC79361"
+    },
+    {
+      "rides": 219,
+      "block": "3FC79271"
+    },
+    {
+      "rides": 220,
+      "block": "3FC79501"
+    },
+    {
+      "rides": 221,
+      "block": "3FC79411"
+    },
+    {
+      "rides": 222,
+      "block": "3FC79721"
+    },
+    {
+      "rides": 223,
+      "block": "3FC79631"
+    },
+    {
+      "rides": 224,
+      "block": "3FC7A9C2"
+    },
+    {
+      "rides": 225,
+      "block": "3FC7A8D2"
+    },
+    {
+      "rides": 226,
+      "block": "3FC7ABE2"
+    },
+    {
+      "rides": 227,
+      "block": "3FC7AAF2"
+    },
+    {
+      "rides": 228,
+      "block": "3FC7AD82"
+    },
+    {
+      "rides": 229,
+      "block": "3FC7AC92"
+    },
+    {
+      "rides": 230,
+      "block": "3FC7AFA2"
+    },
+    {
+      "rides": 231,
+      "block": "3FC7AEB2"
+    },
+    {
+      "rides": 232,
+      "block": "3FC7A142"
+    },
+    {
+      "rides": 233,
+      "block": "3FC7A052"
+    },
+    {
+      "rides": 234,
+      "block": "3FC7A362"
+    },
+    {
+      "rides": 235,
+      "block": "3FC7A272"
+    },
+    {
+      "rides": 236,
+      "block": "3FC7A502"
+    },
+    {
+      "rides": 237,
+      "block": "3FC7A412"
+    },
+    {
+      "rides": 238,
+      "block": "3FC7A722"
+    },
+    {
+      "rides": 239,
+      "block": "3FC7A632"
+    },
+    {
+      "rides": 240,
+      "block": "3FC7B9C3"
+    },
+    {
+      "rides": 241,
+      "block": "3FC7B8D3"
+    },
+    {
+      "rides": 242,
+      "block": "3FC7BBE3"
+    },
+    {
+      "rides": 243,
+      "block": "3FC7BAF3"
+    },
+    {
+      "rides": 244,
+      "block": "3FC7BD83"
+    },
+    {
+      "rides": 245,
+      "block": "3FC7BC93"
+    },
+    {
+      "rides": 246,
+      "block": "3FC7BFA3"
+    },
+    {
+      "rides": 247,
+      "block": "3FC7BEB3"
+    },
+    {
+      "rides": 248,
+      "block": "3FC7B143"
+    },
+    {
+      "rides": 249,
+      "block": "3FC7B053"
+    },
+    {
+      "rides": 250,
+      "block": "3FC7B363"
+    },
+    {
+      "rides": 251,
+      "block": "3FC7B273"
+    },
+    {
+      "rides": 252,
+      "block": "3FC7B503"
+    },
+    {
+      "rides": 253,
+      "block": "3FC7B413"
+    },
+    {
+      "rides": 254,
+      "block": "3FC7B723"
+    },
+    {
+      "rides": 255,
+      "block": "3FC7B633"
+    },
+    {
+      "rides": 256,
+      "block": "CCC649DC"
+    },
+    {
+      "rides": 257,
+      "block": "CCC648CC"
+    },
+    {
+      "rides": 258,
+      "block": "CCC64BFC"
+    },
+    {
+      "rides": 259,
+      "block": "CCC64AEC"
+    },
+    {
+      "rides": 260,
+      "block": "CCC64D9C"
+    },
+    {
+      "rides": 261,
+      "block": "CCC64C8C"
+    },
+    {
+      "rides": 262,
+      "block": "CCC64FBC"
+    },
+    {
+      "rides": 263,
+      "block": "CCC64EAC"
+    },
+    {
+      "rides": 264,
+      "block": "CCC6415C"
+    },
+    {
+      "rides": 265,
+      "block": "CCC6404C"
+    },
+    {
+      "rides": 266,
+      "block": "CCC6437C"
+    },
+    {
+      "rides": 267,
+      "block": "CCC6426C"
+    },
+    {
+      "rides": 268,
+      "block": "CCC6451C"
+    },
+    {
+      "rides": 269,
+      "block": "CCC6440C"
+    },
+    {
+      "rides": 270,
+      "block": "CCC6473C"
+    },
+    {
+      "rides": 271,
+      "block": "CCC6462C"
+    },
+    {
+      "rides": 272,
+      "block": "CCC659DD"
+    },
+    {
+      "rides": 273,
+      "block": "CCC658CD"
+    },
+    {
+      "rides": 274,
+      "block": "CCC65BFD"
+    },
+    {
+      "rides": 275,
+      "block": "CCC65AED"
+    },
+    {
+      "rides": 276,
+      "block": "CCC65D9D"
+    },
+    {
+      "rides": 277,
+      "block": "CCC65C8D"
+    },
+    {
+      "rides": 278,
+      "block": "CCC65FBD"
+    },
+    {
+      "rides": 279,
+      "block": "CCC65EAD"
+    },
+    {
+      "rides": 280,
+      "block": "CCC6515D"
+    },
+    {
+      "rides": 281,
+      "block": "CCC6504D"
+    },
+    {
+      "rides": 282,
+      "block": "CCC6537D"
+    },
+    {
+      "rides": 283,
+      "block": "CCC6526D"
+    },
+    {
+      "rides": 284,
+      "block": "CCC6551D"
+    },
+    {
+      "rides": 285,
+      "block": "CCC6540D"
+    },
+    {
+      "rides": 286,
+      "block": "CCC6573D"
+    },
+    {
+      "rides": 287,
+      "block": "CCC6562D"
+    },
+    {
+      "rides": 288,
+      "block": "CCC669DE"
+    },
+    {
+      "rides": 289,
+      "block": "CCC668CE"
+    },
+    {
+      "rides": 290,
+      "block": "CCC66BFE"
+    },
+    {
+      "rides": 291,
+      "block": "CCC66AEE"
+    },
+    {
+      "rides": 292,
+      "block": "CCC66D9E"
+    },
+    {
+      "rides": 293,
+      "block": "CCC66C8E"
+    },
+    {
+      "rides": 294,
+      "block": "CCC66FBE"
+    },
+    {
+      "rides": 295,
+      "block": "CCC66EAE"
+    },
+    {
+      "rides": 296,
+      "block": "CCC6615E"
+    },
+    {
+      "rides": 297,
+      "block": "CCC6604E"
+    },
+    {
+      "rides": 298,
+      "block": "CCC6637E"
+    },
+    {
+      "rides": 299,
+      "block": "CCC6626E"
+    },
+    {
+      "rides": 300,
+      "block": "CCC6651E"
+    },
+    {
+      "rides": 301,
+      "block": "CCC6640E"
+    },
+    {
+      "rides": 302,
+      "block": "CCC6673E"
+    },
+    {
+      "rides": 303,
+      "block": "CCC6662E"
+    },
+    {
+      "rides": 304,
+      "block": "CCC679DF"
+    },
+    {
+      "rides": 305,
+      "block": "CCC678CF"
+    },
+    {
+      "rides": 306,
+      "block": "CCC67BFF"
+    },
+    {
+      "rides": 307,
+      "block": "CCC67AEF"
+    },
+    {
+      "rides": 308,
+      "block": "CCC67D9F"
+    },
+    {
+      "rides": 309,
+      "block": "CCC67C8F"
+    },
+    {
+      "rides": 310,
+      "block": "CCC67FBF"
+    },
+    {
+      "rides": 311,
+      "block": "CCC67EAF"
+    },
+    {
+      "rides": 312,
+      "block": "CCC6715F"
+    },
+    {
+      "rides": 313,
+      "block": "CCC6704F"
+    },
+    {
+      "rides": 314,
+      "block": "CCC6737F"
+    },
+    {
+      "rides": 315,
+      "block": "CCC6726F"
+    },
+    {
+      "rides": 316,
+      "block": "CCC6751F"
+    },
+    {
+      "rides": 317,
+      "block": "CCC6740F"
+    },
+    {
+      "rides": 318,
+      "block": "CCC6773F"
+    },
+    {
+      "rides": 319,
+      "block": "CCC6762F"
+    },
+    {
+      "rides": 320,
+      "block": "CCC609D8"
+    },
+    {
+      "rides": 321,
+      "block": "CCC608C8"
+    },
+    {
+      "rides": 322,
+      "block": "CCC60BF8"
+    },
+    {
+      "rides": 323,
+      "block": "CCC60AE8"
+    },
+    {
+      "rides": 324,
+      "block": "CCC60D98"
+    },
+    {
+      "rides": 325,
+      "block": "CCC60C88"
+    },
+    {
+      "rides": 326,
+      "block": "CCC60FB8"
+    },
+    {
+      "rides": 327,
+      "block": "CCC60EA8"
+    },
+    {
+      "rides": 328,
+      "block": "CCC60158"
+    },
+    {
+      "rides": 329,
+      "block": "CCC60048"
+    },
+    {
+      "rides": 330,
+      "block": "CCC60378"
+    },
+    {
+      "rides": 331,
+      "block": "CCC60268"
+    },
+    {
+      "rides": 332,
+      "block": "CCC60518"
+    },
+    {
+      "rides": 333,
+      "block": "CCC60408"
+    },
+    {
+      "rides": 334,
+      "block": "CCC60738"
+    },
+    {
+      "rides": 335,
+      "block": "CCC60628"
+    },
+    {
+      "rides": 336,
+      "block": "CCC619D9"
+    },
+    {
+      "rides": 337,
+      "block": "CCC618C9"
+    },
+    {
+      "rides": 338,
+      "block": "CCC61BF9"
+    },
+    {
+      "rides": 339,
+      "block": "CCC61AE9"
+    },
+    {
+      "rides": 340,
+      "block": "CCC61D99"
+    },
+    {
+      "rides": 341,
+      "block": "CCC61C89"
+    },
+    {
+      "rides": 342,
+      "block": "CCC61FB9"
+    },
+    {
+      "rides": 343,
+      "block": "CCC61EA9"
+    },
+    {
+      "rides": 344,
+      "block": "CCC61159"
+    },
+    {
+      "rides": 345,
+      "block": "CCC61049"
+    },
+    {
+      "rides": 346,
+      "block": "CCC61379"
+    },
+    {
+      "rides": 347,
+      "block": "CCC61269"
+    },
+    {
+      "rides": 348,
+      "block": "CCC61519"
+    },
+    {
+      "rides": 349,
+      "block": "CCC61409"
+    },
+    {
+      "rides": 350,
+      "block": "CCC61739"
+    },
+    {
+      "rides": 351,
+      "block": "CCC61629"
+    },
+    {
+      "rides": 352,
+      "block": "CCC629DA"
+    },
+    {
+      "rides": 353,
+      "block": "CCC628CA"
+    },
+    {
+      "rides": 354,
+      "block": "CCC62BFA"
+    },
+    {
+      "rides": 355,
+      "block": "CCC62AEA"
+    },
+    {
+      "rides": 356,
+      "block": "CCC62D9A"
+    },
+    {
+      "rides": 357,
+      "block": "CCC62C8A"
+    },
+    {
+      "rides": 358,
+      "block": "CCC62FBA"
+    },
+    {
+      "rides": 359,
+      "block": "CCC62EAA"
+    },
+    {
+      "rides": 360,
+      "block": "CCC6215A"
+    },
+    {
+      "rides": 361,
+      "block": "CCC6204A"
+    },
+    {
+      "rides": 362,
+      "block": "CCC6237A"
+    },
+    {
+      "rides": 363,
+      "block": "CCC6226A"
+    },
+    {
+      "rides": 364,
+      "block": "CCC6251A"
+    },
+    {
+      "rides": 365,
+      "block": "CCC6240A"
+    },
+    {
+      "rides": 366,
+      "block": "CCC6273A"
+    },
+    {
+      "rides": 367,
+      "block": "CCC6262A"
+    },
+    {
+      "rides": 368,
+      "block": "CCC639DB"
+    },
+    {
+      "rides": 369,
+      "block": "CCC638CB"
+    },
+    {
+      "rides": 370,
+      "block": "CCC63BFB"
+    },
+    {
+      "rides": 371,
+      "block": "CCC63AEB"
+    },
+    {
+      "rides": 372,
+      "block": "CCC63D9B"
+    },
+    {
+      "rides": 373,
+      "block": "CCC63C8B"
+    },
+    {
+      "rides": 374,
+      "block": "CCC63FBB"
+    },
+    {
+      "rides": 375,
+      "block": "CCC63EAB"
+    },
+    {
+      "rides": 376,
+      "block": "CCC6315B"
+    },
+    {
+      "rides": 377,
+      "block": "CCC6304B"
+    },
+    {
+      "rides": 378,
+      "block": "CCC6337B"
+    },
+    {
+      "rides": 379,
+      "block": "CCC6326B"
+    },
+    {
+      "rides": 380,
+      "block": "CCC6351B"
+    },
+    {
+      "rides": 381,
+      "block": "CCC6340B"
+    },
+    {
+      "rides": 382,
+      "block": "CCC6373B"
+    },
+    {
+      "rides": 383,
+      "block": "CCC6362B"
+    },
+    {
+      "rides": 384,
+      "block": "3FC6C9D4"
+    },
+    {
+      "rides": 385,
+      "block": "3FC6C8C4"
+    },
+    {
+      "rides": 386,
+      "block": "3FC6CBF4"
+    },
+    {
+      "rides": 387,
+      "block": "3FC6CAE4"
+    },
+    {
+      "rides": 388,
+      "block": "3FC6CD94"
+    },
+    {
+      "rides": 389,
+      "block": "3FC6CC84"
+    },
+    {
+      "rides": 390,
+      "block": "3FC6CFB4"
+    },
+    {
+      "rides": 391,
+      "block": "3FC6CEA4"
+    },
+    {
+      "rides": 392,
+      "block": "3FC6C154"
+    },
+    {
+      "rides": 393,
+      "block": "3FC6C044"
+    },
+    {
+      "rides": 394,
+      "block": "3FC6C374"
+    },
+    {
+      "rides": 395,
+      "block": "3FC6C264"
+    },
+    {
+      "rides": 396,
+      "block": "3FC6C514"
+    },
+    {
+      "rides": 397,
+      "block": "3FC6C404"
+    },
+    {
+      "rides": 398,
+      "block": "3FC6C734"
+    },
+    {
+      "rides": 399,
+      "block": "3FC6C624"
+    },
+    {
+      "rides": 400,
+      "block": "3FC6D9D5"
+    },
+    {
+      "rides": 401,
+      "block": "3FC6D8C5"
+    },
+    {
+      "rides": 402,
+      "block": "3FC6DBF5"
+    },
+    {
+      "rides": 403,
+      "block": "3FC6DAE5"
+    },
+    {
+      "rides": 404,
+      "block": "3FC6DD95"
+    },
+    {
+      "rides": 405,
+      "block": "3FC6DC85"
+    },
+    {
+      "rides": 406,
+      "block": "3FC6DFB5"
+    },
+    {
+      "rides": 407,
+      "block": "3FC6DEA5"
+    },
+    {
+      "rides": 408,
+      "block": "3FC6D155"
+    },
+    {
+      "rides": 409,
+      "block": "3FC6D045"
+    },
+    {
+      "rides": 410,
+      "block": "3FC6D375"
+    },
+    {
+      "rides": 411,
+      "block": "3FC6D265"
+    },
+    {
+      "rides": 412,
+      "block": "3FC6D515"
+    },
+    {
+      "rides": 413,
+      "block": "3FC6D405"
+    },
+    {
+      "rides": 414,
+      "block": "3FC6D735"
+    },
+    {
+      "rides": 415,
+      "block": "3FC6D625"
+    },
+    {
+      "rides": 416,
+      "block": "3FC6E9D6"
+    },
+    {
+      "rides": 417,
+      "block": "3FC6E8C6"
+    },
+    {
+      "rides": 418,
+      "block": "3FC6EBF6"
+    },
+    {
+      "rides": 419,
+      "block": "3FC6EAE6"
+    },
+    {
+      "rides": 420,
+      "block": "3FC6ED96"
+    },
+    {
+      "rides": 421,
+      "block": "3FC6EC86"
+    },
+    {
+      "rides": 422,
+      "block": "3FC6EFB6"
+    },
+    {
+      "rides": 423,
+      "block": "3FC6EEA6"
+    },
+    {
+      "rides": 424,
+      "block": "3FC6E156"
+    },
+    {
+      "rides": 425,
+      "block": "3FC6E046"
+    },
+    {
+      "rides": 426,
+      "block": "3FC6E376"
+    },
+    {
+      "rides": 427,
+      "block": "3FC6E266"
+    },
+    {
+      "rides": 428,
+      "block": "3FC6E516"
+    },
+    {
+      "rides": 429,
+      "block": "3FC6E406"
+    },
+    {
+      "rides": 430,
+      "block": "3FC6E736"
+    },
+    {
+      "rides": 431,
+      "block": "3FC6E626"
+    },
+    {
+      "rides": 432,
+      "block": "3FC6F9D7"
+    },
+    {
+      "rides": 433,
+      "block": "3FC6F8C7"
+    },
+    {
+      "rides": 434,
+      "block": "3FC6FBF7"
+    },
+    {
+      "rides": 435,
+      "block": "3FC6FAE7"
+    },
+    {
+      "rides": 436,
+      "block": "3FC6FD97"
+    },
+    {
+      "rides": 437,
+      "block": "3FC6FC87"
+    },
+    {
+      "rides": 438,
+      "block": "3FC6FFB7"
+    },
+    {
+      "rides": 439,
+      "block": "3FC6FEA7"
+    },
+    {
+      "rides": 440,
+      "block": "3FC6F157"
+    },
+    {
+      "rides": 441,
+      "block": "3FC6F047"
+    },
+    {
+      "rides": 442,
+      "block": "3FC6F377"
+    },
+    {
+      "rides": 443,
+      "block": "3FC6F267"
+    },
+    {
+      "rides": 444,
+      "block": "3FC6F517"
+    },
+    {
+      "rides": 445,
+      "block": "3FC6F407"
+    },
+    {
+      "rides": 446,
+      "block": "3FC6F737"
+    },
+    {
+      "rides": 447,
+      "block": "3FC6F627"
+    },
+    {
+      "rides": 448,
+      "block": "3FC689D0"
+    },
+    {
+      "rides": 449,
+      "block": "3FC688C0"
+    },
+    {
+      "rides": 450,
+      "block": "3FC68BF0"
+    },
+    {
+      "rides": 451,
+      "block": "3FC68AE0"
+    },
+    {
+      "rides": 452,
+      "block": "3FC68D90"
+    },
+    {
+      "rides": 453,
+      "block": "3FC68C80"
+    },
+    {
+      "rides": 454,
+      "block": "3FC68FB0"
+    },
+    {
+      "rides": 455,
+      "block": "3FC68EA0"
+    },
+    {
+      "rides": 456,
+      "block": "3FC68150"
+    },
+    {
+      "rides": 457,
+      "block": "3FC68040"
+    },
+    {
+      "rides": 458,
+      "block": "3FC68370"
+    },
+    {
+      "rides": 459,
+      "block": "3FC68260"
+    },
+    {
+      "rides": 460,
+      "block": "3FC68510"
+    },
+    {
+      "rides": 461,
+      "block": "3FC68400"
+    },
+    {
+      "rides": 462,
+      "block": "3FC68730"
+    },
+    {
+      "rides": 463,
+      "block": "3FC68620"
+    },
+    {
+      "rides": 464,
+      "block": "3FC699D1"
+    },
+    {
+      "rides": 465,
+      "block": "3FC698C1"
+    },
+    {
+      "rides": 466,
+      "block": "3FC69BF1"
+    },
+    {
+      "rides": 467,
+      "block": "3FC69AE1"
+    },
+    {
+      "rides": 468,
+      "block": "3FC69D91"
+    },
+    {
+      "rides": 469,
+      "block": "3FC69C81"
+    },
+    {
+      "rides": 470,
+      "block": "3FC69FB1"
+    },
+    {
+      "rides": 471,
+      "block": "3FC69EA1"
+    },
+    {
+      "rides": 472,
+      "block": "3FC69151"
+    },
+    {
+      "rides": 473,
+      "block": "3FC69041"
+    },
+    {
+      "rides": 474,
+      "block": "3FC69371"
+    },
+    {
+      "rides": 475,
+      "block": "3FC69261"
+    },
+    {
+      "rides": 476,
+      "block": "3FC69511"
+    },
+    {
+      "rides": 477,
+      "block": "3FC69401"
+    },
+    {
+      "rides": 478,
+      "block": "3FC69731"
+    },
+    {
+      "rides": 479,
+      "block": "3FC69621"
+    },
+    {
+      "rides": 480,
+      "block": "3FC6A9D2"
+    },
+    {
+      "rides": 481,
+      "block": "3FC6A8C2"
+    },
+    {
+      "rides": 482,
+      "block": "3FC6ABF2"
+    },
+    {
+      "rides": 483,
+      "block": "3FC6AAE2"
+    },
+    {
+      "rides": 484,
+      "block": "3FC6AD92"
+    },
+    {
+      "rides": 485,
+      "block": "3FC6AC82"
+    },
+    {
+      "rides": 486,
+      "block": "3FC6AFB2"
+    },
+    {
+      "rides": 487,
+      "block": "3FC6AEA2"
+    },
+    {
+      "rides": 488,
+      "block": "3FC6A152"
+    },
+    {
+      "rides": 489,
+      "block": "3FC6A042"
+    },
+    {
+      "rides": 490,
+      "block": "3FC6A372"
+    },
+    {
+      "rides": 491,
+      "block": "3FC6A262"
+    },
+    {
+      "rides": 492,
+      "block": "3FC6A512"
+    },
+    {
+      "rides": 493,
+      "block": "3FC6A402"
+    },
+    {
+      "rides": 494,
+      "block": "3FC6A732"
+    },
+    {
+      "rides": 495,
+      "block": "3FC6A622"
+    },
+    {
+      "rides": 496,
+      "block": "3FC6B9D3"
+    },
+    {
+      "rides": 497,
+      "block": "3FC6B8C3"
+    },
+    {
+      "rides": 498,
+      "block": "3FC6BBF3"
+    },
+    {
+      "rides": 499,
+      "block": "3FC6BAE3"
+    },
+    {
+      "rides": 500,
+      "block": "3FC6BD93"
+    }
+  ],
+  "rejectedEncodings": [
+    {
+      "rides": 501,
+      "block": "3FC6BC83",
+      "reason": "application-range"
+    },
+    {
+      "rides": 502,
+      "block": "3FC6BFB3",
+      "reason": "application-range"
+    },
+    {
+      "rides": 503,
+      "block": "3FC6BEA3",
+      "reason": "application-range"
+    },
+    {
+      "rides": 504,
+      "block": "3FC6B153",
+      "reason": "application-range"
+    },
+    {
+      "rides": 505,
+      "block": "3FC6B043",
+      "reason": "application-range"
+    },
+    {
+      "rides": 506,
+      "block": "3FC6B373",
+      "reason": "application-range"
+    },
+    {
+      "rides": 507,
+      "block": "3FC6B263",
+      "reason": "application-range"
+    },
+    {
+      "rides": 508,
+      "block": "3FC6B513",
+      "reason": "application-range"
+    },
+    {
+      "rides": 509,
+      "block": "3FC6B403",
+      "reason": "application-range"
+    },
+    {
+      "rides": 510,
+      "block": "3FC6B733",
+      "reason": "application-range"
+    },
+    {
+      "rides": 511,
+      "block": "3FC6B623",
+      "reason": "application-range"
+    }
+  ],
+  "malformedBlocks": [
+    {
+      "name": "wrong-f3-toggle",
+      "block": "3FC7414C",
+      "reason": "structural"
+    },
+    {
+      "name": "wrong-payload",
+      "block": "CCC70059",
+      "reason": "structural"
+    },
+    {
+      "name": "wrong-high-counter-byte",
+      "block": "CCC60058",
+      "reason": "structural"
+    },
+    {
+      "name": "unrelated-block",
+      "block": "DEAD1234",
+      "reason": "structural"
+    }
+  ],
+  "mirrorCases": [
+    {
+      "name": "matching-valid",
+      "block5": "CCC70058",
+      "block6": "CCC70058",
+      "expected": {
+        "status": "success",
+        "rides": 73,
+        "sourceBlock": "CCC70058",
+        "sourceBlockNumber": 5,
+        "blocksMatched": true,
+        "warningMessage": null
+      }
+    },
+    {
+      "name": "only-block-5-valid",
+      "block5": "CCC70058",
+      "block6": "CCC70001",
+      "expected": {
+        "status": "success",
+        "rides": 73,
+        "sourceBlock": "CCC70058",
+        "sourceBlockNumber": 5,
+        "blocksMatched": false,
+        "warningMessage": "Warning: blocks 5 and 6 differ; using block 5."
+      }
+    },
+    {
+      "name": "only-block-6-valid",
+      "block5": "CCC70000",
+      "block6": "CCC7636E",
+      "expected": {
+        "status": "success",
+        "rides": 42,
+        "sourceBlock": "CCC7636E",
+        "sourceBlockNumber": 6,
+        "blocksMatched": false,
+        "warningMessage": "Warning: blocks 5 and 6 differ; using block 6."
+      }
+    },
+    {
+      "name": "both-valid-block-6-wins",
+      "block5": "CCC70058",
+      "block6": "CCC719C9",
+      "expected": {
+        "status": "success",
+        "rides": 80,
+        "sourceBlock": "CCC719C9",
+        "sourceBlockNumber": 6,
+        "blocksMatched": false,
+        "warningMessage": "Warning: blocks 5 and 6 differ; using block 6 (80 rides)."
+      }
+    },
+    {
+      "name": "neither-valid",
+      "block5": "CCC70000",
+      "block6": "CCC70001",
+      "expected": {
+        "status": "unknownEncodingSequence",
+        "rides": null,
+        "sourceBlock": "CCC70000",
+        "sourceBlockNumber": 5,
+        "blocksMatched": false,
+        "warningMessage": null
+      }
+    }
+  ]
+}

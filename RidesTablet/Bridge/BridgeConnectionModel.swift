@@ -7,6 +7,8 @@ public enum BridgeConnectionState: Equatable, Sendable {
     case restored
     case connected
     case reading
+    case readingMercury
+    case settingMercury
     case forgetting
     case authenticationRequired
     case failed(String)
@@ -18,6 +20,8 @@ public enum BridgeConnectionState: Equatable, Sendable {
         case .restored: "Saved pairing restored"
         case .connected: "Connected"
         case .reading: "Reading block 5…"
+        case .readingMercury: "Reading Mercury rides…"
+        case .settingMercury: "Setting Mercury rides…"
         case .forgetting: "Revoking pairing…"
         case .authenticationRequired: "Pairing required"
         case .failed: "Action failed"
@@ -26,17 +30,22 @@ public enum BridgeConnectionState: Equatable, Sendable {
 
     public var isBusy: Bool {
         switch self {
-        case .pairing, .reading, .forgetting: true
+        case .pairing, .reading, .readingMercury, .settingMercury, .forgetting: true
         default: false
         }
     }
 
     public var isPaired: Bool {
         switch self {
-        case .restored, .connected, .reading, .forgetting: true
+        case .restored, .connected, .reading, .readingMercury, .settingMercury, .forgetting: true
         default: false
         }
     }
+}
+
+private struct MercuryWriteSnapshot: Equatable, Sendable {
+    let block5: String
+    let block6: String
 }
 
 @MainActor
@@ -45,11 +54,16 @@ public final class BridgeConnectionModel: ObservableObject {
     @Published public private(set) var state: BridgeConnectionState
     @Published public private(set) var message: String?
     @Published public private(set) var lastBlock5Value: String?
+    @Published public private(set) var lastMercuryBlock5Value: String?
+    @Published public private(set) var lastMercuryBlock6Value: String?
+    @Published public private(set) var lastMercuryRead: MercuryRideRead?
+    @Published public var targetMercuryRidesText: String
 
     private let credentialStore: any BridgeCredentialStore
     private let session: URLSession
     private let healthRetryDelay: @Sendable () async throws -> Void
     private var client: BridgeClient?
+    private var mercuryWriteSnapshot: MercuryWriteSnapshot?
 
     public init(
         credentialStore: any BridgeCredentialStore = KeychainBridgeCredentialStore(),
@@ -66,12 +80,32 @@ public final class BridgeConnectionModel: ObservableObject {
         self.state = .unconfigured
         self.message = nil
         self.lastBlock5Value = nil
+        self.lastMercuryBlock5Value = nil
+        self.lastMercuryBlock6Value = nil
+        self.lastMercuryRead = nil
+        self.targetMercuryRidesText = ""
         restore()
     }
 
     public var isBusy: Bool { state.isBusy }
     /// A saved credential remains usable for retry/forget even after a transient failure.
     public var isPaired: Bool { client?.hasCredential == true }
+    public var hasFreshMercurySnapshot: Bool { mercuryWriteSnapshot != nil }
+    public var resolvedMercuryRides: UInt? { lastMercuryRead?.rides }
+    public var mercurySourceBlockNumber: Int? { lastMercuryRead?.sourceBlockNumber }
+    public var mercuryBlocksMatch: Bool? { lastMercuryRead.map(\.blocksMatched) }
+    public var mercuryWarningMessage: String? { lastMercuryRead?.warningMessage }
+    public var mercuryWarningDisplay: String? {
+        guard let read = lastMercuryRead else { return nil }
+        if let warning = read.warningMessage { return warning }
+        return read.status == .unknownEncodingSequence
+            ? "Warning: Mercury mirror encoding is unknown."
+            : "None"
+    }
+
+    public var canSetMercuryRides: Bool {
+        !isBusy && isPaired && isWritableMercurySnapshot && parsedTargetMercuryRides != nil
+    }
 
     public func restore() {
         do {
@@ -102,6 +136,7 @@ public final class BridgeConnectionModel: ObservableObject {
         }
         state = .pairing
         message = nil
+        clearMercurySnapshot()
         lastBlock5Value = nil
 
         let newClient: BridgeClient
@@ -149,7 +184,7 @@ public final class BridgeConnectionModel: ObservableObject {
             bridgeURLText = credential.baseURL.absoluteString
             state = .connected
             message = "Paired with the local bridge."
-        } catch let error as CancellationError {
+        } catch is CancellationError {
             restoreStateAfterCancellation()
         } catch {
             fail(with: error)
@@ -171,7 +206,7 @@ public final class BridgeConnectionModel: ObservableObject {
         } catch BridgeClientError.unauthorized {
             // The server already considers this credential invalid; local cleanup is safe.
             clearLocalCredential()
-        } catch let error as CancellationError {
+        } catch is CancellationError {
             restoreStateAfterCancellation()
         } catch {
             // Keep the client and store intact so the operator can retry Forget and revoke later.
@@ -195,16 +230,166 @@ public final class BridgeConnectionModel: ObservableObject {
             state = .connected
             message = "Block 5 read successfully."
         } catch BridgeClientError.unauthorized {
-            try? credentialStore.remove()
-            client.clearCredential()
-            self.client = nil
-            state = .authenticationRequired
-            message = BridgeClientError.unauthorized.localizedDescription
-        } catch let error as CancellationError {
+            handleUnauthorized()
+        } catch is CancellationError {
             restoreStateAfterCancellation()
         } catch {
             fail(with: error)
         }
+    }
+
+    /// Reads a fresh pair of Mercury mirrors. The raw pair is the only optimistic
+    /// concurrency snapshot that can authorize a later set operation.
+    public func readMercuryRides() async {
+        guard !isBusy else { return }
+        guard let client, client.hasCredential else {
+            state = .authenticationRequired
+            message = BridgeClientError.missingCredential.localizedDescription
+            return
+        }
+
+        state = .readingMercury
+        message = nil
+        do {
+            let response = try await client.readMercuryMirrors()
+            applyMercurySnapshot(block5: response.block5, block6: response.block6)
+            state = .connected
+            if lastMercuryRead?.status == .success {
+                message = "Mercury rides read successfully."
+            } else {
+                message = "Mercury mirrors read, but the ride encoding is unknown."
+            }
+        } catch BridgeClientError.unauthorized {
+            handleUnauthorized()
+        } catch is CancellationError {
+            invalidateMercurySnapshot()
+            failMercury("Mercury read was cancelled. Read Mercury rides again before setting a value.")
+        } catch {
+            invalidateMercurySnapshot()
+            failMercury("Mercury read failed: \(errorDescription(error)). Read Mercury rides again before setting a value.")
+        }
+    }
+
+    /// Sets both Mercury mirrors from the most recent successful raw snapshot.
+    /// There is deliberately no retry or implicit refresh after an ambiguous result.
+    public func setMercuryRides() async {
+        guard !isBusy else { return }
+        guard let client, client.hasCredential else {
+            state = .authenticationRequired
+            message = BridgeClientError.missingCredential.localizedDescription
+            return
+        }
+        guard let read = lastMercuryRead else {
+            failMercury("Read Mercury rides successfully first. A fresh mirror snapshot is required before setting rides.")
+            return
+        }
+        guard read.status == .success, read.rides != nil else {
+            failMercury("Setting Mercury rides is disabled for unknown encoding. Read a known Mercury token before setting rides.")
+            return
+        }
+        guard let snapshot = mercuryWriteSnapshot, isWritableMercurySnapshot else {
+            failMercury("Read Mercury rides successfully first. A fresh mirror snapshot is required before setting rides.")
+            return
+        }
+        guard let target = parsedTargetMercuryRides,
+              let desired = MercuryRideCodec.encode(target) else {
+            failMercury("Target Mercury rides must be a whole number from 0 through 500.")
+            return
+        }
+
+        let desiredHex = String(format: "%08X", desired)
+        do {
+            let request = try BridgeMercuryMutationRequest(mutations: [
+                try BridgeMercuryMutation(block: 5, expected: snapshot.block5, desired: desiredHex),
+                try BridgeMercuryMutation(block: 6, expected: snapshot.block6, desired: desiredHex),
+            ])
+            state = .settingMercury
+            message = nil
+            let response = try await client.mutateMercury(request)
+            if response.status == "conflict" {
+                invalidateMercurySnapshot()
+                failMercury("Mercury set conflicted with a changed token. No blocks were written and no retry was sent; read Mercury rides again before setting a value.")
+                return
+            }
+            if response.status == "verifyFailed" {
+                invalidateMercurySnapshot()
+                failMercury("Mercury set verification failed (\(response.rollbackStatus)). No retry was sent; read Mercury rides again before setting a value.")
+                return
+            }
+            let actual = try actualValues(for: response, matching: request)
+            applyMercurySnapshot(block5: actual.block5, block6: actual.block6)
+            state = .connected
+            if response.status == "alreadyApplied" {
+                message = "Mercury rides already applied; no blocks were rewritten."
+            } else {
+                message = "Mercury rides written and verified."
+            }
+        } catch BridgeClientError.unauthorized {
+            invalidateMercurySnapshot()
+            handleUnauthorized()
+        } catch is CancellationError {
+            invalidateMercurySnapshot()
+            failMercury("Mercury set was cancelled. No retry was sent; read Mercury rides again before setting a value.")
+        } catch {
+            // Conflict, verify failure, no chip, timeout, disconnect, and malformed
+            // responses all invalidate the expected-value snapshot. Never replay them.
+            invalidateMercurySnapshot()
+            failMercury(mutationFailureMessage(error))
+        }
+    }
+
+    /// Convenience for tests and non-text callers; the same bounded input path is used.
+    public func setMercuryRides(_ rides: UInt) async {
+        targetMercuryRidesText = String(rides)
+        await setMercuryRides()
+    }
+
+    private var parsedTargetMercuryRides: UInt? {
+        guard !targetMercuryRidesText.isEmpty,
+              targetMercuryRidesText.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+              let value = UInt(targetMercuryRidesText),
+              (MercuryRideCodec.minimumRides...MercuryRideCodec.maximumRides).contains(value) else {
+            return nil
+        }
+        return value
+    }
+
+    private func actualValues(
+        for response: BridgeMercuryMutationResponse,
+        matching request: BridgeMercuryMutationRequest
+    ) throws -> (block5: String, block6: String) {
+        guard Set(response.results.map(\.block)) == Set(request.mutations.map(\.block)),
+              response.results.allSatisfy({ result in
+                  request.mutations.contains {
+                      $0.block == result.block && $0.expected == result.expected && $0.desired == result.desired
+                  }
+              }),
+              let block5 = response.results.first(where: { $0.block == 5 })?.actual,
+              let block6 = response.results.first(where: { $0.block == 6 })?.actual else {
+            throw BridgeClientError.invalidResponse
+        }
+        return (block5, block6)
+    }
+
+    private func applyMercurySnapshot(block5: String, block6: String) {
+        guard let raw5 = UInt32(block5, radix: 16), let raw6 = UInt32(block6, radix: 16) else {
+            invalidateMercurySnapshot()
+            failMercury("The bridge returned invalid Mercury mirror values. Read Mercury rides again.")
+            return
+        }
+        lastMercuryBlock5Value = block5
+        lastMercuryBlock6Value = block6
+        let read = MercuryMirrorResolver.resolve(block5: raw5, block6: raw6)
+        lastMercuryRead = read
+        // Keep unknown/malformed diagnostics visible, but never let them authorize
+        // a write. The resolver must positively identify a Mercury ride value.
+        mercuryWriteSnapshot = read.status == .success && read.rides != nil
+            ? MercuryWriteSnapshot(block5: block5, block6: block6)
+            : nil
+    }
+
+    private var isWritableMercurySnapshot: Bool {
+        mercuryWriteSnapshot != nil && lastMercuryRead?.status == .success && lastMercuryRead?.rides != nil
     }
 
     private func clearLocalCredential() {
@@ -213,6 +398,7 @@ public final class BridgeConnectionModel: ObservableObject {
             client?.clearCredential()
             client = nil
             lastBlock5Value = nil
+            clearMercurySnapshot()
             state = .unconfigured
             message = "Saved pairing revoked and removed."
         } catch {
@@ -223,9 +409,53 @@ public final class BridgeConnectionModel: ObservableObject {
         }
     }
 
+    private func handleUnauthorized() {
+        try? credentialStore.remove()
+        client?.clearCredential()
+        client = nil
+        lastBlock5Value = nil
+        clearMercurySnapshot()
+        state = .authenticationRequired
+        message = BridgeClientError.unauthorized.localizedDescription
+    }
+
+    private func clearMercurySnapshot() {
+        mercuryWriteSnapshot = nil
+        lastMercuryBlock5Value = nil
+        lastMercuryBlock6Value = nil
+        lastMercuryRead = nil
+    }
+
+    private func invalidateMercurySnapshot() {
+        clearMercurySnapshot()
+    }
+
     private func restoreStateAfterCancellation() {
         state = isPaired ? .connected : .unconfigured
         message = nil
+    }
+
+    private func failMercury(_ detail: String) {
+        state = .failed(detail)
+        message = detail
+    }
+
+    private func mutationFailureMessage(_ error: Error) -> String {
+        if case let BridgeClientError.server(code, _, _) = error, code == "conflict" {
+            return "Mercury set conflicted with a changed token. No blocks were written and no retry was sent; read Mercury rides again before setting a value."
+        }
+        if case let BridgeClientError.server(code, _, _) = error, code == "no_chip" {
+            return "No supported T55xx chip was found. No retry was sent; read Mercury rides again after checking the token."
+        }
+        if let bridgeError = error as? BridgeClientError {
+            return "Mercury set failed: \(bridgeError.localizedDescription) No retry was sent; read Mercury rides again before setting a value."
+        }
+        return "Mercury set failed. No retry was sent; read Mercury rides again before setting a value."
+    }
+
+    private func errorDescription(_ error: Error) -> String {
+        if let bridgeError = error as? BridgeClientError { return bridgeError.localizedDescription }
+        return "Check the local connection."
     }
 
     private func fail(with error: Error) {

@@ -232,6 +232,50 @@ public sealed class BridgeOperationGate
         ExecuteAsync(operation, ct, _defaultWaitTimeout, operationTimeout: null);
 
     /// <summary>
+    /// Waits using the request token, but once the operation starts only the server-owned
+    /// deadline is used. This is required for mutations: a disconnected client must not
+    /// cancel verification or rollback.
+    /// </summary>
+    public async Task<T> ExecuteDetachedAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken requestCt,
+        TimeSpan? waitTimeout,
+        TimeSpan operationTimeout)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (operationTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(operationTimeout));
+        if (waitTimeout.HasValue)
+            ValidateWaitTimeout(waitTimeout.Value, nameof(waitTimeout));
+
+        using var waitCts = waitTimeout is null ? null : CancellationTokenSource.CreateLinkedTokenSource(requestCt);
+        if (waitCts is not null)
+            waitCts.CancelAfter(waitTimeout.GetValueOrDefault());
+        try
+        {
+            await _semaphore.WaitAsync(waitCts?.Token ?? requestCt).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!requestCt.IsCancellationRequested && waitCts?.IsCancellationRequested == true)
+        {
+            throw new BridgeHardwareException(BridgeHardwareError.Busy, "The bridge is busy with another hardware operation.");
+        }
+
+        using var operationCts = new CancellationTokenSource(operationTimeout);
+        try
+        {
+            return await operation(operationCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (operationCts.IsCancellationRequested && !requestCt.IsCancellationRequested)
+        {
+            throw HardwareTimeout();
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    /// <summary>
     /// Waits for the gate, then runs the operation with an independent execution deadline.
     /// The wait timeout is measured from this call; operationTimeout starts only after the gate is acquired.
     /// </summary>

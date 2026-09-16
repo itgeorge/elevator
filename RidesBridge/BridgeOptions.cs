@@ -29,6 +29,12 @@ public sealed record BridgeOptions
     /// </summary>
     public TimeSpan HardwareExecutionTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
+    /// <summary>
+    /// Independent budget for best-effort verification rollback after a mutation failure.
+    /// The default keeps wait, execution, and recovery within the tablet's 30-second deadline.
+    /// </summary>
+    public TimeSpan HardwareRecoveryTimeout { get; init; } = TimeSpan.FromSeconds(4);
+
     public string EffectivePairedClientsPath => PairedClientsPath ?? Path.Combine(DataDirectory, "paired-clients.json");
 
     public BridgeOptions Validate()
@@ -40,6 +46,11 @@ public sealed record BridgeOptions
             throw new BridgeConfigurationException("OperationWaitTimeout must be greater than zero and less than 30 seconds.");
         if (HardwareExecutionTimeout <= TimeSpan.Zero || HardwareExecutionTimeout >= TimeSpan.FromSeconds(30))
             throw new BridgeConfigurationException("HardwareExecutionTimeout must be greater than zero and less than 30 seconds.");
+        if (HardwareRecoveryTimeout <= TimeSpan.Zero || HardwareRecoveryTimeout == Timeout.InfiniteTimeSpan
+            || HardwareRecoveryTimeout >= TimeSpan.FromSeconds(30))
+            throw new BridgeConfigurationException("HardwareRecoveryTimeout must be finite, greater than zero, and less than 30 seconds.");
+        if (OperationWaitTimeout + HardwareExecutionTimeout + HardwareRecoveryTimeout >= TimeSpan.FromSeconds(30))
+            throw new BridgeConfigurationException("OperationWaitTimeout, HardwareExecutionTimeout, and HardwareRecoveryTimeout must total less than 30 seconds.");
         if (string.IsNullOrWhiteSpace(DataDirectory) || !Path.IsPathFullyQualified(DataDirectory))
             throw new BridgeConfigurationException("DataDirectory must be an absolute path.");
         if (!string.IsNullOrWhiteSpace(PairedClientsPath) && !Path.IsPathFullyQualified(PairedClientsPath))
@@ -62,6 +73,7 @@ public sealed record BridgeOptions
         var lifetime = configuration["Bridge:PairingLifetimeSeconds"] ?? configuration["BRIDGE_PAIRING_LIFETIME_SECONDS"];
         var operationWait = configuration["Bridge:OperationWaitTimeoutSeconds"] ?? configuration["BRIDGE_OPERATION_WAIT_TIMEOUT_SECONDS"];
         var hardwareExecution = configuration["Bridge:HardwareExecutionTimeoutSeconds"] ?? configuration["BRIDGE_HARDWARE_EXECUTION_TIMEOUT_SECONDS"];
+        var hardwareRecovery = configuration["Bridge:HardwareRecoveryTimeoutSeconds"] ?? configuration["BRIDGE_HARDWARE_RECOVERY_TIMEOUT_SECONDS"];
 
         if (!bool.TryParse(auto, out var autoDiscover))
             autoDiscover = true;
@@ -69,8 +81,12 @@ public sealed record BridgeOptions
             seconds = 120;
         if (!double.TryParse(operationWait, out var operationWaitSeconds))
             operationWaitSeconds = 5;
-        if (!double.TryParse(hardwareExecution, out var hardwareExecutionSeconds))
+        if (!double.TryParse(hardwareExecution, out var hardwareExecutionSeconds)
+            || !double.IsFinite(hardwareExecutionSeconds))
             hardwareExecutionSeconds = 20;
+        if (!double.TryParse(hardwareRecovery, out var hardwareRecoverySeconds)
+            || !double.IsFinite(hardwareRecoverySeconds))
+            hardwareRecoverySeconds = 4;
 
         return new BridgeOptions
         {
@@ -83,6 +99,7 @@ public sealed record BridgeOptions
             PairingLifetime = TimeSpan.FromSeconds(seconds),
             OperationWaitTimeout = TimeSpan.FromSeconds(operationWaitSeconds),
             HardwareExecutionTimeout = TimeSpan.FromSeconds(hardwareExecutionSeconds),
+            HardwareRecoveryTimeout = TimeSpan.FromSeconds(hardwareRecoverySeconds),
         };
     }
 
