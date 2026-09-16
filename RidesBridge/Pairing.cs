@@ -217,25 +217,36 @@ public sealed class FilePairedClientStore : IPairedClientStore
 
 public sealed class BridgeOperationGate
 {
+    public static readonly TimeSpan DefaultWaitTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MaximumWaitTimeout = TimeSpan.FromSeconds(30);
+
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-    private readonly TimeSpan? _defaultWaitTimeout;
+    private readonly TimeSpan _defaultWaitTimeout;
 
     public BridgeOperationGate(TimeSpan? defaultWaitTimeout = null)
     {
-        if (defaultWaitTimeout.HasValue && defaultWaitTimeout.Value <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(defaultWaitTimeout));
-        _defaultWaitTimeout = defaultWaitTimeout;
+        _defaultWaitTimeout = ValidateWaitTimeout(defaultWaitTimeout ?? DefaultWaitTimeout, nameof(defaultWaitTimeout));
     }
 
     public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
-        ExecuteAsync(operation, ct, _defaultWaitTimeout);
+        ExecuteAsync(operation, ct, _defaultWaitTimeout, operationTimeout: null);
 
+    /// <summary>
+    /// Waits for the gate, then runs the operation with an independent execution deadline.
+    /// The wait timeout is measured from this call; operationTimeout starts only after the gate is acquired.
+    /// </summary>
     public async Task<T> ExecuteAsync<T>(
         Func<CancellationToken, Task<T>> operation,
         CancellationToken ct,
-        TimeSpan? waitTimeout)
+        TimeSpan? waitTimeout,
+        TimeSpan? operationTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(operation);
+        if (operationTimeout.HasValue && operationTimeout.Value <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(operationTimeout));
+        if (waitTimeout.HasValue)
+            ValidateWaitTimeout(waitTimeout.Value, nameof(waitTimeout));
+
         using var waitCts = waitTimeout is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct);
         if (waitCts is not null && waitTimeout.HasValue)
             waitCts.CancelAfter(waitTimeout.GetValueOrDefault());
@@ -248,13 +259,37 @@ public sealed class BridgeOperationGate
             throw new BridgeHardwareException(BridgeHardwareError.Busy, "The bridge is busy with another hardware operation.");
         }
 
+        using var operationCts = operationTimeout is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (operationCts is not null && operationTimeout.HasValue)
+            operationCts.CancelAfter(operationTimeout.GetValueOrDefault());
+
         try
         {
-            return await operation(ct).ConfigureAwait(false);
+            var result = await operation(operationCts?.Token ?? ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (operationCts?.IsCancellationRequested == true)
+                throw HardwareTimeout();
+            return result;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && operationCts?.IsCancellationRequested == true)
+        {
+            throw HardwareTimeout();
         }
         finally
         {
             _semaphore.Release();
         }
+    }
+
+    private static BridgeHardwareException HardwareTimeout() =>
+        new(BridgeHardwareError.Timeout, "Proxmark3 operation timed out.");
+
+    private static TimeSpan ValidateWaitTimeout(TimeSpan value, string parameterName)
+    {
+        if (value <= TimeSpan.Zero || value >= MaximumWaitTimeout)
+            throw new ArgumentOutOfRangeException(parameterName, "The gate wait timeout must be greater than zero and less than 30 seconds.");
+        return value;
     }
 }

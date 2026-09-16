@@ -26,7 +26,7 @@ public enum BridgeClientError: Error, Equatable, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalidBaseURL(let reason):
-            return "Enter a local HTTP bridge URL with an explicit port. \(reason)"
+            return "Enter a local HTTP bridge address. \(reason)"
         case .invalidPIN:
             return "PIN must contain exactly six digits."
         case .missingCredential:
@@ -38,7 +38,7 @@ public enum BridgeClientError: Error, Equatable, LocalizedError, Sendable {
         case .unreachable:
             return "Could not reach the bridge. Check its local IP, port, and Wi-Fi."
         case .invalidJSON, .invalidResponse:
-            return "The bridge returned an invalid response. Check that it is the expected API."
+            return "The bridge returned an invalid or incompatible response. Check that it is a healthy v1 bridge."
         case .server(let code, let message, _):
             return "Bridge error \(code): \(message)"
         }
@@ -49,12 +49,21 @@ public enum BridgeClientError: Error, Equatable, LocalizedError, Sendable {
 public final class BridgeClient: @unchecked Sendable {
     public let baseURL: URL
     private let session: URLSession
+    private let healthRetryDelay: @Sendable () async throws -> Void
     private let credentialLock = NSLock()
     private var credential: BridgeCredential?
 
-    public init(baseURL: URL, session: URLSession = .shared, credential: BridgeCredential? = nil) throws {
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        credential: BridgeCredential? = nil,
+        healthRetryDelay: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+    ) throws {
         self.baseURL = try Self.normalizeBaseURL(baseURL)
         self.session = session
+        self.healthRetryDelay = healthRetryDelay
         if let credential {
             let credentialURL = try Self.normalizeBaseURL(credential.baseURL)
             guard credentialURL == self.baseURL,
@@ -68,13 +77,31 @@ public final class BridgeClient: @unchecked Sendable {
         }
     }
 
-    public convenience init(baseURLString: String, session: URLSession = .shared) throws {
-        try self.init(baseURL: Self.normalizeBaseURL(baseURLString), session: session)
+    public convenience init(
+        baseURLString: String,
+        session: URLSession = .shared,
+        healthRetryDelay: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+    ) throws {
+        try self.init(
+            baseURL: Self.normalizeBaseURL(baseURLString),
+            session: session,
+            healthRetryDelay: healthRetryDelay
+        )
     }
 
     public static func normalizeBaseURL(_ string: String) throws -> URL {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else {
+        guard !trimmed.isEmpty else {
+            throw BridgeClientError.invalidBaseURL("The URL is missing.")
+        }
+
+        // The UI accepts the bridge's concise direct address. Add the scheme before
+        // asking Foundation to parse it so `192.168.1.20:5080` is not mistaken for
+        // a URL whose scheme is `192.168.1.20`.
+        let candidate = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
+        guard let url = URL(string: candidate) else {
             throw BridgeClientError.invalidBaseURL("The URL is malformed.")
         }
         return try normalizeBaseURL(url)
@@ -95,8 +122,12 @@ public final class BridgeClient: @unchecked Sendable {
         guard let host = components.host?.lowercased(), !host.isEmpty else {
             throw BridgeClientError.invalidBaseURL("A direct local IPv4 address or localhost is required.")
         }
-        guard let port = components.port, (1...65535).contains(port) else {
-            throw BridgeClientError.invalidBaseURL("An explicit TCP port is required.")
+        guard !hasEmptyPort(in: url.absoluteString) else {
+            throw BridgeClientError.invalidBaseURL("The TCP port is missing after the colon.")
+        }
+        let port = components.port ?? 5080
+        guard (1...65535).contains(port) else {
+            throw BridgeClientError.invalidBaseURL("The TCP port must be between 1 and 65535.")
         }
         guard host == "localhost" || isPrivateIPv4(host) else {
             throw BridgeClientError.invalidBaseURL("Only localhost or a private IPv4 address is allowed.")
@@ -140,14 +171,26 @@ public final class BridgeClient: @unchecked Sendable {
 
     public func health() async throws -> BridgeHealthResponse {
         let data = try await send(path: "api/v1/health", method: "GET", body: nil, requiresAuthentication: false)
-        return try decode(BridgeHealthResponse.self, data: data)
+        let response = try decode(BridgeHealthResponse.self, data: data)
+        guard response.status.caseInsensitiveCompare("ok") == .orderedSame,
+              response.apiVersion == "v1" else {
+            throw BridgeClientError.invalidResponse
+        }
+        return response
     }
 
     @discardableResult
     public func pair(pin: String) async throws -> BridgeCredential {
         guard Self.isSixDigitPIN(pin) else { throw BridgeClientError.invalidPIN }
+        try await preflightHealth()
         let body = try JSONEncoder().encode(BridgePairRequest(pin: pin))
-        let data = try await send(path: "api/v1/pair", method: "POST", body: body, requiresAuthentication: false)
+        let data = try await send(
+            path: "api/v1/pair",
+            method: "POST",
+            body: body,
+            requiresAuthentication: false,
+            ephemeralSecrets: [pin]
+        )
         let response = try decode(BridgePairResponse.self, data: data)
         let newCredential = BridgeCredential(baseURL: baseURL, accessToken: response.accessToken, tokenType: response.tokenType)
         withCredentialLock { credential = newCredential }
@@ -169,7 +212,13 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
-    private func send(path: String, method: String, body: Data?, requiresAuthentication: Bool) async throws -> Data {
+    private func send(
+        path: String,
+        method: String,
+        body: Data?,
+        requiresAuthentication: Bool,
+        ephemeralSecrets: [String] = []
+    ) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = method
         request.httpBody = body
@@ -215,7 +264,11 @@ public final class BridgeClient: @unchecked Sendable {
         guard (200...299).contains(http.statusCode) else {
             do {
                 let error = try decode(BridgeErrorResponse.self, data: data)
-                throw BridgeClientError.server(code: error.code, message: sanitizedServerMessage(error.message), statusCode: http.statusCode)
+                throw BridgeClientError.server(
+                    code: sanitizedServerValue(error.code, ephemeralSecrets: ephemeralSecrets),
+                    message: sanitizedServerValue(error.message, ephemeralSecrets: ephemeralSecrets),
+                    statusCode: http.statusCode
+                )
             } catch let error as BridgeClientError {
                 throw error
             } catch {
@@ -233,19 +286,54 @@ public final class BridgeClient: @unchecked Sendable {
         }
     }
 
+    private func preflightHealth() async throws {
+        do {
+            _ = try await health()
+        } catch BridgeClientError.unreachable {
+            // iOS may report the first local-network request as unreachable while
+            // the permission prompt transitions. Only readiness is retried; the
+            // one-time PIN endpoint is deliberately never retried.
+            try await healthRetryDelay()
+            _ = try await health()
+        }
+    }
+
     private func credentialSnapshot() -> BridgeCredential? {
         withCredentialLock { credential }
     }
 
-    private func sanitizedServerMessage(_ message: String) -> String {
-        guard let credential = credentialSnapshot(), !credential.accessToken.isEmpty else { return message }
-        return message.replacingOccurrences(of: credential.accessToken, with: "[redacted]")
+    private func sanitizedServerValue(_ value: String, ephemeralSecrets: [String]) -> String {
+        var sanitized = value
+        for secret in ephemeralSecrets where !secret.isEmpty {
+            sanitized = sanitized.replacingOccurrences(of: secret, with: "[redacted]")
+        }
+        if let credential = credentialSnapshot(), !credential.accessToken.isEmpty {
+            sanitized = sanitized.replacingOccurrences(of: credential.accessToken, with: "[redacted]")
+        }
+        return sanitized
     }
 
     private func withCredentialLock<T>(_ body: () -> T) -> T {
         credentialLock.lock()
         defer { credentialLock.unlock() }
         return body()
+    }
+
+    private static func hasEmptyPort(in absoluteURL: String) -> Bool {
+        guard let separator = absoluteURL.range(of: "://") else { return false }
+        let authorityStart = separator.upperBound
+        let authorityEnd = absoluteURL[authorityStart...].firstIndex { "/?#".contains($0) } ?? absoluteURL.endIndex
+        var authority = absoluteURL[authorityStart..<authorityEnd]
+        if let credentialsEnd = authority.lastIndex(of: "@") {
+            authority = authority[authority.index(after: credentialsEnd)...]
+        }
+
+        if authority.first == "[" {
+            guard let closingBracket = authority.lastIndex(of: "]") else { return false }
+            return authority[authority.index(after: closingBracket)...] == ":"
+        }
+        guard let colon = authority.lastIndex(of: ":") else { return false }
+        return authority[authority.index(after: colon)...].isEmpty
     }
 
     private static func isPrivateIPv4(_ host: String) -> Bool {

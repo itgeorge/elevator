@@ -321,13 +321,13 @@ Use a temporary root screen from `RidesTabletApp`; do not delete or redesign Con
 
 ## Physical acceptance
 
-- [ ] Run the bridge on the Mac with PM3 and black card present; record bind URL, API version, and PM3 port without recording secrets.
-- [ ] Pair the physical iPad through manual direct-IP URL and PIN.
-- [ ] Tap `Read block 5` once and compare the returned value with a direct read-only PM3 read.
-- [ ] Repeat the end-to-end read over the iPhone 13 Pro hotspot; no internet-dependent call may be required.
-- [ ] Verify bridge restart/reconnect behavior matches the documented token-persistence choice.
-- [ ] Verify no blocks were written and no full dump occurred.
-- [ ] Record exact test commands/results and update this plan in the slice commit.
+- [x] Run the bridge on the Mac with PM3 and black card present; record bind URL, API version, and PM3 port without recording secrets.
+- [x] Pair the physical iPad through manual direct-IP URL and PIN.
+- [x] Tap `Read block 5` once and compare the returned value with a direct read-only PM3 read.
+- [x] Repeat the end-to-end read over the iPhone 13 Pro hotspot; no internet-dependent call may be required.
+- [x] Verify bridge restart/reconnect behavior matches the documented token-persistence choice.
+- [x] Verify no blocks were written and no full dump occurred.
+- [x] Record exact test commands/results and update this plan in the slice commit.
 
 ## Acceptance
 
@@ -346,6 +346,11 @@ Use a temporary root screen from `RidesTabletApp`; do not delete or redesign Con
 - iPad client (2026-09-16): added strict v1 DTO decoding, local direct-IP URL validation, an injected `URLSession` client with bearer authorization, explicit 30-second/no-cache/no-retry requests, cancellation/error mapping, and synchronized credential access. Keychain persistence is behind `BridgeCredentialStore`; save failures revoke the newly issued bearer or retain it only for an explicit Forget retry. Forget calls the authenticated server revocation endpoint and keeps credentials when revocation fails so a live bearer is not silently orphaned.
 - Temporary iPad UI (2026-09-16): app startup now routes to a diagnostic URL/PIN Pair/Forget/read-block-5 screen while the Concept A `ContentView` remains intact. The app plist contains `NSLocalNetworkUsageDescription` and only `NSAllowsLocalNetworking`; there is no global arbitrary-load exemption. The URL field starts blank and directs the operator to the private URL printed by the Mac bridge.
 - iPad tests (2026-09-16): the focused bridge suite passed 21/21 and an independent full `xcodebuild test -project RidesTablet/RidesTablet.xcodeproj -scheme RidesTablet -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'` passed 40/40, preserving the original 19 tests. The independent full non-integration .NET run again passed 450 with 1 skipped. `plutil -lint`, Xcode project listing, and `git diff --check` passed; only AppIntents metadata notices were emitted. No physical device, USB, PM3, or card operation occurred.
+- Physical acceptance (2026-09-16): on the iPhone 13 Pro hotspot, the Mac bridge bound explicitly to `http://172.20.10.4:5080`, reported API `v1` / bridge `1.0.0`, and used `/dev/cu.usbmodem11301`. The physical iPad Air 4 paired by direct URL and a terminal-only PIN. The first iOS local-network permission transition required a second Pair tap; the client now accepts concise `IP[:port]` input and performs a retryable unauthenticated health preflight before consuming the one-time PIN.
+- Physical defect and repair (2026-09-16): the first authenticated read succeeded, but the original adapter failed to release its private operation semaphore afterward. A second token read therefore showed no PM3 activity, timed out, and blocked graceful shutdown while retaining the serial port. A forced read-only-process cleanup was required; a fresh direct native detect plus block-5-only read of the approved black card returned `3FC6B8C3`. The repair releases the adapter lock on every path, invalidates cross-request detect state, gives queued requests a five-second bound, gives hardware execution a server-owned 20-second cancellation bound, and discards a cancelled/timed-out PM3 session before reconnecting.
+- Physical retest (2026-09-16): the repaired app was installed in place and the repaired bridge restarted with the same one-way-verifier store. The iPad restored its Keychain credential without URL/PIN re-entry. The operator successfully read the approved black card, swapped in another token and read it, then restored and successfully read the black card again. All traffic remained on the iPhone hotspot; no internet call was needed. Final bridge shutdown completed gracefully and released both TCP port 5080 and `/dev/cu.usbmodem11301`.
+- Physical safety: the bridge and direct comparison issued only detect plus explicit page-0 block-5 reads. No full dump, tune, or write occurred; blocks 0/7 were never written, and no explicit block read other than block 5 was requested.
+- Repair verification (2026-09-16): `dotnet test ElevatorTokens.sln --filter 'Category!=Integration&Category!=IntegrationParity' --no-restore` passed 471 with 1 skipped and 0 failed; `dotnet build ElevatorTokens.sln --no-restore -warnaserror` completed with 0 warnings/errors. `xcodebuild test -project RidesTablet/RidesTablet.xcodeproj -scheme RidesTablet -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'` passed 49/49. Bridge-focused tests passed 62/62 and Swift bridge-focused tests passed 30/30. `git diff --check` passed.
 - Assumptions: Manual URL + PIN is intentionally first. Bonjour/QR convenience must not block this slice. Physical runs will explicitly bind the current hotspot/private Mac address (or intentionally choose wildcard); loopback remains the safe development default.
 
 ---
