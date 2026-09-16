@@ -2,17 +2,27 @@ import SwiftUI
 
 /// Temporary Slice 2 Mercury diagnostic screen. Concept A remains in ContentView for later integration.
 public struct BridgeConnectionView: View {
+    public static let addressOverrideEnvironmentKey = "RIDES_BRIDGE_ADDRESS_OVERRIDE"
+
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
+    @State private var didApplyLaunchAddressOverride = false
+    private let launchAddressOverride: String?
 
     @MainActor
-    public init() {
+    public init(
+        environmentLookup: @escaping @Sendable () -> String? = {
+            ProcessInfo.processInfo.environment[BridgeConnectionView.addressOverrideEnvironmentKey]
+        }
+    ) {
         _model = StateObject(wrappedValue: BridgeConnectionModel())
+        launchAddressOverride = environmentLookup()
     }
 
     @MainActor
-    public init(model: BridgeConnectionModel) {
+    public init(model: BridgeConnectionModel, launchAddressOverride: String? = nil) {
         _model = StateObject(wrappedValue: model)
+        self.launchAddressOverride = launchAddressOverride
     }
 
     public var body: some View {
@@ -27,6 +37,13 @@ public struct BridgeConnectionView: View {
                     Text("Enter the Mac's private IPv4 address or localhost. Port defaults to 5080.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+
+                    if model.hasSavedCredential && model.isPaired && model.hasEnteredBridgeAddressChange {
+                        Button("Use entered address") {
+                            Task { await model.useEnteredBridgeAddress() }
+                        }
+                        .disabled(!model.canUseEnteredBridgeAddress)
+                    }
 
                     SecureField("Six-digit PIN", text: $pin)
                         .textContentType(.oneTimeCode)
@@ -122,12 +139,17 @@ public struct BridgeConnectionView: View {
             }
             .navigationTitle("Bridge Diagnostic")
         }
+        .task {
+            guard !didApplyLaunchAddressOverride else { return }
+            didApplyLaunchAddressOverride = true
+            await model.applyLaunchAddressOverride(launchAddressOverride)
+        }
     }
 
     private var statusSymbol: String {
         switch model.state {
         case .connected, .restored: "checkmark.circle.fill"
-        case .pairing, .reading, .readingMercury, .settingMercury, .forgetting: "arrow.triangle.2.circlepath"
+        case .pairing, .reading, .readingMercury, .settingMercury, .relocating, .forgetting: "arrow.triangle.2.circlepath"
         case .failed, .authenticationRequired: "exclamationmark.triangle.fill"
         case .unconfigured: "link.badge.plus"
         }

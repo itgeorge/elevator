@@ -86,6 +86,8 @@ final class BridgeContractTests: XCTestCase {
             Data(#"{"block":5,"value":"a1B2C3D4"}"#.utf8),
             Data(#"{"block":5,"value":"A1B2C3D"}"#.utf8),
             Data(#"{"block":4,"value":"A1B2C3D4"}"#.utf8),
+            Data(#"{"version":"v1","paired":false}"#.utf8),
+            Data(#"{"version":"v1","paired":true,"extra":false}"#.utf8),
             Data(#"not-json"#.utf8)
         ]
         XCTAssertThrowsError(try decoder.decode(BridgePairResponse.self, from: malformed[0]))
@@ -94,7 +96,9 @@ final class BridgeContractTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(BridgeBlockResponse.self, from: malformed[3]))
         XCTAssertThrowsError(try decoder.decode(BridgeBlockResponse.self, from: malformed[4]))
         XCTAssertThrowsError(try decoder.decode(BridgeBlockResponse.self, from: malformed[5]))
-        XCTAssertThrowsError(try decoder.decode(BridgeHealthResponse.self, from: malformed[6]))
+        XCTAssertThrowsError(try decoder.decode(BridgePairStatusResponse.self, from: malformed[6]))
+        XCTAssertThrowsError(try decoder.decode(BridgePairStatusResponse.self, from: malformed[7]))
+        XCTAssertThrowsError(try decoder.decode(BridgeHealthResponse.self, from: malformed[8]))
     }
 
     func testBaseURLAcceptsConciseLocalInputAndDefaultsPort() throws {
@@ -356,6 +360,57 @@ final class BridgeClientTests: XCTestCase {
             }
         }
         XCTAssertTrue(client.hasCredential)
+    }
+
+    func testPairStatusVerificationUsesCandidateURLBearerAndExactRequestWithoutRetry() async throws {
+        let session = stubSession()
+        let token = "status-token"
+        var requests: [URLRequest] = []
+        StubBridgeURLProtocol.handler = { request in
+            requests.append(request)
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.absoluteString, "http://192.168.1.20:8080/api/v1/pair/status")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
+            XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cache-Control"), "no-cache")
+            XCTAssertEqual(request.timeoutInterval, 30, accuracy: 0.001)
+            XCTAssertNil(request.httpBody)
+            return (response(for: request), Data(#"{"version":"v1","paired":true}"#.utf8))
+        }
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let client = try BridgeClient(
+            baseURL: oldURL,
+            session: session,
+            credential: BridgeCredential(baseURL: oldURL, accessToken: token)
+        )
+
+        let status = try await client.verifyPairing(at: " 192.168.1.20:8080/ ")
+
+        XCTAssertEqual(status.version, "v1")
+        XCTAssertTrue(status.paired)
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(client.baseURL, oldURL)
+    }
+
+    func testPairStatusVerificationTimeoutIsNotRetried() async throws {
+        StubBridgeURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/pair/status")
+            throw URLError(.timedOut)
+        }
+        let url = URL(string: "http://127.0.0.1:8080")!
+        let client = try BridgeClient(
+            baseURL: url,
+            session: stubSession(),
+            credential: BridgeCredential(baseURL: url, accessToken: "status-timeout-token")
+        )
+
+        do {
+            _ = try await client.verifyPairing()
+            XCTFail("Expected timeout")
+        } catch let error as BridgeClientError {
+            XCTAssertEqual(error, .timeout)
+        }
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 1)
     }
 
     func testRevokeUsesAuthenticatedPOST() async throws {
@@ -718,6 +773,174 @@ final class BridgeConnectionModelTests: XCTestCase {
         XCTAssertNil(store.credential)
         XCTAssertTrue(model.message?.contains("Pair again") == true)
         XCTAssertFalse(model.message?.contains("expired-token") == true)
+    }
+
+    func testUseEnteredBridgeAddressVerifiesThenSavesSameBearerAndSwitchesClient() async throws {
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let newURL = URL(string: "http://192.168.1.20:8080")!
+        let token = "relocation-token"
+        let store = InMemoryBridgeCredentialStore(
+            credential: BridgeCredential(baseURL: oldURL, accessToken: token)
+        )
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/pair/status" {
+                XCTAssertEqual(request.url, newURL.appendingPathComponent("api/v1/pair/status"))
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
+                return (response(for: request), Data(#"{"version":"v1","paired":true}"#.utf8))
+            }
+            XCTAssertEqual(request.url, newURL.appendingPathComponent("api/v1/hardware/page0/block5"))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
+            return (response(for: request), Data(#"{"block":5,"value":"A1B2C3D4"}"#.utf8))
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        model.bridgeURLText = " 192.168.1.20:8080/ "
+
+        XCTAssertTrue(model.canUseEnteredBridgeAddress)
+        await model.useEnteredBridgeAddress()
+        XCTAssertEqual(paths, ["/api/v1/pair/status"])
+        XCTAssertEqual(store.credential, BridgeCredential(baseURL: newURL, accessToken: token))
+        XCTAssertEqual(model.bridgeURLText, newURL.absoluteString)
+        XCTAssertEqual(model.state, .connected)
+
+        await model.readBlock5()
+        XCTAssertEqual(paths, ["/api/v1/pair/status", "/api/v1/hardware/page0/block5"])
+        XCTAssertEqual(model.lastBlock5Value, "A1B2C3D4")
+    }
+
+    func testUseEnteredBridgeAddressFailuresRetainOldCredentialAndClient() async throws {
+        enum Failure { case network, unauthorized, invalidResponse, secureSave }
+        let failures: [Failure] = [.network, .unauthorized, .invalidResponse, .secureSave]
+        for failure in failures {
+            StubBridgeURLProtocol.requestCount = 0
+            let oldURL = URL(string: "http://127.0.0.1:8080")!
+            let newURL = URL(string: "http://192.168.1.20:8080")!
+            let token = "relocation-failure-token"
+            let oldCredential = BridgeCredential(baseURL: oldURL, accessToken: token)
+            let store = InMemoryBridgeCredentialStore(credential: oldCredential)
+            if failure == .secureSave { store.setSaveError(BridgeTestError.secureSaveFailed) }
+            var paths: [String] = []
+            StubBridgeURLProtocol.handler = { request in
+                paths.append(request.url!.path)
+                if request.url!.path == "/api/v1/pair/status" {
+                    switch failure {
+                    case .network: throw URLError(.cannotConnectToHost)
+                    case .unauthorized: return (response(for: request, status: 401), Data())
+                    case .invalidResponse: return (response(for: request), Data(#"{"version":"v2","paired":true}"#.utf8))
+                    case .secureSave: return (response(for: request), Data(#"{"version":"v1","paired":true}"#.utf8))
+                    }
+                }
+                XCTAssertEqual(request.url, oldURL.appendingPathComponent("api/v1/hardware/page0/block5"))
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
+                return (response(for: request), Data(#"{"block":5,"value":"A1B2C3D4"}"#.utf8))
+            }
+            let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+            model.bridgeURLText = newURL.absoluteString
+
+            await model.useEnteredBridgeAddress()
+
+            XCTAssertEqual(store.credential, oldCredential, String(describing: failure))
+            XCTAssertEqual(model.bridgeURLText, newURL.absoluteString, String(describing: failure))
+            XCTAssertTrue(model.isPaired, String(describing: failure))
+            XCTAssertFalse(model.message?.contains(token) == true, String(describing: failure))
+            guard case .failed = model.state else {
+                XCTFail("Expected failed relocation for \(failure)")
+                continue
+            }
+
+            // The old client remains usable after every failed candidate attempt.
+            await model.readBlock5()
+            XCTAssertEqual(model.lastBlock5Value, "A1B2C3D4", String(describing: failure))
+            XCTAssertEqual(paths.last, "/api/v1/hardware/page0/block5", String(describing: failure))
+        }
+    }
+
+    func testLaunchAddressOverrideAutoRelocatesExactlyOnceWithNoPairRevokeOrHardware() async throws {
+        StubBridgeURLProtocol.requestCount = 0
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let newURL = URL(string: "http://192.168.1.20:8080")!
+        let token = "launch-override-token"
+        let store = InMemoryBridgeCredentialStore(
+            credential: BridgeCredential(baseURL: oldURL, accessToken: token)
+        )
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url, newURL.appendingPathComponent("api/v1/pair/status"))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
+            return (response(for: request), Data(#"{"version":"v1","paired":true}"#.utf8))
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+
+        await model.applyLaunchAddressOverride(" 192.168.1.20:8080/ ")
+        await model.applyLaunchAddressOverride("192.168.1.20:8080")
+
+        XCTAssertEqual(paths, ["/api/v1/pair/status"])
+        XCTAssertEqual(store.credential, BridgeCredential(baseURL: newURL, accessToken: token))
+        XCTAssertEqual(model.bridgeURLText, newURL.absoluteString)
+        XCTAssertEqual(model.state, .connected)
+    }
+
+    func testAbsentLaunchAddressOverrideDoesNothing() async throws {
+        StubBridgeURLProtocol.requestCount = 0
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let token = "no-launch-override-token"
+        let store = InMemoryBridgeCredentialStore(
+            credential: BridgeCredential(baseURL: oldURL, accessToken: token)
+        )
+        StubBridgeURLProtocol.handler = { request in
+            XCTFail("No launch override request expected: \(request.url!.path)")
+            return (response(for: request, status: 500), Data())
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+
+        await model.applyLaunchAddressOverride(nil)
+
+        XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 0)
+    }
+
+    func testUnpairedLaunchAddressOverrideOnlyPrefillsWithoutPairing() async throws {
+        StubBridgeURLProtocol.requestCount = 0
+        StubBridgeURLProtocol.handler = { request in
+            XCTFail("Unpaired launch override must not send \(request.url!.path)")
+            return (response(for: request, status: 500), Data())
+        }
+        let model = BridgeConnectionModel(credentialStore: InMemoryBridgeCredentialStore(), session: stubSession())
+
+        await model.applyLaunchAddressOverride(" 192.168.1.20:8080 ")
+
+        XCTAssertEqual(model.bridgeURLText, "192.168.1.20:8080")
+        XCTAssertEqual(model.state, .unconfigured)
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 0)
+    }
+
+    func testLaunchAddressOverrideFailureRetainsOldCredentialAndSendsNoPairOrRevoke() async throws {
+        StubBridgeURLProtocol.requestCount = 0
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let token = "failed-launch-override-token"
+        let oldCredential = BridgeCredential(baseURL: oldURL, accessToken: token)
+        let store = InMemoryBridgeCredentialStore(credential: oldCredential)
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.url?.path, "/api/v1/pair/status")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
+            return (response(for: request, status: 401), Data())
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+
+        await model.applyLaunchAddressOverride("192.168.1.20")
+        await model.applyLaunchAddressOverride("192.168.1.20")
+
+        XCTAssertEqual(paths, ["/api/v1/pair/status"])
+        XCTAssertEqual(store.credential, oldCredential)
+        XCTAssertTrue(model.isPaired)
+        XCTAssertEqual(model.state, .failed(BridgeClientError.unauthorized.localizedDescription))
+        XCTAssertFalse(model.message?.contains(token) == true)
     }
 
     func testInvalidURLAndMissingPairingProduceActionableStates() async {

@@ -138,6 +138,28 @@ public sealed class PairingTests
     }
 
     [Test]
+    public async Task PairStatusRequiresBearerAndAuthorizedStatusDoesNotTouchPm3()
+    {
+        await using var host = await BridgeTestHost.CreateAsync();
+
+        var unauthorized = await host.Client.GetAsync("/api/v1/pair/status");
+        Assert.That(unauthorized.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(host.Device.ReadCalls, Is.EqualTo(0));
+
+        var token = await host.PairAsync();
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var authorized = await host.Client.GetAsync("/api/v1/pair/status");
+
+        Assert.That(authorized.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var body = await authorized.Content.ReadAsStringAsync();
+        Assert.That(body, Does.Not.Contain(token));
+        Assert.That(System.Text.Json.JsonSerializer.Deserialize<PairStatusResponse>(
+                body, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
+            Is.EqualTo(new PairStatusResponse("v1", true)));
+        Assert.That(host.Device.ReadCalls, Is.EqualTo(0));
+    }
+
+    [Test]
     public async Task WrongExpiredAndReusedEndpointPinsDoNotIssueTokens()
     {
         await using var host = await BridgeTestHost.CreateAsync();

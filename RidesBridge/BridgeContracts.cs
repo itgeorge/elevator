@@ -1,6 +1,7 @@
 namespace RidesBridge;
 
 public sealed record HealthResponse(string Status, string ApiVersion, string BridgeVersion);
+public sealed record PairStatusResponse(string Version, bool Paired);
 public sealed record BlockReadResponse(int Block, string Value);
 public sealed record MercuryMirrorReadResponse(string Version, string Block5, string Block6);
 public sealed record MercuryMutationRequest(string? Version, IReadOnlyList<MercuryMutation>? Mutations);

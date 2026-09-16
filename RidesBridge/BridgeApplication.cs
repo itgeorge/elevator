@@ -72,6 +72,9 @@ public static class BridgeApplication
 
         app.MapGet("/api/v1/health", () => Results.Ok(new HealthResponse("ok", BridgeOptions.ApiVersion, BridgeOptions.BridgeVersion)));
 
+        // Authenticated, no-hardware liveness check for moving a saved bearer to a new address.
+        app.MapGet("/api/v1/pair/status", () => Results.Ok(new PairStatusResponse(BridgeOptions.ApiVersion, true)));
+
         app.MapPost("/api/v1/pair", async (PairRequest request, PairingCodeService pairing, IPairedClientStore store, CancellationToken ct) =>
         {
             if (request.Pin is null || request.Pin.Length != 6 || request.Pin.Any(c => c is < '0' or > '9'))
@@ -242,7 +245,9 @@ public static class BridgeApplication
     }
 
     private static bool RequiresBearer(PathString path) =>
-        path.StartsWithSegments("/api/v1/hardware") || path.StartsWithSegments("/api/v1/pair/revoke");
+        path.StartsWithSegments("/api/v1/hardware")
+        || path.StartsWithSegments("/api/v1/pair/revoke")
+        || path.StartsWithSegments("/api/v1/pair/status");
 
     private static string CreateBearerToken()
     {
