@@ -82,6 +82,29 @@ public struct BridgeHealthResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// Strict v1 response for the authenticated no-hardware pairing status check.
+public struct BridgePairStatusResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let paired: Bool
+
+    public init(version: String = "v1", paired: Bool = true) throws {
+        guard version == "v1", paired else {
+            throw BridgeContractError.invalidPairStatus
+        }
+        self.version = version
+        self.paired = paired
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "paired"])
+        try self.init(
+            version: container.decode(String.self, forKey: .version),
+            paired: container.decode(Bool.self, forKey: .paired)
+        )
+    }
+}
+
 public struct BridgeBlockResponse: Codable, Equatable, Sendable {
     public let block: Int
     public let value: String
@@ -366,6 +389,7 @@ public struct BridgeMercuryMutationResponse: Codable, Equatable, Sendable {
 }
 
 public enum BridgeContractError: Error, Equatable, Sendable {
+    case invalidPairStatus
     case invalidBlockValue
     case invalidMercuryMutation
     case invalidMercuryResponse

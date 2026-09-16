@@ -9,6 +9,7 @@ public enum BridgeConnectionState: Equatable, Sendable {
     case reading
     case readingMercury
     case settingMercury
+    case relocating
     case forgetting
     case authenticationRequired
     case failed(String)
@@ -22,6 +23,7 @@ public enum BridgeConnectionState: Equatable, Sendable {
         case .reading: "Reading block 5…"
         case .readingMercury: "Reading Mercury rides…"
         case .settingMercury: "Setting Mercury rides…"
+        case .relocating: "Checking new bridge address…"
         case .forgetting: "Revoking pairing…"
         case .authenticationRequired: "Pairing required"
         case .failed: "Action failed"
@@ -30,14 +32,14 @@ public enum BridgeConnectionState: Equatable, Sendable {
 
     public var isBusy: Bool {
         switch self {
-        case .pairing, .reading, .readingMercury, .settingMercury, .forgetting: true
+        case .pairing, .reading, .readingMercury, .settingMercury, .relocating, .forgetting: true
         default: false
         }
     }
 
     public var isPaired: Bool {
         switch self {
-        case .restored, .connected, .reading, .readingMercury, .settingMercury, .forgetting: true
+        case .restored, .connected, .reading, .readingMercury, .settingMercury, .relocating, .forgetting: true
         default: false
         }
     }
@@ -64,6 +66,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private let healthRetryDelay: @Sendable () async throws -> Void
     private var client: BridgeClient?
     private var mercuryWriteSnapshot: MercuryWriteSnapshot?
+    private var launchAddressOverrideApplied = false
 
     public init(
         credentialStore: any BridgeCredentialStore = KeychainBridgeCredentialStore(),
@@ -90,6 +93,26 @@ public final class BridgeConnectionModel: ObservableObject {
     public var isBusy: Bool { state.isBusy }
     /// A saved credential remains usable for retry/forget even after a transient failure.
     public var isPaired: Bool { client?.hasCredential == true }
+
+    /// Address migration is only offered for a credential that is actually persisted.
+    public var hasSavedCredential: Bool {
+        do { return try credentialStore.load() != nil }
+        catch { return false }
+    }
+
+    /// True when the operator has entered a different normalized address while paired.
+    public var hasEnteredBridgeAddressChange: Bool {
+        guard let client, client.hasCredential else { return false }
+        guard let entered = try? BridgeClient.normalizeBaseURL(bridgeURLText) else {
+            return !bridgeURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return entered != client.baseURL
+    }
+
+    public var canUseEnteredBridgeAddress: Bool {
+        !isBusy && isPaired && hasSavedCredential && hasEnteredBridgeAddressChange
+    }
+
     public var hasFreshMercurySnapshot: Bool { mercuryWriteSnapshot != nil }
     public var resolvedMercuryRides: UInt? { lastMercuryRead?.rides }
     public var mercurySourceBlockNumber: Int? { lastMercuryRead?.sourceBlockNumber }
@@ -187,6 +210,66 @@ public final class BridgeConnectionModel: ObservableObject {
         } catch is CancellationError {
             restoreStateAfterCancellation()
         } catch {
+            fail(with: error)
+        }
+    }
+
+    /// Applies the launch-only address override once. Unpaired sessions are only prefilled;
+    /// paired sessions use the same transactional migration as the manual action.
+    public func applyLaunchAddressOverride(_ value: String?) async {
+        let override = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !override.isEmpty, !launchAddressOverrideApplied else { return }
+        launchAddressOverrideApplied = true
+        bridgeURLText = override
+
+        guard isPaired else { return }
+        await useEnteredBridgeAddress()
+    }
+
+    /// Moves a saved bearer to a new local bridge address transactionally.
+    /// Verification and persistence happen before replacing the active client; failures
+    /// therefore leave the old client and stored credential available for recovery.
+    public func useEnteredBridgeAddress() async {
+        guard !isBusy else { return }
+        guard let oldClient = client, oldClient.hasCredential else {
+            state = .authenticationRequired
+            message = BridgeClientError.missingCredential.localizedDescription
+            return
+        }
+
+        state = .relocating
+        message = nil
+
+        do {
+            guard let savedCredential = try credentialStore.load() else {
+                throw BridgeClientError.missingCredential
+            }
+            let candidateURL = try BridgeClient.normalizeBaseURL(bridgeURLText)
+            let candidateCredential = BridgeCredential(
+                baseURL: candidateURL,
+                accessToken: savedCredential.accessToken,
+                tokenType: savedCredential.tokenType
+            )
+            let candidateClient = try BridgeClient(
+                baseURL: candidateURL,
+                session: session,
+                credential: candidateCredential
+            )
+            _ = try await candidateClient.verifyPairing()
+
+            // Do not alter the active client until secure persistence succeeds.
+            try credentialStore.save(candidateCredential)
+            client = candidateClient
+            bridgeURLText = candidateClient.baseURL.absoluteString
+            state = .connected
+            message = "Bridge address updated. The saved pairing was kept."
+        } catch is CancellationError {
+            state = .connected
+            message = "Address change was cancelled. The previous bridge address remains active."
+        } catch {
+            // oldClient is intentionally retained; it remains the recovery path for every
+            // candidate network, authentication, response, and Keychain failure.
+            _ = oldClient
             fail(with: error)
         }
     }

@@ -179,6 +179,45 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
+    /// Verifies the bearer against this client's normalized local bridge address.
+    /// This is a single authenticated status request; it never retries and never touches hardware.
+    public func verifyPairing() async throws -> BridgePairStatusResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(
+            path: "api/v1/pair/status",
+            method: "GET",
+            body: nil,
+            requiresAuthentication: true
+        )
+        let response = try decode(BridgePairStatusResponse.self, data: data)
+        guard response.version == "v1", response.paired else {
+            throw BridgeClientError.invalidResponse
+        }
+        return response
+    }
+
+    /// Verifies the current bearer at a candidate address without changing this client.
+    /// The candidate is normalized and receives the same bearer only for this check.
+    public func verifyPairing(at candidateBaseURL: URL) async throws -> BridgePairStatusResponse {
+        let normalizedURL = try Self.normalizeBaseURL(candidateBaseURL)
+        guard let current = credentialSnapshot() else { throw BridgeClientError.missingCredential }
+        let candidateCredential = BridgeCredential(
+            baseURL: normalizedURL,
+            accessToken: current.accessToken,
+            tokenType: current.tokenType
+        )
+        let candidate = try BridgeClient(
+            baseURL: normalizedURL,
+            session: session,
+            credential: candidateCredential
+        )
+        return try await candidate.verifyPairing()
+    }
+
+    public func verifyPairing(at candidateBaseURLString: String) async throws -> BridgePairStatusResponse {
+        try await verifyPairing(at: Self.normalizeBaseURL(candidateBaseURLString))
+    }
+
     @discardableResult
     public func pair(pin: String) async throws -> BridgeCredential {
         guard Self.isSixDigitPIN(pin) else { throw BridgeClientError.invalidPIN }
