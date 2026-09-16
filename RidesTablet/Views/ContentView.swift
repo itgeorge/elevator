@@ -29,13 +29,21 @@ struct ContentView: View {
                 VStack(spacing: 22) {
                     topBar
                     conceptContent
+                    Color.clear
+                        .frame(height: BottomChargeAction.scrollReservation)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 34)
-                .padding(.vertical, 22)
+                .padding(.top, 22)
                 .frame(maxWidth: 1180)
                 .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(uiColor: .systemGroupedBackground))
+            .overlay(alignment: .bottom) {
+                BottomChargeAction(model: model)
+                    .frame(height: BottomChargeAction.barHeight)
+            }
             .navigationTitle("Rides")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -111,42 +119,69 @@ private struct OneScreenLayout: View {
                 }
                 .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
 
-                VStack(spacing: 14) {
-                    MainPanel(model: model, minHeight: 470, showsDeltaEquation: showsDeltaEquation)
-                    ChargeButton(model: model, showsReset: false)
-                }
-                .frame(minWidth: 540, maxWidth: .infinity)
+                MainPanel(model: model, showsDeltaEquation: showsDeltaEquation)
+                    .frame(minWidth: 540, maxWidth: .infinity)
             }
             .frame(minWidth: 940, maxWidth: .infinity, alignment: .top)
 
             VStack(spacing: 14) {
                 DetectStrip(model: model, layout: .portrait)
-                MainPanel(model: model, minHeight: 470, showsDeltaEquation: showsDeltaEquation)
+                MainPanel(model: model, showsDeltaEquation: showsDeltaEquation)
                 AptControlRow(model: model)
-                ChargeButton(model: model, showsReset: false)
             }
         }
     }
 }
 
+private struct BottomChargeAction: View {
+    @ObservedObject var model: RidesViewModel
+
+    // ChargeButton is 68pt high, with 12pt of breathing room on each side.
+    // The scroll view reserves that whole bar plus the usual 22pt content gap.
+    static let barHeight: CGFloat = 68 + 12 + 12
+    static let scrollReservation: CGFloat = barHeight + 22
+
+    var body: some View {
+        // Keep the breakpoint identical to OneScreenLayout. The clear first
+        // column preserves the landscape hierarchy without covering it.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                Color.clear
+                    .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
+                    .accessibilityHidden(true)
+
+                ChargeButton(model: model, showsReset: false)
+                    .frame(minWidth: 540, maxWidth: .infinity)
+            }
+            .frame(minWidth: 940, maxWidth: .infinity, alignment: .top)
+
+            ChargeButton(model: model, showsReset: false)
+        }
+        .padding(.horizontal, 34)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+        .frame(maxWidth: 1180)
+        .frame(maxWidth: .infinity)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
 private struct MainPanel: View {
     @ObservedObject var model: RidesViewModel
-    let minHeight: CGFloat
     let showsDeltaEquation: Bool
+
+    private static let statusMinimumHeight: CGFloat = 374
 
     var body: some View {
         Group {
             if case .known = model.state {
-                VStack(spacing: 0) {
-                    KnownControls(model: model, showsDeltaEquation: showsDeltaEquation)
-                    Spacer(minLength: 0)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, minHeight: minHeight, maxHeight: minHeight, alignment: .top)
+                KnownControls(model: model, showsDeltaEquation: showsDeltaEquation)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .top)
             } else {
                 StatusContent(model: model)
                     .padding(16)
-                    .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .center)
+                    .frame(maxWidth: .infinity, minHeight: Self.statusMinimumHeight, alignment: .center)
             }
         }
         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
@@ -232,7 +267,7 @@ private struct StatusContent: View {
             }
         }
         .frame(maxWidth: 560)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Operation status")
