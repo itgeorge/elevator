@@ -60,6 +60,10 @@ public final class BridgeConnectionModel: ObservableObject {
     @Published public private(set) var lastMercuryBlock6Value: String?
     @Published public private(set) var lastMercuryRead: MercuryRideRead?
     @Published public var targetMercuryRidesText: String
+#if DEBUG
+    @Published public private(set) var physicalAcceptanceSummary: BridgePhysicalAcceptanceSummary?
+    @Published public private(set) var physicalAcceptanceFailure: BridgePhysicalAcceptanceFailure?
+#endif
 
     private let credentialStore: any BridgeCredentialStore
     private let session: URLSession
@@ -67,6 +71,9 @@ public final class BridgeConnectionModel: ObservableObject {
     private var client: BridgeClient?
     private var mercuryWriteSnapshot: MercuryWriteSnapshot?
     private var launchAddressOverrideApplied = false
+#if DEBUG
+    private var launchPhysicalAcceptanceAttempted = false
+#endif
 
     public init(
         credentialStore: any BridgeCredentialStore = KeychainBridgeCredentialStore(),
@@ -87,6 +94,10 @@ public final class BridgeConnectionModel: ObservableObject {
         self.lastMercuryBlock6Value = nil
         self.lastMercuryRead = nil
         self.targetMercuryRidesText = ""
+#if DEBUG
+        self.physicalAcceptanceSummary = nil
+        self.physicalAcceptanceFailure = nil
+#endif
         restore()
     }
 
@@ -225,6 +236,28 @@ public final class BridgeConnectionModel: ObservableObject {
         guard isPaired else { return }
         await useEnteredBridgeAddress()
     }
+
+#if DEBUG
+    /// Runs the launch-triggered physical acceptance only with a persisted pairing,
+    /// a live bearer, and a nonbusy model. The attempted flag makes the launch
+    /// trigger one-shot even if SwiftUI recreates or re-enters the task.
+    public func runLaunchPhysicalAcceptanceIfRequested() async {
+        guard !launchPhysicalAcceptanceAttempted else { return }
+        launchPhysicalAcceptanceAttempted = true
+        guard !isBusy, hasSavedCredential, let client, client.hasCredential else { return }
+
+        let result = await BridgePhysicalAcceptanceCoordinator(client: client).run()
+        switch result {
+        case .success(let summary):
+            physicalAcceptanceSummary = summary
+            physicalAcceptanceFailure = nil
+            message = summary.conciseDescription
+        case .failure(let failure):
+            physicalAcceptanceFailure = failure
+            physicalAcceptanceSummary = nil
+        }
+    }
+#endif
 
     /// Moves a saved bearer to a new local bridge address transactionally.
     /// Verification and persistence happen before replacing the active client; failures

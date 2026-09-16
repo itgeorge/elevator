@@ -1,13 +1,46 @@
 import SwiftUI
 
+public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
+    public static let addressOverrideEnvironmentKey = "RIDES_BRIDGE_ADDRESS_OVERRIDE"
+    public static let physicalAcceptanceEnvironmentKey = "RIDES_PHASE2_PHYSICAL_ACCEPTANCE"
+
+    public let addressOverride: String?
+    public let physicalAcceptanceEnabled: Bool
+
+    public init(addressOverride: String? = nil, physicalAcceptanceEnabled: Bool = false) {
+        self.addressOverride = addressOverride
+        self.physicalAcceptanceEnabled = physicalAcceptanceEnabled
+    }
+
+    public init(environment: [String: String]) {
+        self.init(
+            addressOverride: environment[Self.addressOverrideEnvironmentKey],
+            physicalAcceptanceEnabled: environment[Self.physicalAcceptanceEnvironmentKey] == "1"
+        )
+    }
+
+    public init(environmentLookup: @escaping @Sendable (String) -> String?) {
+        self.init(
+            addressOverride: environmentLookup(Self.addressOverrideEnvironmentKey),
+            physicalAcceptanceEnabled: environmentLookup(Self.physicalAcceptanceEnvironmentKey) == "1"
+        )
+    }
+
+    public static var processEnvironment: Self {
+        Self(environment: ProcessInfo.processInfo.environment)
+    }
+}
+
 /// Temporary Slice 2 Mercury diagnostic screen. Concept A remains in ContentView for later integration.
 public struct BridgeConnectionView: View {
-    public static let addressOverrideEnvironmentKey = "RIDES_BRIDGE_ADDRESS_OVERRIDE"
+    public static let addressOverrideEnvironmentKey = BridgeConnectionLaunchConfiguration.addressOverrideEnvironmentKey
+    public static let physicalAcceptanceEnvironmentKey = BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey
 
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
     @State private var didApplyLaunchAddressOverride = false
-    private let launchAddressOverride: String?
+    @State private var didRunLaunchPhysicalAcceptance = false
+    private let launchConfiguration: BridgeConnectionLaunchConfiguration
 
     @MainActor
     public init(
@@ -16,13 +49,28 @@ public struct BridgeConnectionView: View {
         }
     ) {
         _model = StateObject(wrappedValue: BridgeConnectionModel())
-        launchAddressOverride = environmentLookup()
+        launchConfiguration = BridgeConnectionLaunchConfiguration(
+            addressOverride: environmentLookup(),
+            physicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey] == "1"
+        )
+    }
+
+    @MainActor
+    public init(environmentLookup: @escaping @Sendable (String) -> String?) {
+        _model = StateObject(wrappedValue: BridgeConnectionModel())
+        launchConfiguration = BridgeConnectionLaunchConfiguration(environmentLookup: environmentLookup)
     }
 
     @MainActor
     public init(model: BridgeConnectionModel, launchAddressOverride: String? = nil) {
         _model = StateObject(wrappedValue: model)
-        self.launchAddressOverride = launchAddressOverride
+        launchConfiguration = BridgeConnectionLaunchConfiguration(addressOverride: launchAddressOverride)
+    }
+
+    @MainActor
+    public init(model: BridgeConnectionModel, launchConfiguration: BridgeConnectionLaunchConfiguration) {
+        _model = StateObject(wrappedValue: model)
+        self.launchConfiguration = launchConfiguration
     }
 
     public var body: some View {
@@ -142,7 +190,14 @@ public struct BridgeConnectionView: View {
         .task {
             guard !didApplyLaunchAddressOverride else { return }
             didApplyLaunchAddressOverride = true
-            await model.applyLaunchAddressOverride(launchAddressOverride)
+            await model.applyLaunchAddressOverride(launchConfiguration.addressOverride)
+
+#if DEBUG
+            guard !didRunLaunchPhysicalAcceptance else { return }
+            didRunLaunchPhysicalAcceptance = true
+            guard launchConfiguration.physicalAcceptanceEnabled else { return }
+            await model.runLaunchPhysicalAcceptanceIfRequested()
+#endif
         }
     }
 
