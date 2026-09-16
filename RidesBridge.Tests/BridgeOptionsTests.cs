@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using RidesBridge;
 
@@ -26,6 +27,61 @@ public sealed class BridgeOptionsTests
     {
         var ex = Assert.Throws<BridgeConfigurationException>(() => BridgeOptions.ValidateBindUrl(url));
         Assert.That(ex!.Message, Does.Contain("BindUrl"));
+    }
+
+    [Test]
+    public void Validate_DefaultHardwareExecutionTimeoutLeavesMarginBelowTabletDeadline()
+    {
+        var options = new BridgeOptions { BindUrl = "http://127.0.0.1:5080", DataDirectory = Path.GetTempPath() };
+
+        Assert.That(options.OperationWaitTimeout, Is.EqualTo(TimeSpan.FromSeconds(5)));
+        Assert.That(options.HardwareExecutionTimeout, Is.EqualTo(TimeSpan.FromSeconds(20)));
+        Assert.That(() => options.Validate(), Throws.Nothing);
+    }
+
+    [TestCase(0)]
+    [TestCase(30)]
+    [TestCase(31)]
+    public void Validate_RejectsHardwareExecutionTimeoutThatIsNotBelowTabletDeadline(double seconds)
+    {
+        var ex = Assert.Throws<BridgeConfigurationException>(() => new BridgeOptions
+        {
+            BindUrl = "http://127.0.0.1:5080",
+            DataDirectory = Path.GetTempPath(),
+            HardwareExecutionTimeout = TimeSpan.FromSeconds(seconds),
+        }.Validate());
+
+        Assert.That(ex!.Message, Does.Contain("HardwareExecutionTimeout"));
+    }
+
+    [TestCase(0)]
+    [TestCase(30)]
+    [TestCase(31)]
+    public void Validate_RejectsGateWaitTimeoutThatCouldOutliveTabletRequest(double seconds)
+    {
+        var ex = Assert.Throws<BridgeConfigurationException>(() => new BridgeOptions
+        {
+            BindUrl = "http://127.0.0.1:5080",
+            DataDirectory = Path.GetTempPath(),
+            OperationWaitTimeout = TimeSpan.FromSeconds(seconds),
+        }.Validate());
+
+        Assert.That(ex!.Message, Does.Contain("OperationWaitTimeout"));
+    }
+
+    [Test]
+    public void FromConfiguration_ReadsHardwareExecutionTimeoutSeparatelyFromGateWaitTimeout()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Bridge:OperationWaitTimeoutSeconds"] = "7",
+            ["Bridge:HardwareExecutionTimeoutSeconds"] = "19",
+        }).Build();
+
+        var options = BridgeOptions.FromConfiguration(configuration);
+
+        Assert.That(options.OperationWaitTimeout, Is.EqualTo(TimeSpan.FromSeconds(7)));
+        Assert.That(options.HardwareExecutionTimeout, Is.EqualTo(TimeSpan.FromSeconds(19)));
     }
 
     [Test]

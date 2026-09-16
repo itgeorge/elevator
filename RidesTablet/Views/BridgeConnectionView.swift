@@ -19,12 +19,12 @@ public struct BridgeConnectionView: View {
         NavigationStack {
             Form {
                 Section("Local RidesBridge") {
-                    TextField("http://<Mac private IP>:5080", text: $model.bridgeURLText)
+                    TextField("Mac IP or localhost[:port]", text: $model.bridgeURLText)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
 
-                    Text("Enter the URL printed by RidesBridge on the Mac.")
+                    Text("Enter the Mac's private IPv4 address or localhost. Port defaults to 5080.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 

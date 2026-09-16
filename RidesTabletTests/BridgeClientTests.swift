@@ -97,7 +97,10 @@ final class BridgeContractTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(BridgeHealthResponse.self, from: malformed[6]))
     }
 
-    func testBaseURLOnlyAllowsLocalExplicitPortAndNormalizesSlash() throws {
+    func testBaseURLAcceptsConciseLocalInputAndDefaultsPort() throws {
+        XCTAssertEqual(try BridgeClient.normalizeBaseURL(" 192.168.1.20 "), URL(string: "http://192.168.1.20:5080")!)
+        XCTAssertEqual(try BridgeClient.normalizeBaseURL("localhost"), URL(string: "http://localhost:5080")!)
+        XCTAssertEqual(try BridgeClient.normalizeBaseURL("10.0.0.3:8080"), URL(string: "http://10.0.0.3:8080")!)
         XCTAssertEqual(
             try BridgeClient.normalizeBaseURL(" http://192.168.1.20:8080/ "),
             URL(string: "http://192.168.1.20:8080")!
@@ -106,16 +109,20 @@ final class BridgeContractTests: XCTestCase {
         XCTAssertEqual(try BridgeClient.normalizeBaseURL("http://10.0.0.3:1"), URL(string: "http://10.0.0.3:1")!)
     }
 
-    func testBaseURLRejectsHTTPSPublicDNSMissingPortAndPath() {
+    func testBaseURLRejectsHTTPSPublicDNSPathCredentialsQueryAndIPv6() {
         let invalid = [
             "https://192.168.1.2:8080",
+            "https://192.168.1.2",
             "http://8.8.8.8:8080",
             "http://bridge.local:8080",
-            "http://192.168.1.2",
             "http://192.168.1.2:8080/api",
             "http://user:password@192.168.1.2:8080",
+            "192.168.1.2:8080?q=secret",
             "http://192.168.1.2:8080?q=secret",
-            "http://[::1]:8080"
+            "http://192.168.1.2:",
+            "192.168.1.2:",
+            "http://[::1]:8080",
+            "[::1]:8080"
         ]
         for value in invalid {
             XCTAssertThrowsError(try BridgeClient.normalizeBaseURL(value), value)
@@ -136,7 +143,11 @@ final class BridgeClientTests: XCTestCase {
         var requests: [URLRequest] = []
         StubBridgeURLProtocol.handler = { request in
             requests.append(request)
-            if request.url!.path.hasSuffix("/pair") {
+            if request.url!.path == "/api/v1/health" {
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            if request.url!.path == "/api/v1/pair" {
                 XCTAssertEqual(request.httpMethod, "POST")
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
                 let body = try XCTUnwrap(request.httpBody)
@@ -151,7 +162,108 @@ final class BridgeClientTests: XCTestCase {
         _ = try await client.pair(pin: "123456")
         let result = try await client.readBlock5()
         XCTAssertEqual(result.value, "A1B2C3D4")
-        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.count, 3)
+        XCTAssertEqual(requests.map { $0.url?.path }, ["/api/v1/health", "/api/v1/pair", "/api/v1/hardware/page0/block5"])
+    }
+
+    func testPairFailureIsNotRetriedAfterSingleHealthCheck() async throws {
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            XCTAssertEqual(request.url!.path, "/api/v1/pair")
+            return (response(for: request, status: 503), Data(#"{"code":"bridge_busy","message":"Try again."}"#.utf8))
+        }
+        let client = try BridgeClient(baseURLString: "127.0.0.1", session: stubSession())
+        do {
+            _ = try await client.pair(pin: "123456")
+            XCTFail("Expected pair failure")
+        } catch let error as BridgeClientError {
+            XCTAssertEqual(error, .server(code: "bridge_busy", message: "Try again.", statusCode: 503))
+        }
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair"])
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 2)
+    }
+
+    func testPairServerErrorRedactsPINFromCodeMessageAndDescription() async throws {
+        let pin = "123456"
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            XCTAssertEqual(request.url!.path, "/api/v1/pair")
+            return (
+                response(for: request, status: 409),
+                Data(#"{"code":"pin_123456_rejected","message":"Submitted PIN 123456 was echoed by the server."}"#.utf8)
+            )
+        }
+        let client = try BridgeClient(baseURLString: "127.0.0.1", session: stubSession())
+
+        do {
+            _ = try await client.pair(pin: pin)
+            XCTFail("Expected malicious pairing error")
+        } catch let error as BridgeClientError {
+            XCTAssertEqual(
+                error,
+                .server(
+                    code: "pin_[redacted]_rejected",
+                    message: "Submitted PIN [redacted] was echoed by the server.",
+                    statusCode: 409
+                )
+            )
+            XCTAssertFalse(error.localizedDescription.contains(pin))
+        }
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair"])
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 2)
+    }
+
+    func testHealthTimeoutIsNotRetriedAndPairIsNotSent() async throws {
+        var paths: [String] = []
+        var delayCount = 0
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.url!.path, "/api/v1/health")
+            throw URLError(.timedOut)
+        }
+        let client = try BridgeClient(
+            baseURLString: "127.0.0.1",
+            session: stubSession(),
+            healthRetryDelay: { delayCount += 1 }
+        )
+        do {
+            _ = try await client.pair(pin: "123456")
+            XCTFail("Expected health timeout")
+        } catch let error as BridgeClientError {
+            XCTAssertEqual(error, .timeout)
+        }
+        XCTAssertEqual(paths, ["/api/v1/health"])
+        XCTAssertEqual(delayCount, 0)
+    }
+
+    func testPairCancellationIsPreservedWithoutRetry() async throws {
+        var paths: [String] = []
+        var delayCount = 0
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            throw CancellationError()
+        }
+        let client = try BridgeClient(
+            baseURLString: "127.0.0.1",
+            session: stubSession(),
+            healthRetryDelay: { delayCount += 1 }
+        )
+        do {
+            _ = try await client.pair(pin: "123456")
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected: cancellation is not converted to unreachable or retried.
+        }
+        XCTAssertEqual(paths, ["/api/v1/health"])
+        XCTAssertEqual(delayCount, 0)
     }
 
     func testTimeoutAndUnreachableAreMappedActionably() async throws {
@@ -283,10 +395,148 @@ final class BridgeClientTests: XCTestCase {
 
 @MainActor
 final class BridgeConnectionModelTests: XCTestCase {
+    private let healthyResponse = Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8)
+
+    func testPairHealthPreflightHappensBeforePINIsConsumed() async throws {
+        let store = InMemoryBridgeCredentialStore()
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            switch request.url!.path {
+            case "/api/v1/health":
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                return (response(for: request), self.healthyResponse)
+            case "/api/v1/pair":
+                XCTAssertEqual(request.httpMethod, "POST")
+                return (response(for: request), Data(#"{"accessToken":"preflight-token","tokenType":"Bearer"}"#.utf8))
+            default:
+                XCTFail("Unexpected bridge request: \(request.url!.path)")
+                return (response(for: request, status: 500), Data())
+            }
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        model.bridgeURLText = "192.168.1.20"
+
+        await model.pair(pin: "123456")
+
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair"])
+        XCTAssertEqual(model.bridgeURLText, "http://192.168.1.20:5080")
+        XCTAssertEqual(store.credential?.baseURL, URL(string: "http://192.168.1.20:5080")!)
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertNotNil(store.credential)
+    }
+
+    func testPairRetriesOnlyUnreachableHealthOnceBeforePairing() async throws {
+        let store = InMemoryBridgeCredentialStore()
+        var paths: [String] = []
+        var delayCount = 0
+        var healthAttempts = 0
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/health" {
+                healthAttempts += 1
+                if healthAttempts == 1 { throw URLError(.cannotConnectToHost) }
+                return (response(for: request), self.healthyResponse)
+            }
+            XCTAssertEqual(request.url!.path, "/api/v1/pair")
+            return (response(for: request), Data(#"{"accessToken":"retry-health-token","tokenType":"Bearer"}"#.utf8))
+        }
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: stubSession(),
+            healthRetryDelay: { delayCount += 1 }
+        )
+        model.bridgeURLText = "localhost"
+
+        await model.pair(pin: "123456")
+
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/health", "/api/v1/pair"])
+        XCTAssertEqual(healthAttempts, 2)
+        XCTAssertEqual(delayCount, 1)
+        XCTAssertEqual(model.state, .connected)
+    }
+
+    func testFailedHealthPreflightDoesNotSendPairAndLeavesPINForRetry() async throws {
+        let store = InMemoryBridgeCredentialStore()
+        var paths: [String] = []
+        var delayCount = 0
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.url!.path, "/api/v1/health")
+            throw URLError(.cannotConnectToHost)
+        }
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: stubSession(),
+            healthRetryDelay: { delayCount += 1 }
+        )
+        model.bridgeURLText = "192.168.1.20"
+        let pin = "123456"
+
+        await model.pair(pin: pin)
+
+        XCTAssertEqual(pin, "123456")
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/health"])
+        XCTAssertEqual(delayCount, 1)
+        XCTAssertEqual(model.state, .failed(BridgeClientError.unreachable.localizedDescription))
+        XCTAssertNil(store.credential)
+    }
+
+    func testIncompatibleHealthDoesNotConsumePINOrSendPair() async throws {
+        let store = InMemoryBridgeCredentialStore()
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.url!.path, "/api/v1/health")
+            return (response(for: request), Data(#"{"status":"ok","apiVersion":"v2","bridgeVersion":"2.0.0"}"#.utf8))
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        model.bridgeURLText = "192.168.1.20"
+
+        await model.pair(pin: "123456")
+
+        XCTAssertEqual(paths, ["/api/v1/health"])
+        XCTAssertEqual(model.state, .failed(BridgeClientError.invalidResponse.localizedDescription))
+        XCTAssertNil(store.credential)
+    }
+
+    func testPairServerErrorNeverExposesPINInModelState() async throws {
+        let store = InMemoryBridgeCredentialStore()
+        let pin = "123456"
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), self.healthyResponse)
+            }
+            XCTAssertEqual(request.url!.path, "/api/v1/pair")
+            return (
+                response(for: request, status: 409),
+                Data(#"{"code":"pin_123456_rejected","message":"The submitted PIN 123456 was logged."}"#.utf8)
+            )
+        }
+        let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
+        model.bridgeURLText = "127.0.0.1"
+
+        await model.pair(pin: pin)
+
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair"])
+        XCTAssertEqual(
+            model.state,
+            .failed("Bridge error pin_[redacted]_rejected: The submitted PIN [redacted] was logged.")
+        )
+        XCTAssertFalse(model.message?.contains(pin) == true)
+        XCTAssertFalse(String(describing: model.state).contains(pin))
+        XCTAssertNil(store.credential)
+    }
+
     func testPairReadRestoreAndForgetStates() async throws {
         let store = InMemoryBridgeCredentialStore()
         StubBridgeURLProtocol.handler = { request in
-            if request.url!.path.hasSuffix("/pair") {
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), self.healthyResponse)
+            }
+            if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"persisted-token","tokenType":"Bearer"}"#.utf8))
             }
             return (response(for: request), Data(#"{"block":5,"value":"A1B2C3D4"}"#.utf8))
@@ -318,6 +568,9 @@ final class BridgeConnectionModelTests: XCTestCase {
         var paths: [String] = []
         StubBridgeURLProtocol.handler = { request in
             paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
             if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"orphan-prevention-token","tokenType":"Bearer"}"#.utf8))
             }
@@ -328,7 +581,7 @@ final class BridgeConnectionModelTests: XCTestCase {
         let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
         model.bridgeURLText = "http://127.0.0.1:8080"
         await model.pair(pin: "123456")
-        XCTAssertEqual(paths, ["/api/v1/pair", "/api/v1/pair/revoke"])
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair", "/api/v1/pair/revoke"])
         XCTAssertFalse(model.isPaired)
         XCTAssertNil(store.credential)
         guard case .failed(let detail) = model.state else { return XCTFail("Expected secure-save failure") }
@@ -343,6 +596,9 @@ final class BridgeConnectionModelTests: XCTestCase {
         let token = "retain-forget-token"
         var revokeAttempts = 0
         StubBridgeURLProtocol.handler = { request in
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
             if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"retain-forget-token","tokenType":"Bearer"}"#.utf8))
             }
@@ -375,7 +631,10 @@ final class BridgeConnectionModelTests: XCTestCase {
         var paths: [String] = []
         StubBridgeURLProtocol.handler = { request in
             paths.append(request.url!.path)
-            if request.url!.path.hasSuffix("/pair") {
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"successful-forget-token","tokenType":"Bearer"}"#.utf8))
             }
             XCTAssertEqual(request.httpMethod, "POST")
@@ -389,7 +648,7 @@ final class BridgeConnectionModelTests: XCTestCase {
         XCTAssertEqual(model.state, .connected)
         XCTAssertTrue(model.message?.contains("already paired") == true)
         await model.forget()
-        XCTAssertEqual(paths, ["/api/v1/pair", "/api/v1/pair/revoke"])
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair", "/api/v1/pair/revoke"])
         XCTAssertEqual(model.state, .unconfigured)
         XCTAssertFalse(model.isPaired)
         XCTAssertNil(store.credential)
@@ -400,7 +659,10 @@ final class BridgeConnectionModelTests: XCTestCase {
         let store = InMemoryBridgeCredentialStore()
         let token = "failed-forget-token"
         StubBridgeURLProtocol.handler = { request in
-            if request.url!.path.hasSuffix("/pair") {
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"failed-forget-token","tokenType":"Bearer"}"#.utf8))
             }
             return (response(for: request, status: 503), Data(#"{"code":"bridge_busy","message":"Cannot revoke failed-forget-token yet."}"#.utf8))
@@ -419,7 +681,10 @@ final class BridgeConnectionModelTests: XCTestCase {
         let store = InMemoryBridgeCredentialStore()
         let token = "expired-forget-token"
         StubBridgeURLProtocol.handler = { request in
-            if request.url!.path.hasSuffix("/pair") {
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"expired-forget-token","tokenType":"Bearer"}"#.utf8))
             }
             return (response(for: request, status: 401), Data(#"{"code":"unauthorized","message":"Pair again."}"#.utf8))
@@ -437,7 +702,10 @@ final class BridgeConnectionModelTests: XCTestCase {
     func testUnauthorizedClearsStoredCredentialAndRequiresPairing() async throws {
         let store = InMemoryBridgeCredentialStore()
         StubBridgeURLProtocol.handler = { request in
-            if request.url!.path.hasSuffix("/pair") {
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            if request.url!.path == "/api/v1/pair" {
                 return (response(for: request), Data(#"{"accessToken":"expired-token","tokenType":"Bearer"}"#.utf8))
             }
             return (response(for: request, status: 401), Data(#"{"code":"unauthorized","message":"Pair again."}"#.utf8))

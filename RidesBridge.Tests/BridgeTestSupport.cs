@@ -45,6 +45,60 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
     }
 }
 
+internal sealed class FakeBridgePm3Session : IBridgePm3Session
+{
+    private readonly List<string> _calls;
+    private readonly Func<CancellationToken, Task<string>> _read;
+    private readonly Exception? _disposeException;
+
+    public bool Disposed { get; private set; }
+
+    public FakeBridgePm3Session(
+        List<string> calls,
+        Func<CancellationToken, Task<string>>? read = null,
+        Exception? disposeException = null)
+    {
+        _calls = calls;
+        _read = read ?? (_ => Task.FromResult("A1B2C3D4"));
+        _disposeException = disposeException;
+    }
+
+    public Task<bool> IsConnectedAsync(CancellationToken ct = default)
+    {
+        _calls.Add("connected");
+        return Task.FromResult(true);
+    }
+
+    public Task ConnectAsync(CancellationToken ct = default)
+    {
+        _calls.Add("connect");
+        return Task.CompletedTask;
+    }
+
+    public void InvalidateT55DetectCache() => _calls.Add("invalidate");
+
+    public Task EnsureT55SessionActiveAsync(CancellationToken ct = default)
+    {
+        _calls.Add("ensure");
+        return Task.CompletedTask;
+    }
+
+    public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)
+    {
+        _calls.Add("read");
+        return _read(ct);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _calls.Add("dispose");
+        Disposed = true;
+        if (_disposeException is not null)
+            throw _disposeException;
+        return ValueTask.CompletedTask;
+    }
+}
+
 internal sealed class TestClock : TimeProvider
 {
     private DateTimeOffset _now;
@@ -90,11 +144,14 @@ internal sealed class BridgeTestHost : IAsyncDisposable
     public static async Task<BridgeTestHost> CreateAsync(
         FakeBridgePm3Device? device = null,
         string? path = null,
-        ILoggerProvider? loggerProvider = null)
+        ILoggerProvider? loggerProvider = null,
+        BridgeOptions? options = null)
     {
         device ??= new FakeBridgePm3Device();
         path ??= Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"), "paired.json");
-        var options = new BridgeOptions { BindUrl = "http://127.0.0.1:5080", PairedClientsPath = path };
+        options ??= new BridgeOptions { BindUrl = "http://127.0.0.1:5080", PairedClientsPath = path };
+        if (options.PairedClientsPath is null)
+            options = options with { PairedClientsPath = path };
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             ApplicationName = typeof(BridgeApplication).Assembly.GetName().Name,

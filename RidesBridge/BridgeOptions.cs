@@ -20,7 +20,14 @@ public sealed record BridgeOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ElevatorTokens", "RidesBridge");
     public string? PairedClientsPath { get; init; }
     public TimeSpan PairingLifetime { get; init; } = TimeSpan.FromMinutes(2);
-    public TimeSpan OperationWaitTimeout { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>Maximum time to wait for the single hardware-operation gate. Must remain below the iPad's 30-second request deadline.</summary>
+    public TimeSpan OperationWaitTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Maximum time spent executing one hardware operation after it acquires the gate.
+    /// The 20-second default leaves margin below the iPad's 30-second request deadline.
+    /// </summary>
+    public TimeSpan HardwareExecutionTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
     public string EffectivePairedClientsPath => PairedClientsPath ?? Path.Combine(DataDirectory, "paired-clients.json");
 
@@ -29,8 +36,10 @@ public sealed record BridgeOptions
         ValidateBindUrl(BindUrl);
         if (PairingLifetime <= TimeSpan.Zero || PairingLifetime > TimeSpan.FromMinutes(15))
             throw new BridgeConfigurationException("PairingLifetime must be greater than zero and no more than 15 minutes.");
-        if (OperationWaitTimeout <= TimeSpan.Zero || OperationWaitTimeout > TimeSpan.FromMinutes(5))
-            throw new BridgeConfigurationException("OperationWaitTimeout must be greater than zero and no more than 5 minutes.");
+        if (OperationWaitTimeout <= TimeSpan.Zero || OperationWaitTimeout >= TimeSpan.FromSeconds(30))
+            throw new BridgeConfigurationException("OperationWaitTimeout must be greater than zero and less than 30 seconds.");
+        if (HardwareExecutionTimeout <= TimeSpan.Zero || HardwareExecutionTimeout >= TimeSpan.FromSeconds(30))
+            throw new BridgeConfigurationException("HardwareExecutionTimeout must be greater than zero and less than 30 seconds.");
         if (string.IsNullOrWhiteSpace(DataDirectory) || !Path.IsPathFullyQualified(DataDirectory))
             throw new BridgeConfigurationException("DataDirectory must be an absolute path.");
         if (!string.IsNullOrWhiteSpace(PairedClientsPath) && !Path.IsPathFullyQualified(PairedClientsPath))
@@ -52,13 +61,16 @@ public sealed record BridgeOptions
         var auto = configuration["Pm3:AutoDiscover"] ?? configuration["PM3_AUTO_DISCOVER"];
         var lifetime = configuration["Bridge:PairingLifetimeSeconds"] ?? configuration["BRIDGE_PAIRING_LIFETIME_SECONDS"];
         var operationWait = configuration["Bridge:OperationWaitTimeoutSeconds"] ?? configuration["BRIDGE_OPERATION_WAIT_TIMEOUT_SECONDS"];
+        var hardwareExecution = configuration["Bridge:HardwareExecutionTimeoutSeconds"] ?? configuration["BRIDGE_HARDWARE_EXECUTION_TIMEOUT_SECONDS"];
 
         if (!bool.TryParse(auto, out var autoDiscover))
             autoDiscover = true;
         if (!double.TryParse(lifetime, out var seconds))
             seconds = 120;
         if (!double.TryParse(operationWait, out var operationWaitSeconds))
-            operationWaitSeconds = 30;
+            operationWaitSeconds = 5;
+        if (!double.TryParse(hardwareExecution, out var hardwareExecutionSeconds))
+            hardwareExecutionSeconds = 20;
 
         return new BridgeOptions
         {
@@ -70,6 +82,7 @@ public sealed record BridgeOptions
             Pm3ClientPath = configuration["Pm3:ClientPath"] ?? configuration["PM3_CLIENT_PATH"],
             PairingLifetime = TimeSpan.FromSeconds(seconds),
             OperationWaitTimeout = TimeSpan.FromSeconds(operationWaitSeconds),
+            HardwareExecutionTimeout = TimeSpan.FromSeconds(hardwareExecutionSeconds),
         };
     }
 

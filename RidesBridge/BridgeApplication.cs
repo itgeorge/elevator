@@ -90,13 +90,16 @@ public static class BridgeApplication
         app.MapGet("/api/v1/hardware/page0/block5", async (
             IBridgePm3Device device,
             BridgeOperationGate gate,
+            BridgeOptions options,
             HttpContext context) =>
         {
             try
             {
                 var value = await gate.ExecuteAsync(
                     operationCt => device.ReadPage0Block5Async(operationCt),
-                    context.RequestAborted).ConfigureAwait(false);
+                    context.RequestAborted,
+                    waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
                 if (!IsBlockHex(value))
                     throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
                 return Results.Ok(new BlockReadResponse(5, value.ToUpperInvariant()));

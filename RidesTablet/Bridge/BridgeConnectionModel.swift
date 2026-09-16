@@ -48,15 +48,20 @@ public final class BridgeConnectionModel: ObservableObject {
 
     private let credentialStore: any BridgeCredentialStore
     private let session: URLSession
+    private let healthRetryDelay: @Sendable () async throws -> Void
     private var client: BridgeClient?
 
     public init(
         credentialStore: any BridgeCredentialStore = KeychainBridgeCredentialStore(),
         session: URLSession = .shared,
-        defaultBridgeURL: String = ""
+        defaultBridgeURL: String = "",
+        healthRetryDelay: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
     ) {
         self.credentialStore = credentialStore
         self.session = session
+        self.healthRetryDelay = healthRetryDelay
         self.bridgeURLText = defaultBridgeURL
         self.state = .unconfigured
         self.message = nil
@@ -101,7 +106,11 @@ public final class BridgeConnectionModel: ObservableObject {
 
         let newClient: BridgeClient
         do {
-            newClient = try BridgeClient(baseURLString: bridgeURLText, session: session)
+            newClient = try BridgeClient(
+                baseURLString: bridgeURLText,
+                session: session,
+                healthRetryDelay: healthRetryDelay
+            )
         } catch {
             fail(with: error)
             return
