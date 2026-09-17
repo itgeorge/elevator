@@ -2,6 +2,11 @@ namespace RidesBridge;
 
 public sealed record HealthResponse(string Status, string ApiVersion, string BridgeVersion);
 public sealed record PairStatusResponse(string Version, bool Paired);
+/// <summary>Unauthenticated request used to prove a paired bearer at a Bonjour candidate.</summary>
+public sealed record PairProofRequest(string? Locator, string? Nonce, string? Url);
+/// <summary>Proof response; it contains no bearer or verifier material.</summary>
+/// <remarks>BridgeId is a public identifier and is not trusted without the MAC proof.</remarks>
+public sealed record PairProofResponse(string BridgeId, string ApiVersion, string Nonce, string Proof);
 public sealed record BlockReadResponse(int Block, string Value);
 public sealed record MercuryMirrorReadResponse(string Version, string Block5, string Block6);
 public sealed record MercuryMutationRequest(string? Version, IReadOnlyList<MercuryMutation>? Mutations);

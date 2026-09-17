@@ -103,7 +103,7 @@ public sealed record PairingPayload(
             }
             if (value.BridgeId is null || !IsBridgeId(value.BridgeId))
             {
-                error = "Pairing payload bridge identity is invalid.";
+                error = "Pairing payload bridge identifier is invalid.";
                 return false;
             }
             if (!string.Equals(value.ApiVersion, BridgeOptions.ApiVersion, StringComparison.Ordinal))
@@ -156,7 +156,7 @@ public sealed record PairingPayload(
             throw new BridgeConfigurationException($"Unsupported pairing payload version; expected {CurrentVersion}.");
         ValidateBridgeUrl(payload.BridgeUrl);
         if (!IsPin(payload.Pin)) throw new BridgeConfigurationException("Pairing payload PIN must contain exactly six digits.");
-        if (!IsBridgeId(payload.BridgeId)) throw new BridgeConfigurationException("Pairing payload bridge identity is invalid.");
+        if (!IsBridgeId(payload.BridgeId)) throw new BridgeConfigurationException("Pairing payload bridge identifier is invalid.");
         if (!string.Equals(payload.ApiVersion, BridgeOptions.ApiVersion, StringComparison.Ordinal))
             throw new BridgeConfigurationException("Pairing payload API version is unsupported.");
         if (payload.ExpiresAt == default) throw new BridgeConfigurationException("Pairing payload expiration is required.");
@@ -200,7 +200,7 @@ public static class PairingPayloadFactory
         if (!PairingPayload.IsPin(pairingCode.Value))
             throw new BridgeConfigurationException("The active pairing PIN is invalid.");
         if (!PairingPayload.IsBridgeId(bridgeId))
-            throw new BridgeConfigurationException("The bridge identity is invalid.");
+            throw new BridgeConfigurationException("The bridge identifier is invalid.");
         if (pairingCode.ExpiresAt <= (clock ?? TimeProvider.System).GetUtcNow())
             return [];
 
@@ -223,7 +223,7 @@ public sealed class BridgeIdentityService
 
     public BridgeIdentityService(string path)
     {
-        if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("A bridge identity path is required.", nameof(path));
+        if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("A bridge identifier path is required.", nameof(path));
         _path = Path.GetFullPath(path);
         Id = LoadOrCreate();
     }

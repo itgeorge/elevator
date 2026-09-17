@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +21,9 @@ public static class BridgeApplication
         options.Validate();
         services.AddSingleton(options);
         services.AddSingleton<PairingCodeService>(_ => new PairingCodeService(options.PairingLifetime));
-        services.AddSingleton<IPairedClientStore>(_ => new FilePairedClientStore(options.EffectivePairedClientsPath));
+        services.AddSingleton<FilePairedClientStore>(_ => new FilePairedClientStore(options.EffectivePairedClientsPath));
+        services.AddSingleton<IPairedClientStore>(serviceProvider => serviceProvider.GetRequiredService<FilePairedClientStore>());
+        services.AddSingleton<IPairedClientRelocationStore>(serviceProvider => serviceProvider.GetRequiredService<FilePairedClientStore>());
         services.AddSingleton<BridgeIdentityService>(_ => new BridgeIdentityService(options.EffectiveBridgeIdentityPath));
         services.AddSingleton<BridgeOperationGate>(_ => new BridgeOperationGate(options.OperationWaitTimeout));
         if (device is null)
@@ -93,6 +96,51 @@ public static class BridgeApplication
 
         // Authenticated, no-hardware liveness check for moving a saved bearer to a new address.
         app.MapGet("/api/v1/pair/status", () => Results.Ok(new PairStatusResponse(BridgeOptions.ApiVersion, true)));
+
+        // Deliberately not included in RequiresBearer: the locator is derived from the
+        // bearer, while the response proves that this candidate has its verifier. The
+        // Authorization header is ignored by this endpoint.
+        app.MapPost("/api/v1/pair/proof", async (
+            HttpContext context,
+            IPairedClientRelocationStore store,
+            BridgeIdentityService identity,
+            BridgeOptions options) =>
+        {
+            var request = await ReadPairProofRequestAsync(context.Request, context.RequestAborted).ConfigureAwait(false);
+            if (request is null
+                || !PairRelocationProof.TryDecodeUpperHex(request.Locator, PairRelocationProof.DigestBytes, out _)
+                || !PairRelocationProof.TryDecodeUpperHex(request.Nonce, PairRelocationProof.DigestBytes, out var nonceBytes))
+                return InvalidPairProof();
+
+            Uri canonicalUrl;
+            try
+            {
+                canonicalUrl = BonjourServiceDescriptor.CanonicalPrivateHttpUrl(new Uri(request.Url!, UriKind.Absolute));
+            }
+            catch (Exception ex) when (ex is UriFormatException or ArgumentException or BridgeConfigurationException)
+            {
+                return InvalidPairProof();
+            }
+
+            // Membership is evaluated from the same bind/interface semantics used for
+            // Bonjour publication, not from public TXT supplied by the caller.
+            IReadOnlyList<Uri> reportedUrls;
+            try { reportedUrls = options.GetReportedUrls(); }
+            catch (BridgeConfigurationException) { return InvalidPairProof(); }
+            var urlIsReported = reportedUrls.Any(url => string.Equals(
+                url.AbsoluteUri, canonicalUrl.AbsoluteUri, StringComparison.Ordinal));
+            // Still perform the bounded verifier scan for a canonical but unreported URL;
+            // discard its result below. This keeps URL mismatch and unknown/revoked locator
+            // failures on the same generic path without ever issuing a proof for that URL.
+            var proofFound = store.TryCreateProof(
+                request.Locator!, nonceBytes, identity.Id, canonicalUrl.AbsoluteUri,
+                BridgeOptions.ApiVersion, out var proof);
+            if (!urlIsReported || !proofFound)
+                return InvalidPairProof();
+
+            return Results.Ok(new PairProofResponse(
+                identity.Id.ToUpperInvariant(), BridgeOptions.ApiVersion, request.Nonce!, proof));
+        });
 
         app.MapPost("/api/v1/pair", async (PairRequest request, PairingCodeService pairing, IPairedClientStore store, CancellationToken ct) =>
         {
@@ -253,6 +301,62 @@ public static class BridgeApplication
             }
         });
     }
+
+    private const int MaximumPairProofBodyBytes = 4096;
+
+    private static async Task<PairProofRequest?> ReadPairProofRequestAsync(HttpRequest request, CancellationToken ct)
+    {
+        if (request.ContentLength is > MaximumPairProofBodyBytes)
+            return null;
+
+        using var body = new MemoryStream();
+        var buffer = new byte[1024];
+        while (true)
+        {
+            var read = await request.Body.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
+            if (read == 0) break;
+            if (body.Length + read > MaximumPairProofBodyBytes)
+                return null;
+            await body.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body.ToArray(), new JsonDocumentOptions { MaxDepth = 4 });
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return null;
+
+            string? locator = null;
+            string? nonce = null;
+            string? url = null;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in root.EnumerateObject())
+            {
+                if (!seen.Add(property.Name) || property.Value.ValueKind != JsonValueKind.String)
+                    return null;
+                var value = property.Value.GetString();
+                switch (property.Name)
+                {
+                    case "locator": locator = value; break;
+                    case "nonce": nonce = value; break;
+                    case "url": url = value; break;
+                    default: return null;
+                }
+            }
+
+            return seen.Count == 3 && locator is not null && nonce is not null && url is not null
+                ? new PairProofRequest(locator, nonce, url)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static IResult InvalidPairProof() =>
+        Results.Json(new BridgeErrorResponse("invalid_pairing_proof", "Pairing proof request is invalid."), statusCode: StatusCodes.Status400BadRequest);
 
     public static string? ReadBearerToken(string? authorization)
     {

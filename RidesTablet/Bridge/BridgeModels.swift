@@ -82,6 +82,49 @@ public struct BridgeHealthResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// Exact response contract for the unauthenticated Bonjour relocation proof.
+public struct BridgePairRelocationProofResponse: Codable, Equatable, Sendable {
+    public let bridgeId: String
+    public let apiVersion: String
+    public let nonce: String
+    public let proof: String
+
+    public init(bridgeId: String, apiVersion: String, nonce: String, proof: String) {
+        self.bridgeId = bridgeId
+        self.apiVersion = apiVersion
+        self.nonce = nonce
+        self.proof = proof
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case bridgeId, apiVersion, nonce, proof
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["bridgeId", "apiVersion", "nonce", "proof"])
+        self.init(
+            bridgeId: try container.decode(String.self, forKey: .bridgeId),
+            apiVersion: try container.decode(String.self, forKey: .apiVersion),
+            nonce: try container.decode(String.self, forKey: .nonce),
+            proof: try container.decode(String.self, forKey: .proof)
+        )
+    }
+}
+
+/// Exact request contract for the unauthenticated Bonjour relocation proof.
+public struct BridgePairRelocationProofRequest: Codable, Equatable, Sendable {
+    public let locator: String
+    public let nonce: String
+    public let url: String
+
+    public init(locator: String, nonce: String, url: String) {
+        self.locator = locator
+        self.nonce = nonce
+        self.url = url
+    }
+}
+
 /// Strict v1 response for the authenticated no-hardware pairing status check.
 public struct BridgePairStatusResponse: Codable, Equatable, Sendable {
     public let version: String

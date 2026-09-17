@@ -322,7 +322,7 @@ public enum BridgePairingPayloadError: Error, Equatable, LocalizedError, Sendabl
         case .invalidURL: "The pairing QR must contain a private IPv4 HTTP address with an explicit port and no path, query, fragment, or credentials."
         case .invalidPIN: "The pairing QR contains an invalid pairing PIN."
         case .invalidExpiration: "The pairing QR expiration is not a valid ISO-8601 date."
-        case .invalidBridgeID: "The pairing QR contains an invalid bridge identity."
+        case .invalidBridgeID: "The pairing QR contains an invalid bridge identifier."
         case .invalidAPIVersion, .unsupportedAPIVersion: "The pairing QR uses an unsupported bridge API version."
         case .expired: "The pairing QR has expired. Request a fresh pairing QR."
         }

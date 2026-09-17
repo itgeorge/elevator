@@ -119,8 +119,23 @@ public interface IPairedClientStore
     Task<bool> RevokeAsync(string token, CancellationToken ct = default);
 }
 
-public sealed class FilePairedClientStore : IPairedClientStore
+/// <summary>Server-side relocation proof operations that do not expose a verifier.</summary>
+public interface IPairedClientRelocationStore
 {
+    bool TryCreateProof(
+        string locator,
+        byte[] nonce,
+        string bridgeId,
+        string canonicalUrl,
+        string apiVersion,
+        out string proof);
+}
+
+public sealed class FilePairedClientStore : IPairedClientStore, IPairedClientRelocationStore
+{
+    // A proof request performs a bounded full scan. The on-disk JSON shape remains the
+    // existing PairedClientRecord list; oversized stores fail closed at load/add time.
+    public const int MaximumRecords = 256;
     private readonly string _path;
     private readonly object _sync = new();
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
@@ -139,6 +154,8 @@ public sealed class FilePairedClientStore : IPairedClientStore
         lock (_sync)
         {
             _records.RemoveAll(r => r.Verifier == record.Verifier);
+            if (_records.Count >= MaximumRecords)
+                throw new BridgeConfigurationException($"Paired-client store cannot contain more than {MaximumRecords} records.");
             _records.Add(record);
             PersistLocked();
         }
@@ -150,7 +167,59 @@ public sealed class FilePairedClientStore : IPairedClientStore
         if (string.IsNullOrWhiteSpace(token)) return false;
         var verifier = HashToken(token);
         lock (_sync)
-            return _records.Any(r => !r.Revoked && FixedEquals(r.Verifier, verifier));
+        {
+            var valid = false;
+            foreach (var record in _records)
+                valid |= !record.Revoked && FixedEquals(record.Verifier, verifier);
+            return valid;
+        }
+    }
+
+    /// <summary>
+    /// Finds a paired client by locator and creates its proof while retaining verifier bytes
+    /// inside this store operation. It deliberately returns only the proof, never V.
+    /// Every bounded record is compared and HMAC work is performed even for revoked/nonmatching
+    /// records to avoid making the locator an obvious record-existence oracle.
+    /// </summary>
+    public bool TryCreateProof(
+        string locator,
+        byte[] nonce,
+        string bridgeId,
+        string canonicalUrl,
+        string apiVersion,
+        out string proof)
+    {
+        proof = string.Empty;
+        if (!PairRelocationProof.TryDecodeUpperHex(locator, PairRelocationProof.DigestBytes, out _)
+            || nonce is null || nonce.Length != PairRelocationProof.DigestBytes)
+            return false;
+        var locatorAscii = Encoding.ASCII.GetBytes(locator);
+
+        lock (_sync)
+        {
+            string? selectedProof = null;
+            foreach (var record in _records)
+            {
+                var verifierIsValid = PairRelocationProof.TryDecodeVerifier(record.Verifier, out var verifierBytes);
+                if (!verifierIsValid)
+                    verifierBytes = new byte[PairRelocationProof.DigestBytes];
+
+                var recordLocator = PairRelocationProof.ComputeLocatorFromVerifierBytes(verifierBytes);
+                var locatorMatches = CryptographicOperations.FixedTimeEquals(
+                    locatorAscii, Encoding.ASCII.GetBytes(recordLocator));
+                // Do this for all records, including revoked and malformed records. The result
+                // is discarded unless the record is both valid, active, and locator-matching.
+                var recordProof = PairRelocationProof.ComputeProofFromVerifierBytes(
+                    verifierBytes, nonce, bridgeId, canonicalUrl, apiVersion);
+                if (locatorMatches && verifierIsValid && !record.Revoked && selectedProof is null)
+                    selectedProof = recordProof;
+            }
+
+            if (selectedProof is null)
+                return false;
+            proof = selectedProof;
+            return true;
+        }
     }
 
     public async Task<bool> RevokeAsync(string token, CancellationToken ct = default)
@@ -186,13 +255,21 @@ public sealed class FilePairedClientStore : IPairedClientStore
         try
         {
             var json = File.ReadAllText(_path);
-            return JsonSerializer.Deserialize<List<PairedClientRecord>>(json, _jsonOptions) ?? [];
+            var records = JsonSerializer.Deserialize<List<PairedClientRecord>>(json, _jsonOptions) ?? [];
+            if (records.Count > MaximumRecords)
+                throw new BridgeConfigurationException($"Paired-client store cannot contain more than {MaximumRecords} records.");
+            if (records.Any(record => !IsValidStoredRecord(record)))
+                throw new BridgeConfigurationException("Paired-client store contains an invalid verifier record.");
+            return records;
         }
         catch (JsonException ex)
         {
             throw new BridgeConfigurationException($"Paired-client store is not valid JSON: {ex.Message}");
         }
     }
+
+    private static bool IsValidStoredRecord(PairedClientRecord? record) =>
+        record is not null && PairRelocationProof.TryDecodeVerifier(record.Verifier, out _);
 
     private void PersistLocked()
     {
