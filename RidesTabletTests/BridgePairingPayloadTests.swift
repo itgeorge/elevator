@@ -113,14 +113,32 @@ final class BridgePairingPayloadTests: XCTestCase {
         }
     }
 
+    func testParserAcceptsSystemTextJsonISO8601FractionVariantsAndOffsets() throws {
+        let values = [
+            "2027-01-02T03:04:05.040311+00:00",
+            "2027-01-02T03:04:05.1Z",
+            "2027-01-02T03:04:05.1234567Z",
+            "2027-01-02T03:04:05-05:30"
+        ]
+
+        for value in values {
+            XCTAssertNoThrow(try BridgePairingPayload.parse(validJSON(expiration: value), now: now), value)
+        }
+    }
+
     func testParserRejectsExpiredAndMalformedISO8601WithInjectedClock() {
         XCTAssertThrowsError(try BridgePairingPayload.parse(validJSON(expiration: "2025-12-31T23:59:59Z"), now: now))
         for value in [
             "2027-01-02",
             "2027-01-02T03:04:05",
-            "2027-01-02T03:04:05.1Z",
-            "2027-01-02T03:04:05Zjunk",
+            "2027-01-02T03:04:05.Z",
             "2027-01-02T03:04:05.1234567890Z",
+            "20270102T030405Z",
+            "2027-01-02T03:04:05+24:00",
+            "2027-01-02T03:04:05+00:60",
+            "2027-02-29T03:04:05Z",
+            "2027-01-02T24:04:05Z",
+            "2027-01-02T03:04:05Zjunk",
             "not-a-date"
         ] {
             XCTAssertThrowsError(try BridgePairingPayload.parse(validJSON(expiration: value), now: now), value)

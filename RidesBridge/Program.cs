@@ -14,6 +14,27 @@ app.MapRidesBridge();
 // pairing material only to the terminal QR/manual display; never send it through ILogger.
 var pairing = app.Services.GetRequiredService<PairingCodeService>();
 var bridgeIdentity = app.Services.GetRequiredService<BridgeIdentityService>();
-BridgeTerminalDisplay.Write(options, pairing, bridgeIdentity.Id, Console.Out);
+PairingQrArtifactLease? pairingQrArtifacts = null;
+Task? pairingQrCleanupTask = null;
+using var pairingQrLifetime = CancellationTokenSource.CreateLinkedTokenSource(app.Lifetime.ApplicationStopping);
+try
+{
+    var pairingCode = pairing.GetActiveCode() ?? pairing.IssueCode();
+    pairingQrArtifacts = PairingQrArtifactLease.CreateForReportedUrls(
+        options,
+        pairingCode,
+        bridgeIdentity.Id,
+        clock: TimeProvider.System);
+    BridgeTerminalDisplay.Write(options, pairing, bridgeIdentity.Id, Console.Out, artifactLease: pairingQrArtifacts);
+    if (pairingQrArtifacts is not null)
+        pairingQrCleanupTask = pairingQrArtifacts.RunAsync(pairingQrLifetime.Token);
 
-await app.RunAsync();
+    await app.RunAsync();
+}
+finally
+{
+    pairingQrLifetime.Cancel();
+    if (pairingQrCleanupTask is not null)
+        await pairingQrCleanupTask.ConfigureAwait(false);
+    pairingQrArtifacts?.Dispose();
+}

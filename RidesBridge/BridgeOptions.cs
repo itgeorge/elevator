@@ -20,6 +20,8 @@ public sealed record BridgeOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ElevatorTokens", "RidesBridge");
     public string? PairedClientsPath { get; init; }
     public string? BridgeIdentityPath { get; init; }
+    /// <summary>Directory for temporary pairing QR PNGs; defaults to the private data directory.</summary>
+    public string? PairingQrArtifactDirectory { get; init; }
     public TimeSpan PairingLifetime { get; init; } = TimeSpan.FromMinutes(2);
     /// <summary>Maximum time to wait for the single hardware-operation gate. Must remain below the iPad's 30-second request deadline.</summary>
     public TimeSpan OperationWaitTimeout { get; init; } = TimeSpan.FromSeconds(5);
@@ -38,6 +40,7 @@ public sealed record BridgeOptions
 
     public string EffectivePairedClientsPath => PairedClientsPath ?? Path.Combine(DataDirectory, "paired-clients.json");
     public string EffectiveBridgeIdentityPath => BridgeIdentityPath ?? Path.Combine(DataDirectory, "bridge-id");
+    public string EffectivePairingQrArtifactDirectory => PairingQrArtifactDirectory ?? DataDirectory;
 
     public BridgeOptions Validate()
     {
@@ -59,6 +62,9 @@ public sealed record BridgeOptions
             throw new BridgeConfigurationException("PairedClientsPath must be an absolute path.");
         if (!string.IsNullOrWhiteSpace(BridgeIdentityPath) && !Path.IsPathFullyQualified(BridgeIdentityPath))
             throw new BridgeConfigurationException("BridgeIdentityPath must be an absolute path.");
+        if (PairingQrArtifactDirectory is not null
+            && (string.IsNullOrWhiteSpace(PairingQrArtifactDirectory) || !Path.IsPathFullyQualified(PairingQrArtifactDirectory)))
+            throw new BridgeConfigurationException("PairingQrArtifactDirectory must be a non-empty absolute path.");
         if (!Pm3AutoDiscover && string.IsNullOrWhiteSpace(Pm3Port))
             throw new BridgeConfigurationException("Pm3Port is required when Pm3AutoDiscover is false.");
         return this;
@@ -73,6 +79,8 @@ public sealed record BridgeOptions
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ElevatorTokens", "RidesBridge");
         var pairedPath = configuration["Bridge:PairedClientsPath"] ?? configuration["BRIDGE_PAIRED_CLIENTS_PATH"];
         var identityPath = configuration["Bridge:IdentityPath"] ?? configuration["BRIDGE_IDENTITY_PATH"];
+        var pairingQrArtifactDirectory = configuration["Bridge:PairingQrArtifactDirectory"]
+            ?? configuration["BRIDGE_PAIRING_QR_ARTIFACT_DIRECTORY"];
         var port = configuration["Pm3:Port"] ?? configuration["PM3_PORT"];
         var auto = configuration["Pm3:AutoDiscover"] ?? configuration["PM3_AUTO_DISCOVER"];
         var lifetime = configuration["Bridge:PairingLifetimeSeconds"] ?? configuration["BRIDGE_PAIRING_LIFETIME_SECONDS"];
@@ -99,6 +107,7 @@ public sealed record BridgeOptions
             DataDirectory = dataDirectory,
             PairedClientsPath = pairedPath,
             BridgeIdentityPath = identityPath,
+            PairingQrArtifactDirectory = pairingQrArtifactDirectory,
             Pm3Port = port,
             Pm3AutoDiscover = autoDiscover,
             Pm3ClientPath = configuration["Pm3:ClientPath"] ?? configuration["PM3_CLIENT_PATH"],
