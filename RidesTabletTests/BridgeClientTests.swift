@@ -764,12 +764,12 @@ final class BridgeConnectionModelTests: XCTestCase {
         XCTAssertFalse(model.isPaired)
         XCTAssertNil(store.credential)
         guard case .failed(let detail) = model.state else { return XCTFail("Expected secure-save failure") }
-        XCTAssertTrue(detail.contains("revoked"))
+        XCTAssertTrue(detail.contains("cleaned up"))
         XCTAssertFalse(detail.contains(token))
         XCTAssertFalse(model.message?.contains(token) == true)
     }
 
-    func testSaveFailureAndRevokeFailureRetainsClientForForgetRetry() async throws {
+    func testSaveFailureAndRevokeFailureDropsLocalBearerWithoutForgetRetry() async throws {
         let store = InMemoryBridgeCredentialStore()
         store.setSaveError(BridgeTestError.secureSaveFailed)
         let token = "retain-forget-token"
@@ -790,21 +790,21 @@ final class BridgeConnectionModelTests: XCTestCase {
         let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
         model.bridgeURLText = "http://127.0.0.1:8080"
         await model.pair(pin: "123456")
-        XCTAssertTrue(model.isPaired)
+        XCTAssertFalse(model.isPaired)
         XCTAssertNil(store.credential)
         guard case .failed(let detail) = model.state else { return XCTFail("Expected save/revoke failure") }
-        XCTAssertTrue(detail.contains("tap Forget"))
+        XCTAssertTrue(detail.contains("No active local pairing was retained"))
         XCTAssertFalse(detail.contains(token))
         XCTAssertFalse(model.message?.contains(token) == true)
 
         await model.forget()
-        XCTAssertEqual(revokeAttempts, 2)
+        XCTAssertEqual(revokeAttempts, 1)
         XCTAssertEqual(model.state, .unconfigured)
         XCTAssertFalse(model.isPaired)
         XCTAssertFalse(model.message?.contains(token) == true)
     }
 
-    func testSuccessfulForgetRevokesAndRemovesStoredCredential() async throws {
+    func testForgetRemovesStoredCredentialWithoutNetworkRequest() async throws {
         let store = InMemoryBridgeCredentialStore()
         let token = "successful-forget-token"
         var paths: [String] = []
@@ -827,33 +827,64 @@ final class BridgeConnectionModelTests: XCTestCase {
         XCTAssertEqual(model.state, .connected)
         XCTAssertTrue(model.message?.contains("already paired") == true)
         await model.forget()
-        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair", "/api/v1/pair/revoke"])
+        XCTAssertEqual(paths, ["/api/v1/health", "/api/v1/pair"])
         XCTAssertEqual(model.state, .unconfigured)
         XCTAssertFalse(model.isPaired)
         XCTAssertNil(store.credential)
         XCTAssertFalse(model.message?.contains(token) == true)
     }
 
-    func testFailedForgetRetainsCredentialForActionableRetry() async throws {
+    func testForgetNeverDependsOnBridgeAvailability() async throws {
         let store = InMemoryBridgeCredentialStore()
         let token = "failed-forget-token"
         StubBridgeURLProtocol.handler = { request in
-            if request.url!.path == "/api/v1/health" {
+            switch request.url!.path {
+            case "/api/v1/health":
                 return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
-            }
-            if request.url!.path == "/api/v1/pair" {
+            case "/api/v1/pair":
                 return (response(for: request), Data(#"{"accessToken":"failed-forget-token","tokenType":"Bearer"}"#.utf8))
+            default:
+                XCTFail("Forget must not make a bridge request: \(request.url!.path)")
+                return (response(for: request, status: 500), Data())
             }
-            return (response(for: request, status: 503), Data(#"{"code":"bridge_busy","message":"Cannot revoke failed-forget-token yet."}"#.utf8))
         }
         let model = BridgeConnectionModel(credentialStore: store, session: stubSession())
         model.bridgeURLText = "http://127.0.0.1:8080"
         await model.pair(pin: "123456")
+        let pathsBeforeForget = StubBridgeURLProtocol.requestCount
         await model.forget()
-        XCTAssertEqual(model.state, .failed("Bridge error bridge_busy: Cannot revoke [redacted] yet."))
-        XCTAssertTrue(model.isPaired)
-        XCTAssertNotNil(store.credential)
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, pathsBeforeForget)
+        XCTAssertEqual(model.state, .unconfigured)
+        XCTAssertFalse(model.isPaired)
+        XCTAssertNil(store.credential)
         XCTAssertFalse(model.message?.contains(token) == true)
+    }
+
+    func testForgetKeychainFailureStillDropsBearerAndEnablesRepair() async throws {
+        let store = InMemoryBridgeCredentialStore()
+        store.setRemovalError(BridgeTestError.secureSaveFailed)
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: stubSession()
+        )
+        model.bridgeURLText = "http://127.0.0.1:8080"
+        StubBridgeURLProtocol.handler = { request in
+            if request.url!.path == "/api/v1/health" {
+                return (response(for: request), Data(#"{"status":"ok","apiVersion":"v1","bridgeVersion":"1.0.0"}"#.utf8))
+            }
+            return (response(for: request), Data(#"{"accessToken":"delete-failure-token","tokenType":"Bearer"}"#.utf8))
+        }
+        await model.pair(pin: "123456")
+        let requestCount = StubBridgeURLProtocol.requestCount
+
+        await model.forget()
+
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, requestCount)
+        XCTAssertEqual(model.state, .unconfigured)
+        XCTAssertFalse(model.isPaired)
+        XCTAssertNotNil(store.credential)
+        XCTAssertTrue(model.hasPairingToForget)
+        XCTAssertTrue(model.message?.contains("could not be removed") == true)
     }
 
     func testUnauthorizedForgetClearsCredentialAndRequiresPairing() async throws {
