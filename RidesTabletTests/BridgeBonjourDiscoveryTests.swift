@@ -868,13 +868,20 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(store.credential?.baseURL, URL(string: "http://10.0.0.2:5080")!)
     }
 
-    func testManualBrowseResultChurnDoesNotDisconnectVerifiedConnection() async {
+    func testManualLiveBrowserLosesConnectedStateWhenAdvertisementDisappears() async {
         let oldURL = URL(string: "http://127.0.0.1:8080")!
         let newURL = URL(string: "http://192.168.1.20:8080")!
+        let token = "saved-bearer"
         let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
-            baseURL: oldURL, accessToken: "saved-bearer"
+            baseURL: oldURL, accessToken: token, bridgeId: bonjourBridgeID
         ))
         BonjourModelURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/pair/proof" {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                    try validProofResponseData(for: request, bearer: token, bridgeId: bonjourBridgeID)
+                )
+            }
             XCTAssertEqual(request.url, newURL.appendingPathComponent("api/v1/pair/status"))
             return (
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
@@ -892,13 +899,25 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(model.state, .connected)
 
         model.startBonjourBrowse()
-        source.emitResults([serviceResult(txt: validTXT(bridgeId: secondBonjourBridgeID))])
+        XCTAssertEqual(model.state, .searching)
+        source.emitResults([serviceResult(txt: validTXT(url: newURL.absoluteString))])
+        await waitForBonjourCallbacks()
+        await model.selectBonjourCandidate(model.bonjourCandidates[0])
+        XCTAssertEqual(model.state, .connected)
+
+        source.emitState(.ready)
         await waitForBonjourCallbacks()
         source.emitResults([])
         await waitForBonjourCallbacks()
 
-        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(model.state, .searching)
+        XCTAssertTrue(model.message?.contains("Searching") == true)
         XCTAssertTrue(model.isPaired)
+
+        source.emitState(.ready)
+        await waitForBonjourCallbacks()
+        XCTAssertEqual(model.state, .searching)
+        XCTAssertTrue(model.message?.contains("Searching") == true)
     }
 
     func testAutomaticReconnectDoesNotRequestForMismatchMultipleIdentityOrSameIdentityMultipleURL() async {
