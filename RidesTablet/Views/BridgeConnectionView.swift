@@ -48,7 +48,7 @@ public struct BridgeConnectionView: View {
     @MainActor
     public init(
         environmentLookup: @escaping @Sendable () -> String? = {
-            ProcessInfo.processInfo.environment[BridgeConnectionView.addressOverrideEnvironmentKey]
+            ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.addressOverrideEnvironmentKey]
         },
         scannerCoordinator: (any BridgePairingScannerCoordinator)? = nil
     ) {
@@ -141,6 +141,59 @@ public struct BridgeConnectionView: View {
                     }
                 }
 
+                Section("Bonjour discovery") {
+                    HStack {
+                        Label(model.bonjourDiscoveryState.title, systemImage: bonjourStatusSymbol)
+                        Spacer()
+                        if model.isBonjourBrowsing {
+                            Button("Stop") {
+                                model.stopBonjourBrowse()
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            Button("Find bridges") {
+                                model.startBonjourBrowse()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+
+                    if model.bonjourCandidates.isEmpty {
+                        Text("Find offers a compatible bridge without pairing or changing the address. Manual IP entry and QR pairing remain available.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.bonjourCandidates) { candidate in
+                            Button {
+                                Task { await model.selectBonjourCandidate(candidate) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(candidate.serviceName)
+                                    Text("\(candidate.url.absoluteString) · bridge \(candidate.bridgeId)")
+                                        .font(.footnote.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .disabled(model.isBusy)
+                        }
+                        if model.bonjourCandidates.count == 1 {
+                            Text("One bridge is offered for explicit review; it was not selected automatically.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Select a bridge explicitly. Multiple addresses or identities are kept separate.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if model.rejectedBonjourResultCount > 0 {
+                        Text("Ignored \(model.rejectedBonjourResultCount) incompatible or malformed Bonjour result(s).")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
                 Section("Connection") {
                     Label(model.state.title, systemImage: statusSymbol)
                     if let message = model.message {
@@ -219,6 +272,9 @@ public struct BridgeConnectionView: View {
                 handleScannedPairingPayload(payload)
             }
         }
+        .onDisappear {
+            model.stopBonjourBrowse()
+        }
         .task {
             guard !didApplyLaunchAddressOverride else { return }
             didApplyLaunchAddressOverride = true
@@ -250,6 +306,16 @@ public struct BridgeConnectionView: View {
         case .pairing, .reading, .readingMercury, .settingMercury, .relocating, .forgetting: "arrow.triangle.2.circlepath"
         case .failed, .authenticationRequired: "exclamationmark.triangle.fill"
         case .unconfigured: "link.badge.plus"
+        }
+    }
+
+    private var bonjourStatusSymbol: String {
+        switch model.bonjourDiscoveryState {
+        case .offered: "checkmark.circle"
+        case .selectionRequired: "person.2"
+        case .browsing: "dot.radiowaves.left.and.right"
+        case .denied, .failed: "exclamationmark.triangle"
+        case .idle, .stopped: "magnifyingglass"
         }
     }
 }

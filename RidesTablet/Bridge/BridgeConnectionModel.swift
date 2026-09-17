@@ -59,6 +59,10 @@ public final class BridgeConnectionModel: ObservableObject {
     @Published public private(set) var lastMercuryBlock5Value: String?
     @Published public private(set) var lastMercuryBlock6Value: String?
     @Published public private(set) var lastMercuryRead: MercuryRideRead?
+    @Published public private(set) var bonjourDiscoveryState: BridgeBonjourDiscoveryState
+    @Published public private(set) var bonjourCandidates: [BridgeBonjourCandidate]
+    @Published public private(set) var offeredBonjourCandidate: BridgeBonjourCandidate?
+    @Published public private(set) var rejectedBonjourResultCount: Int
     @Published public var targetMercuryRidesText: String
 #if DEBUG
     @Published public private(set) var physicalAcceptanceSummary: BridgePhysicalAcceptanceSummary?
@@ -69,7 +73,9 @@ public final class BridgeConnectionModel: ObservableObject {
     private let session: URLSession
     private let healthRetryDelay: @Sendable () async throws -> Void
     private let now: @Sendable () -> Date
+    private let bonjourBrowserSource: any BridgeBonjourBrowserSource
     private var client: BridgeClient?
+    private var bonjourBrowseGeneration = 0
     private var mercuryWriteSnapshot: MercuryWriteSnapshot?
     private var launchAddressOverrideApplied = false
 #if DEBUG
@@ -83,12 +89,14 @@ public final class BridgeConnectionModel: ObservableObject {
         healthRetryDelay: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(nanoseconds: 100_000_000)
         },
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        bonjourBrowserSource: any BridgeBonjourBrowserSource = NetworkBonjourBrowserSource()
     ) {
         self.credentialStore = credentialStore
         self.session = session
         self.healthRetryDelay = healthRetryDelay
         self.now = now
+        self.bonjourBrowserSource = bonjourBrowserSource
         self.bridgeURLText = defaultBridgeURL
         self.state = .unconfigured
         self.message = nil
@@ -96,6 +104,10 @@ public final class BridgeConnectionModel: ObservableObject {
         self.lastMercuryBlock5Value = nil
         self.lastMercuryBlock6Value = nil
         self.lastMercuryRead = nil
+        self.bonjourDiscoveryState = .idle
+        self.bonjourCandidates = []
+        self.offeredBonjourCandidate = nil
+        self.rejectedBonjourResultCount = 0
         self.targetMercuryRidesText = ""
 #if DEBUG
         self.physicalAcceptanceSummary = nil
@@ -105,6 +117,17 @@ public final class BridgeConnectionModel: ObservableObject {
     }
 
     public var isBusy: Bool { state.isBusy }
+    /// A browse stays live while its result set is being displayed. An offer or a
+    /// required selection is not a terminal state: NWBrowser can still remove,
+    /// replace, or add services until the operator explicitly stops it.
+    public var isBonjourBrowsing: Bool {
+        switch bonjourDiscoveryState {
+        case .browsing, .offered, .selectionRequired:
+            true
+        case .idle, .stopped, .denied, .failed:
+            false
+        }
+    }
     /// A saved credential remains usable for retry/forget even after a transient failure.
     public var isPaired: Bool { client?.hasCredential == true }
 
@@ -285,6 +308,126 @@ public final class BridgeConnectionModel: ObservableObject {
 
     /// Applies the launch-only address override once. Unpaired sessions are only prefilled;
     /// paired sessions use the same transactional migration as the manual action.
+    /// Starts one explicit Bonjour browse. The source owns the NWBrowser lifecycle;
+    /// the generation gate makes callbacks from a stopped browse harmless.
+    public func startBonjourBrowse() {
+        guard !isBonjourBrowsing else { return }
+        bonjourBrowseGeneration += 1
+        let generation = bonjourBrowseGeneration
+        bonjourCandidates = []
+        offeredBonjourCandidate = nil
+        rejectedBonjourResultCount = 0
+        bonjourDiscoveryState = .browsing
+        message = "Searching for compatible local RidesBridge services…"
+
+        bonjourBrowserSource.start(
+            onState: { [weak self] sourceState in
+                Task { @MainActor [weak self] in
+                    self?.receiveBonjourState(sourceState, generation: generation)
+                }
+            },
+            onResults: { [weak self] results in
+                Task { @MainActor [weak self] in
+                    self?.receiveBonjourResults(results, generation: generation)
+                }
+            }
+        )
+    }
+
+    public func stopBonjourBrowse() {
+        bonjourBrowseGeneration += 1
+        bonjourBrowserSource.stop()
+        bonjourCandidates = []
+        offeredBonjourCandidate = nil
+        rejectedBonjourResultCount = 0
+        bonjourDiscoveryState = .stopped
+        message = "Bridge discovery stopped. You can still enter a private address manually."
+    }
+
+    public func selectBonjourCandidate(_ candidate: BridgeBonjourCandidate) async {
+        guard !isBusy else { return }
+        guard bonjourCandidates.contains(where: { $0.id == candidate.id }) else { return }
+
+        guard isPaired else {
+            // Discovery is only an offer. It never pairs or performs a request.
+            bridgeURLText = candidate.url.absoluteString
+            message = "Bridge address filled from Bonjour. Pair with a PIN, scan a QR, or keep using manual entry."
+            return
+        }
+
+        let savedCredential: BridgeCredential?
+        do {
+            savedCredential = try credentialStore.load()
+        } catch {
+            fail(with: error)
+            return
+        }
+        guard let savedCredential, let savedBridgeId = savedCredential.bridgeId else {
+            // A legacy/manual credential has no cryptographic bridge identity. Do
+            // not turn an unverified address change into identity-safe relocation.
+            fail(with: BridgeBonjourSelectionError.identityUnavailable)
+            return
+        }
+        guard savedBridgeId == candidate.bridgeId else {
+            fail(with: BridgeBonjourSelectionError.identityMismatch)
+            return
+        }
+
+        let previousText = bridgeURLText
+        bridgeURLText = candidate.url.absoluteString
+        // This is deliberately the sole migration call: the existing transactional
+        // migration performs one status request and reports whether it committed.
+        let migrated = await migrateEnteredBridgeAddress()
+        if !migrated {
+            bridgeURLText = previousText
+        }
+    }
+
+    private func receiveBonjourState(_ sourceState: BridgeBonjourSourceState, generation: Int) {
+        guard generation == bonjourBrowseGeneration, isBonjourBrowsing else { return }
+        switch sourceState {
+        case .ready:
+            if bonjourCandidates.isEmpty {
+                message = "Searching for compatible local RidesBridge services…"
+            }
+        case .denied:
+            // Terminal source states own the end of this browse. Stop even when
+            // an injected source reports the terminal state without cleaning up
+            // its underlying browser itself.
+            bonjourBrowseGeneration += 1
+            bonjourBrowserSource.stop()
+            bonjourDiscoveryState = .denied
+            message = "Bonjour discovery was denied. Allow Local Network access or enter the bridge's private IP manually."
+        case .failed:
+            bonjourBrowseGeneration += 1
+            bonjourBrowserSource.stop()
+            bonjourDiscoveryState = .failed
+            message = "Bonjour discovery failed. Check Local Network access and Wi-Fi, or enter the bridge's private IP manually."
+        }
+    }
+
+    private func receiveBonjourResults(_ results: [BridgeBonjourRawResult], generation: Int) {
+        guard generation == bonjourBrowseGeneration, isBonjourBrowsing else { return }
+        let snapshot = BridgeBonjourCandidateParser.parseSnapshot(results)
+        bonjourCandidates = snapshot.candidates
+        rejectedBonjourResultCount = snapshot.rejectedResultCount
+        offeredBonjourCandidate = snapshot.candidates.count == 1 ? snapshot.candidates[0] : nil
+
+        switch snapshot.candidates.count {
+        case 0:
+            bonjourDiscoveryState = .browsing
+            message = snapshot.rejectedResultCount == 0
+                ? "Searching for compatible local RidesBridge services…"
+                : "No compatible RidesBridge service was found. Check the bridge version and TXT record, or use manual entry."
+        case 1:
+            bonjourDiscoveryState = .offered
+            message = "One compatible bridge was found. Select it to review the address; it will not be paired automatically."
+        default:
+            bonjourDiscoveryState = .selectionRequired
+            message = "Multiple compatible bridges were found. Select one explicitly; no bridge will be chosen automatically."
+        }
+    }
+
     public func applyLaunchAddressOverride(_ value: String?) async {
         let override = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !override.isEmpty, !launchAddressOverrideApplied else { return }
@@ -321,11 +464,19 @@ public final class BridgeConnectionModel: ObservableObject {
     /// Verification and persistence happen before replacing the active client; failures
     /// therefore leave the old client and stored credential available for recovery.
     public func useEnteredBridgeAddress() async {
-        guard !isBusy else { return }
+        _ = await migrateEnteredBridgeAddress()
+    }
+
+    /// The shared address migration transaction used by manual entry and Bonjour.
+    /// The Boolean lets Bonjour restore the exact pre-selection text even when the
+    /// HTTP request is cancelled and the model returns to `.connected`.
+    @discardableResult
+    private func migrateEnteredBridgeAddress() async -> Bool {
+        guard !isBusy else { return false }
         guard let oldClient = client, oldClient.hasCredential else {
             state = .authenticationRequired
             message = BridgeClientError.missingCredential.localizedDescription
-            return
+            return false
         }
 
         let previousBridgeURLText = oldClient.baseURL.absoluteString
@@ -356,16 +507,19 @@ public final class BridgeConnectionModel: ObservableObject {
             bridgeURLText = candidateClient.baseURL.absoluteString
             state = .connected
             message = "Bridge address updated. The saved pairing was kept."
+            return true
         } catch is CancellationError {
             bridgeURLText = previousBridgeURLText
             state = .connected
             message = "Address change was cancelled. The previous bridge address remains active."
+            return false
         } catch {
             // oldClient is intentionally retained; it remains the recovery path for every
             // candidate network, authentication, response, and Keychain failure.
             _ = oldClient
             bridgeURLText = previousBridgeURLText
             fail(with: error)
+            return false
         }
     }
 
