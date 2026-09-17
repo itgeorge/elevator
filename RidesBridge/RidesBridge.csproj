@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- Small maintained pure-managed RFC 6762/RFC 6763 advertiser; kept behind IBonjourPublisher. -->
+    <PackageReference Include="Haukcode.Mdns" Version="1.0.18" />
     <ProjectReference Include="..\Pm3UsbApi\Pm3UsbApi.csproj" />
   </ItemGroup>
 </Project>

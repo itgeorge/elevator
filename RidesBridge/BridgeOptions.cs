@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using Microsoft.Extensions.Configuration;
@@ -82,24 +83,17 @@ public sealed record BridgeOptions
         var pairingQrArtifactDirectory = configuration["Bridge:PairingQrArtifactDirectory"]
             ?? configuration["BRIDGE_PAIRING_QR_ARTIFACT_DIRECTORY"];
         var port = configuration["Pm3:Port"] ?? configuration["PM3_PORT"];
-        var auto = configuration["Pm3:AutoDiscover"] ?? configuration["PM3_AUTO_DISCOVER"];
-        var lifetime = configuration["Bridge:PairingLifetimeSeconds"] ?? configuration["BRIDGE_PAIRING_LIFETIME_SECONDS"];
-        var operationWait = configuration["Bridge:OperationWaitTimeoutSeconds"] ?? configuration["BRIDGE_OPERATION_WAIT_TIMEOUT_SECONDS"];
-        var hardwareExecution = configuration["Bridge:HardwareExecutionTimeoutSeconds"] ?? configuration["BRIDGE_HARDWARE_EXECUTION_TIMEOUT_SECONDS"];
-        var hardwareRecovery = configuration["Bridge:HardwareRecoveryTimeoutSeconds"] ?? configuration["BRIDGE_HARDWARE_RECOVERY_TIMEOUT_SECONDS"];
-
-        if (!bool.TryParse(auto, out var autoDiscover))
-            autoDiscover = true;
-        if (!double.TryParse(lifetime, out var seconds))
-            seconds = 120;
-        if (!double.TryParse(operationWait, out var operationWaitSeconds))
-            operationWaitSeconds = 5;
-        if (!double.TryParse(hardwareExecution, out var hardwareExecutionSeconds)
-            || !double.IsFinite(hardwareExecutionSeconds))
-            hardwareExecutionSeconds = 20;
-        if (!double.TryParse(hardwareRecovery, out var hardwareRecoverySeconds)
-            || !double.IsFinite(hardwareRecoverySeconds))
-            hardwareRecoverySeconds = 4;
+        var autoKey = configuration["Pm3:AutoDiscover"] is not null ? "Pm3:AutoDiscover" : "PM3_AUTO_DISCOVER";
+        var auto = configuration[autoKey];
+        var autoDiscover = ParseBoolean(auto, autoKey, defaultValue: true);
+        var pairingLifetime = ParseSeconds(configuration,
+            "Bridge:PairingLifetimeSeconds", "BRIDGE_PAIRING_LIFETIME_SECONDS", 120);
+        var operationWait = ParseSeconds(configuration,
+            "Bridge:OperationWaitTimeoutSeconds", "BRIDGE_OPERATION_WAIT_TIMEOUT_SECONDS", 5);
+        var hardwareExecution = ParseSeconds(configuration,
+            "Bridge:HardwareExecutionTimeoutSeconds", "BRIDGE_HARDWARE_EXECUTION_TIMEOUT_SECONDS", 20);
+        var hardwareRecovery = ParseSeconds(configuration,
+            "Bridge:HardwareRecoveryTimeoutSeconds", "BRIDGE_HARDWARE_RECOVERY_TIMEOUT_SECONDS", 4);
 
         return new BridgeOptions
         {
@@ -111,11 +105,39 @@ public sealed record BridgeOptions
             Pm3Port = port,
             Pm3AutoDiscover = autoDiscover,
             Pm3ClientPath = configuration["Pm3:ClientPath"] ?? configuration["PM3_CLIENT_PATH"],
-            PairingLifetime = TimeSpan.FromSeconds(seconds),
-            OperationWaitTimeout = TimeSpan.FromSeconds(operationWaitSeconds),
-            HardwareExecutionTimeout = TimeSpan.FromSeconds(hardwareExecutionSeconds),
-            HardwareRecoveryTimeout = TimeSpan.FromSeconds(hardwareRecoverySeconds),
+            PairingLifetime = pairingLifetime,
+            OperationWaitTimeout = operationWait,
+            HardwareExecutionTimeout = hardwareExecution,
+            HardwareRecoveryTimeout = hardwareRecovery,
         };
+    }
+
+    private static bool ParseBoolean(string? value, string key, bool defaultValue)
+    {
+        if (value is null)
+            return defaultValue;
+        if (bool.TryParse(value, out var parsed))
+            return parsed;
+        throw new BridgeConfigurationException($"{key} must be true or false.");
+    }
+
+    private static TimeSpan ParseSeconds(IConfiguration configuration, string primaryKey, string environmentKey, double defaultSeconds)
+    {
+        var key = configuration[primaryKey] is not null ? primaryKey : environmentKey;
+        var value = configuration[key];
+        if (value is null)
+            return TimeSpan.FromSeconds(defaultSeconds);
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
+            || !double.IsFinite(seconds))
+            throw new BridgeConfigurationException($"{key} must be a finite number of seconds.");
+        try
+        {
+            return TimeSpan.FromSeconds(seconds);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new BridgeConfigurationException($"{key} is outside the supported time span.", ex);
+        }
     }
 
     public static void ValidateBindUrl(string? bindUrl)
@@ -198,7 +220,15 @@ public sealed record BridgeOptions
     }
 
     private static IEnumerable<IPAddress> GetActiveIpv4Addresses() => NetworkInterface.GetAllNetworkInterfaces()
-        .Where(n => n.OperationalStatus == OperationalStatus.Up)
+        // A wildcard listener should not publish addresses from a down, point-to-point,
+        // or non-multicast interface. Haukcode.Mdns advertises over multicast links, so
+        // those addresses cannot be reached by a Bonjour browser even though HTTP may be
+        // bound to the wildcard socket.
+        .Where(n => n.OperationalStatus == OperationalStatus.Up
+            && n.SupportsMulticast
+            && n.NetworkInterfaceType is not NetworkInterfaceType.Loopback
+            and not NetworkInterfaceType.Ppp
+            and not NetworkInterfaceType.Tunnel)
         .SelectMany(n => n.GetIPProperties().UnicastAddresses)
         .Select(a => a.Address);
 
@@ -226,4 +256,5 @@ public sealed record BridgeOptions
 public sealed class BridgeConfigurationException : Exception
 {
     public BridgeConfigurationException(string message) : base(message) { }
+    public BridgeConfigurationException(string message, Exception innerException) : base(message, innerException) { }
 }

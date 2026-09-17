@@ -72,6 +72,23 @@ public sealed class BridgeOptionsTests
         Assert.That(ex!.Message, Does.Contain("OperationWaitTimeout"));
     }
 
+    [TestCase("Bridge:PairingLifetimeSeconds", "not-a-number")]
+    [TestCase("Bridge:OperationWaitTimeoutSeconds", "not-a-number")]
+    [TestCase("Bridge:HardwareExecutionTimeoutSeconds", "not-a-number")]
+    [TestCase("Bridge:HardwareRecoveryTimeoutSeconds", "not-a-number")]
+    [TestCase("PM3_AUTO_DISCOVER", "not-a-boolean")]
+    public void FromConfiguration_RejectsMalformedConfiguredValues(string key, string value)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [key] = value,
+        }).Build();
+
+        var ex = Assert.Throws<BridgeConfigurationException>(() => BridgeOptions.FromConfiguration(configuration));
+
+        Assert.That(ex!.Message, Does.Contain(key));
+    }
+
     [Test]
     public void FromConfiguration_ReadsHardwareTimeoutsIncludingRecoveryEnvironmentKey()
     {
