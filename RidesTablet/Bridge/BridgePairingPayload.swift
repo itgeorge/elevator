@@ -186,16 +186,79 @@ public struct BridgePairingPayload: Equatable, Sendable {
     }
 
     private static func parseISO8601(_ value: String) -> Date? {
-        // System.Text.Json emits DateTimeOffset with exactly seven fractional digits.
-        // Keep the Swift contract at that backend precision instead of accepting a wider
-        // timestamp language that has not been parity-tested.
-        let pattern = #"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{7}(Z|[+-][0-9]{2}:[0-9]{2})$"#
-        guard value.range(of: pattern, options: .regularExpression) != nil else { return nil }
+        // This is the ISO-8601 extended profile emitted by System.Text.Json for
+        // DateTimeOffset: a fixed-width local date/time, optional 1...7 fractional
+        // digits, and either Z or a numeric offset.
+        let pattern = #"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,7})?(Z|[+-][0-9]{2}:[0-9]{2})$"#
+        guard let match = value.range(of: pattern, options: .regularExpression),
+              match.lowerBound == value.startIndex,
+              match.upperBound == value.endIndex else { return nil }
+
+        let bytes = Array(value.utf8)
+        func number(_ range: Range<Int>) -> Int? {
+            Int(String(decoding: bytes[range], as: UTF8.self))
+        }
+
+        guard let year = number(0..<4),
+              let month = number(5..<7),
+              let day = number(8..<10),
+              let hour = number(11..<13),
+              let minute = number(14..<16),
+              let second = number(17..<19),
+              year >= 1,
+              (1...12).contains(month),
+              (1...31).contains(day),
+              (0...23).contains(hour),
+              (0...59).contains(minute),
+              (0...59).contains(second) else { return nil }
+
+        let hasFraction = bytes[19] == 46 // "."
+        let zoneStart = bytes.last == 90 ? bytes.count - 1 : bytes.count - 6 // "Z" or +/-HH:MM
+        var nanosecond = 0
+        if hasFraction {
+            let fractionLength = zoneStart - 20
+            guard (1...7).contains(fractionLength),
+                  let fraction = number(20..<zoneStart) else { return nil }
+            nanosecond = fraction
+            for _ in 0..<(9 - fractionLength) { nanosecond *= 10 }
+        }
+
+        if bytes.last != 90 {
+            guard bytes[zoneStart] == 43 || bytes[zoneStart] == 45,
+                  bytes[zoneStart + 3] == 58,
+                  let offsetHour = number(zoneStart + 1..<zoneStart + 3),
+                  let offsetMinute = number(zoneStart + 4..<zoneStart + 6),
+                  (0...14).contains(offsetHour),
+                  (0...59).contains(offsetMinute),
+                  offsetHour < 14 || offsetMinute == 0 else { return nil }
+        }
+
+        // Calendar validation is explicit because ISO8601DateFormatter normalizes
+        // some invalid no-fraction values (for example, February 30).
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        components.second = second
+        components.nanosecond = nanosecond
+        guard let localDate = calendar.date(from: components) else { return nil }
+        let normalized = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: localDate)
+        guard normalized.year == year,
+              normalized.month == month,
+              normalized.day == day,
+              normalized.hour == hour,
+              normalized.minute == minute,
+              normalized.second == second else { return nil }
 
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = calendar.timeZone
+        formatter.formatOptions = hasFraction
+            ? [.withInternetDateTime, .withFractionalSeconds]
+            : [.withInternetDateTime]
         return formatter.date(from: value)
     }
 

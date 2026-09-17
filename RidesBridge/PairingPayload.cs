@@ -320,6 +320,230 @@ public sealed class BridgeIdentityService
     }
 }
 
+/// <summary>
+/// Owns the on-disk pairing QR images for one PIN lifetime. The lease is deliberately explicit:
+/// callers must await <see cref="RunAsync"/> and dispose it during host shutdown.
+/// </summary>
+public sealed class PairingQrArtifactLease : IDisposable
+{
+    public const int PixelsPerModule = 16;
+    public const string ArtifactFilePrefix = "ridesbridge-pairing-qr-";
+    private static readonly UnixFileMode OwnerOnlyFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+    private static readonly UnixFileMode OwnerOnlyDirectoryMode = OwnerOnlyFileMode | UnixFileMode.UserExecute;
+
+    private readonly object _sync = new();
+    private readonly TimeProvider _clock;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly string _directory;
+    private readonly IReadOnlyList<string> _paths;
+    private readonly DateTimeOffset _expiresAt;
+    private bool _disposed;
+
+    public PairingQrArtifactLease(
+        BridgeOptions options,
+        IReadOnlyList<PairingPayload> payloads,
+        TimeProvider? clock = null,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(payloads);
+        if (payloads.Count == 0)
+            throw new ArgumentException("At least one pairing payload is required.", nameof(payloads));
+
+        options.Validate();
+        _clock = clock ?? TimeProvider.System;
+        _delay = delay ?? ((duration, cancellationToken) => Task.Delay(duration, cancellationToken));
+        _directory = Path.GetFullPath(options.EffectivePairingQrArtifactDirectory);
+        _expiresAt = payloads.Min(payload => payload.ExpiresAt);
+        if (_expiresAt <= _clock.GetUtcNow())
+            throw new BridgeConfigurationException("Pairing QR payloads have expired.");
+
+        foreach (var payload in payloads)
+            PairingPayload.ValidateBridgeUrl(payload.BridgeUrl);
+        Payloads = payloads.ToArray();
+        _paths = Payloads.Select(payload => Path.Combine(_directory, GetArtifactFileName(payload.BridgeUrl))).ToArray();
+
+        Directory.CreateDirectory(_directory);
+        EnforceOwnerOnlyPermissions(_directory, isDirectory: true);
+        DeleteOwnedArtifacts(_directory);
+        try
+        {
+            for (var index = 0; index < payloads.Count; index++)
+                WriteAtomically(_paths[index], PairingPayload.Serialize(payloads[index]));
+        }
+        catch
+        {
+            DeletePaths(_paths);
+            throw;
+        }
+    }
+
+    public IReadOnlyList<PairingPayload> Payloads { get; }
+
+    public IReadOnlyList<string> ArtifactPaths => _paths;
+
+    public static PairingQrArtifactLease? CreateForReportedUrls(
+        BridgeOptions options,
+        PairingCode pairingCode,
+        string bridgeId,
+        IEnumerable<IPAddress>? addresses = null,
+        TimeProvider? clock = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(pairingCode);
+        var payloads = PairingPayloadFactory.CreateForReportedUrls(
+            options,
+            pairingCode,
+            bridgeId,
+            addresses ?? GetActiveAddresses(),
+            clock);
+        return payloads.Count == 0 ? null : new PairingQrArtifactLease(options, payloads, clock);
+    }
+
+    public static string GetArtifactFileName(Uri bridgeUrl)
+    {
+        var url = PairingPayload.ValidateBridgeUrl(bridgeUrl);
+        return $"{ArtifactFilePrefix}{url.Host}-{url.Port}.png";
+    }
+
+    /// <summary>Deletes the lease's files when its injected clock says the PIN is expired.</summary>
+    public bool CleanupIfExpired()
+    {
+        lock (_sync)
+        {
+            if (_disposed || _clock.GetUtcNow() < _expiresAt)
+                return false;
+            DeletePaths(_paths);
+            return true;
+        }
+    }
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                if (CleanupIfExpired())
+                    return;
+
+                var remaining = _expiresAt - _clock.GetUtcNow();
+                if (remaining <= TimeSpan.Zero)
+                    continue;
+                await _delay(remaining, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutdown owns final deletion; cancellation only stops the expiry watcher.
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_sync)
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            DeletePaths(_paths);
+        }
+        GC.SuppressFinalize(this);
+    }
+
+    private static void WriteAtomically(string path, string payload)
+    {
+        var directory = Path.GetDirectoryName(path)!;
+        var tempPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            var png = CreatePng(payload);
+            using (var stream = new FileStream(
+                       tempPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 4096,
+                       options: FileOptions.WriteThrough))
+            {
+                EnforceOwnerOnlyPermissions(tempPath, isDirectory: false);
+                stream.Write(png, 0, png.Length);
+                stream.Flush(flushToDisk: true);
+            }
+
+            // The temporary file is in the destination directory, so this is one atomic rename
+            // from an owner-only file rather than a partially visible PNG.
+            File.Move(tempPath, path, overwrite: true);
+            EnforceOwnerOnlyPermissions(path, isDirectory: false);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+        }
+    }
+
+    private static byte[] CreatePng(string payload)
+    {
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.M);
+        using var qrCode = new PngByteQRCode(data);
+        return qrCode.GetGraphic(PixelsPerModule, drawQuietZones: true);
+    }
+
+    private static void DeleteOwnedArtifacts(string directory)
+    {
+        foreach (var path in Directory.EnumerateFiles(directory, ArtifactFilePrefix + "*.png"))
+        {
+            // Keep the namespace narrow enough that a similarly named user file is not
+            // mistaken for one of our predictable URL artifacts.
+            if (IsOwnedArtifactFile(path))
+                DeletePath(path);
+        }
+    }
+
+    private static bool IsOwnedArtifactFile(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (!name.StartsWith(ArtifactFilePrefix, StringComparison.Ordinal)
+            || !name.EndsWith(".png", StringComparison.Ordinal))
+            return false;
+        var addressAndPort = name[ArtifactFilePrefix.Length..^4];
+        var separator = addressAndPort.LastIndexOf('-');
+        if (separator <= 0 || !int.TryParse(addressAndPort[(separator + 1)..], out var port)
+            || port is < 1 or > 65535
+            || !IPAddress.TryParse(addressAndPort[..separator], out var address))
+            return false;
+        return address.AddressFamily == AddressFamily.InterNetwork && BridgeOptions.IsPrivateIpv4(address);
+    }
+
+    private static void DeletePaths(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+            DeletePath(path);
+    }
+
+    private static void DeletePath(string path)
+    {
+        try { File.Delete(path); }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
+    }
+
+    private static void EnforceOwnerOnlyPermissions(string path, bool isDirectory)
+    {
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, isDirectory ? OwnerOnlyDirectoryMode : OwnerOnlyFileMode);
+    }
+
+    private static IEnumerable<IPAddress> GetActiveAddresses() =>
+        System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+            .Select(a => a.Address);
+}
+
 public sealed class TerminalQrRenderer
 {
     private const string DarkForeground = "\u001b[30m";
@@ -376,7 +600,8 @@ public static class BridgeTerminalDisplay
         string bridgeId,
         TextWriter output,
         IEnumerable<IPAddress>? addresses = null,
-        TerminalQrRenderer? renderer = null)
+        TerminalQrRenderer? renderer = null,
+        PairingQrArtifactLease? artifactLease = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(pairing);
@@ -388,20 +613,31 @@ public static class BridgeTerminalDisplay
         output.WriteLine($"RidesBridge API {BridgeOptions.ApiVersion} listening.");
         output.WriteLine($"Pairing PIN: {pairingCode.Value} (expires {pairingCode.ExpiresAt:O})");
 
-        var payloads = addresses is null
+        var payloads = artifactLease?.Payloads ?? (addresses is null
             ? PairingPayloadFactory.CreateForReportedUrls(options, pairingCode, bridgeId, GetActiveAddresses())
-            : PairingPayloadFactory.CreateForReportedUrls(options, pairingCode, bridgeId, addresses);
+            : PairingPayloadFactory.CreateForReportedUrls(options, pairingCode, bridgeId, addresses));
         if (payloads.Count == 0)
         {
             output.WriteLine("No non-loopback private URL is available for QR pairing; use the displayed PIN with a manual URL.");
             return;
         }
 
-        foreach (var payload in payloads)
+        for (var index = 0; index < payloads.Count; index++)
         {
+            var payload = payloads[index];
             output.WriteLine($"Reachable private URL: {payload.BridgeUrl}");
-            output.WriteLine($"Pairing QR for {payload.BridgeUrl}:");
-            output.WriteLine(renderer.Render(PairingPayload.Serialize(payload)));
+            if (artifactLease is null)
+            {
+                // The ANSI renderer remains the explicit terminal fallback for callers that do
+                // not opt into the physical PNG artifact.
+                output.WriteLine($"Pairing QR for {payload.BridgeUrl}:");
+                output.WriteLine(renderer.Render(PairingPayload.Serialize(payload)));
+            }
+            else
+            {
+                // Never write PNG bytes or serialized pairing material to the console.
+                output.WriteLine($"Pairing QR artifact: {artifactLease.ArtifactPaths[index]}");
+            }
         }
     }
 

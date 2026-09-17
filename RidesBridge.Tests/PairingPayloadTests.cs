@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -176,6 +177,150 @@ public sealed class PairingPayloadTests
             File.WriteAllText(path, "not-an-identity\n");
             Assert.That(() => new BridgeIdentityService(path), Throws.TypeOf<BridgeConfigurationException>());
             Assert.That(File.ReadAllText(path), Is.EqualTo("not-an-identity\n"));
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Test]
+    public void PairingQrArtifactIsLosslessPngSizedForTheCompleteQuietZonedMatrixAndOwnerOnly()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"));
+        var payload = CreatePayload() with { Pin = "123456" };
+        PairingQrArtifactLease? lease = null;
+        try
+        {
+            lease = new PairingQrArtifactLease(
+                new BridgeOptions { BindUrl = "http://127.0.0.1:5080", PairingQrArtifactDirectory = directory },
+                [payload]);
+            var path = lease.ArtifactPaths.Single();
+            var bytes = File.ReadAllBytes(path);
+            Assert.That(bytes.AsSpan(0, 8).ToArray(), Is.EqualTo(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16, 4)), Is.EqualTo((uint)(new TerminalQrRenderer().GetLogicalMatrix(PairingPayload.Serialize(payload)).Length * PairingQrArtifactLease.PixelsPerModule)));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4)), Is.EqualTo(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16, 4))));
+            Assert.That(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(8, 4)), Is.EqualTo(13u));
+            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 12, 4), Is.EqualTo("IHDR"));
+            Assert.That(path, Does.Not.Contain(payload.Pin));
+            Assert.That(path, Does.Not.Contain("token"));
+            Assert.That(path, Does.Not.Contain("verifier"));
+            Assert.That(Directory.GetFiles(directory, "*.tmp"), Is.Empty);
+            if (!OperatingSystem.IsWindows())
+            {
+                var mode = File.GetUnixFileMode(path);
+                Assert.That(mode, Is.EqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite));
+            }
+        }
+        finally
+        {
+            lease?.Dispose();
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Test]
+    public async Task PairingQrArtifactLeaseExpiresWithInjectedClockAndCancellationIsAwaitable()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"));
+        var clock = new TestClock(DateTimeOffset.UtcNow);
+        var payload = CreatePayload() with { ExpiresAt = clock.GetUtcNow().AddSeconds(5) };
+        PairingQrArtifactLease? lease = null;
+        using var cancellation = new CancellationTokenSource();
+        Task? watcher = null;
+        try
+        {
+            lease = new PairingQrArtifactLease(
+                new BridgeOptions { BindUrl = "http://127.0.0.1:5080", PairingQrArtifactDirectory = directory },
+                [payload],
+                clock,
+                (_, cancellationToken) => Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken));
+            watcher = lease.RunAsync(cancellation.Token);
+            clock.Advance(TimeSpan.FromSeconds(6));
+            Assert.That(lease.CleanupIfExpired(), Is.True);
+            Assert.That(lease.ArtifactPaths.All(path => !File.Exists(path)), Is.True);
+            Assert.That(watcher.IsCompleted, Is.False, "RunAsync remains owned by its caller until cancellation.");
+            cancellation.Cancel();
+            await watcher;
+        }
+        finally
+        {
+            cancellation.Cancel();
+            if (watcher is not null) await watcher;
+            lease?.Dispose();
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Test]
+    public void ArtifactStartupReplacesOnlyItsPredictableFilesAndLoopbackCreatesNothing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"));
+        var unrelated = Path.Combine(directory, "keep-me.txt");
+        var similarlyNamedUnrelated = Path.Combine(directory, PairingQrArtifactLease.ArtifactFilePrefix + "not-a-private-url.png");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(unrelated, "unrelated");
+            File.WriteAllText(similarlyNamedUnrelated, "unrelated");
+            var options = new BridgeOptions { BindUrl = "http://0.0.0.0:5080", PairingQrArtifactDirectory = directory };
+            using (var first = PairingQrArtifactLease.CreateForReportedUrls(
+                       options,
+                       new PairingCode("123456", DateTimeOffset.UtcNow.AddMinutes(1)),
+                       "0123456789ABCDEF0123456789ABCDEF",
+                       [IPAddress.Parse("10.0.0.1"), IPAddress.Parse("192.168.1.2")])!)
+            {
+                Assert.That(first.ArtifactPaths, Has.Count.EqualTo(2));
+            }
+            var stalePath = Path.Combine(directory, PairingQrArtifactLease.GetArtifactFileName(new Uri("http://10.0.0.1:5080/")));
+            File.WriteAllBytes(stalePath, [1, 2, 3]);
+
+            using var second = PairingQrArtifactLease.CreateForReportedUrls(
+                options,
+                new PairingCode("654321", DateTimeOffset.UtcNow.AddMinutes(1)),
+                "0123456789ABCDEF0123456789ABCDEF",
+                [IPAddress.Parse("10.0.0.1"), IPAddress.Parse("192.168.1.2")]);
+            Assert.That(second, Is.Not.Null);
+            var secondLease = second!;
+            Assert.That(secondLease.ArtifactPaths.All(File.Exists), Is.True);
+            Assert.That(Directory.GetFiles(directory, PairingQrArtifactLease.ArtifactFilePrefix + "*.png"), Has.Length.EqualTo(3));
+            Assert.That(File.Exists(unrelated), Is.True);
+            Assert.That(File.Exists(similarlyNamedUnrelated), Is.True);
+            secondLease.Dispose();
+            Assert.That(secondLease.ArtifactPaths.All(path => !File.Exists(path)), Is.True);
+
+            var loopbackDirectory = Path.Combine(directory, "loopback");
+            var loopback = PairingQrArtifactLease.CreateForReportedUrls(
+                new BridgeOptions { BindUrl = "http://127.0.0.1:5080", PairingQrArtifactDirectory = loopbackDirectory },
+                new PairingCode("111111", DateTimeOffset.UtcNow.AddMinutes(1)),
+                "0123456789ABCDEF0123456789ABCDEF",
+                [IPAddress.Parse("10.0.0.1")]);
+            Assert.That(loopback, Is.Null);
+            Assert.That(Directory.Exists(loopbackDirectory), Is.False);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Test]
+    public void ArtifactDisplayPrintsPathsAndRetainsThePinFallbackWithoutPrintingPayloadBytes()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var options = new BridgeOptions { BindUrl = "http://0.0.0.0:5080", PairingQrArtifactDirectory = directory };
+            var pairing = new PairingCodeService(TimeSpan.FromMinutes(1));
+            var code = pairing.GetActiveCode()!;
+            using var lease = PairingQrArtifactLease.CreateForReportedUrls(
+                options,
+                code,
+                "0123456789ABCDEF0123456789ABCDEF",
+                [IPAddress.Parse("10.0.0.1"), IPAddress.Parse("192.168.1.2")]);
+            using var output = new StringWriter();
+            BridgeTerminalDisplay.Write(options, pairing, "0123456789ABCDEF0123456789ABCDEF", output, artifactLease: lease);
+            var text = output.ToString();
+            Assert.That(text, Does.Contain($"Pairing PIN: {code.Value}"));
+            Assert.That(text, Does.Contain("Pairing QR artifact: "));
+            Assert.That(text, Does.Not.Contain("\u001b["));
+            Assert.That(text, Does.Not.Contain("accessToken"));
+            Assert.That(text, Does.Not.Contain("verifier"));
+            Assert.That(text, Does.Not.Contain(PairingPayload.Serialize(lease!.Payloads[0])));
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
