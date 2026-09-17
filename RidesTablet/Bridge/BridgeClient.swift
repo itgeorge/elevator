@@ -4,8 +4,9 @@ public struct BridgeCredential: Codable, Equatable, Sendable {
     public let baseURL: URL
     public let accessToken: String
     public let tokenType: String
-    /// Stable bridge identity carried by QR pairing. It is optional so credentials saved by
-    /// earlier app versions continue to decode and manual pairing remains unchanged.
+    /// Public bridge identifier carried by QR pairing; it is not an authenticator. It is
+    /// optional so credentials saved by earlier app versions continue to decode and manual
+    /// pairing remains unchanged.
     public let bridgeId: String?
 
     public init(baseURL: URL, accessToken: String, tokenType: String = "Bearer", bridgeId: String? = nil) {
@@ -200,6 +201,46 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
+    /// Performs the unauthenticated token-bound proof before any authenticated request
+    /// to a Bonjour candidate. A bad or malformed proof fails closed and never sends status.
+    public func proveBonjourRelocation(expectedBridgeId: String, nonce: String) async throws {
+        guard let credential = credentialSnapshot() else { throw BridgeClientError.missingCredential }
+        guard BridgeRelocationProof.decodeUpperHex(nonce, byteCount: BridgeRelocationProof.digestByteCount) != nil,
+              let canonicalURL = Self.canonicalBonjourURLString(baseURL) else {
+            throw BridgeClientError.invalidResponse
+        }
+
+        let locator = BridgeRelocationProof.locator(for: credential.accessToken)
+        let body = try JSONEncoder().encode(BridgePairRelocationProofRequest(
+            locator: locator,
+            nonce: nonce,
+            url: canonicalURL
+        ))
+        let data = try await send(
+            path: "api/v1/pair/proof",
+            method: "POST",
+            body: body,
+            requiresAuthentication: false,
+            // A malicious candidate must not be able to echo proof inputs into a
+            // user-visible error. The bearer is also sanitized by send itself.
+            ephemeralSecrets: [locator, nonce],
+            maximumResponseBytes: 4_096
+        )
+        guard !Self.hasDuplicateTopLevelJSONKey(data) else {
+            throw BridgeClientError.invalidJSON
+        }
+        let response = try decode(BridgePairRelocationProofResponse.self, data: data)
+        guard BridgeRelocationProof.isValid(
+            response: response,
+            bearer: credential.accessToken,
+            expectedBridgeId: expectedBridgeId,
+            expectedNonce: nonce,
+            canonicalURL: canonicalURL
+        ) else {
+            throw BridgeClientError.invalidResponse
+        }
+    }
+
     /// Verifies the current bearer at a candidate address without changing this client.
     /// The candidate is normalized and receives the same bearer only for this check.
     public func verifyPairing(at candidateBaseURL: URL) async throws -> BridgePairStatusResponse {
@@ -309,7 +350,8 @@ public final class BridgeClient: @unchecked Sendable {
         method: String,
         body: Data?,
         requiresAuthentication: Bool,
-        ephemeralSecrets: [String] = []
+        ephemeralSecrets: [String] = [],
+        maximumResponseBytes: Int? = nil
     ) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = method
@@ -329,7 +371,22 @@ public final class BridgeClient: @unchecked Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            if let maximumResponseBytes {
+                guard maximumResponseBytes > 0 else { throw BridgeClientError.invalidResponse }
+                let (bytes, streamedResponse) = try await session.bytes(for: request)
+                response = streamedResponse
+                var boundedData = Data()
+                boundedData.reserveCapacity(min(maximumResponseBytes, 16_384))
+                for try await byte in bytes {
+                    guard boundedData.count < maximumResponseBytes else {
+                        throw BridgeClientError.invalidResponse
+                    }
+                    boundedData.append(byte)
+                }
+                data = boundedData
+            } else {
+                (data, response) = try await session.data(for: request)
+            }
         } catch let error as BridgeClientError {
             throw error
         } catch {
@@ -393,6 +450,109 @@ public final class BridgeClient: @unchecked Sendable {
 
     private func credentialSnapshot() -> BridgeCredential? {
         withCredentialLock { credential }
+    }
+
+    private static func hasDuplicateTopLevelJSONKey(_ data: Data) -> Bool {
+        let bytes = Array(data)
+        var index = 0
+        skipJSONWhitespace(bytes, &index)
+        guard consumeJSONByte(0x7B, bytes, &index) else { return false } // {
+        skipJSONWhitespace(bytes, &index)
+        if consumeJSONByte(0x7D, bytes, &index) { return false } // }
+
+        var keys = Set<String>()
+        while index < bytes.count {
+            skipJSONWhitespace(bytes, &index)
+            guard index < bytes.count, bytes[index] == 0x22 else { return false } // \"
+            let start = index
+            guard skipJSONString(bytes, &index),
+                  let key = try? JSONDecoder().decode(String.self, from: Data(bytes[start..<index])) else {
+                return false
+            }
+            if !keys.insert(key).inserted { return true }
+            skipJSONWhitespace(bytes, &index)
+            guard consumeJSONByte(0x3A, bytes, &index), skipJSONValue(bytes, &index) else { return false } // :
+            skipJSONWhitespace(bytes, &index)
+            if consumeJSONByte(0x7D, bytes, &index) { return false } // }
+            guard consumeJSONByte(0x2C, bytes, &index) else { return false } // ,
+        }
+        return false
+    }
+
+    private static func skipJSONWhitespace(_ bytes: [UInt8], _ index: inout Int) {
+        while index < bytes.count && (bytes[index] == 0x20 || bytes[index] == 0x09 || bytes[index] == 0x0A || bytes[index] == 0x0D) {
+            index += 1
+        }
+    }
+
+    private static func consumeJSONByte(_ byte: UInt8, _ bytes: [UInt8], _ index: inout Int) -> Bool {
+        guard index < bytes.count, bytes[index] == byte else { return false }
+        index += 1
+        return true
+    }
+
+    private static func skipJSONString(_ bytes: [UInt8], _ index: inout Int) -> Bool {
+        guard consumeJSONByte(0x22, bytes, &index) else { return false } // \"
+        while index < bytes.count {
+            switch bytes[index] {
+            case 0x22:
+                index += 1
+                return true
+            case 0x5C:
+                index += 2
+            case 0x00...0x1F:
+                return false
+            default:
+                index += 1
+            }
+        }
+        return false
+    }
+
+    private static func skipJSONValue(_ bytes: [UInt8], _ index: inout Int) -> Bool {
+        skipJSONWhitespace(bytes, &index)
+        guard index < bytes.count else { return false }
+        if bytes[index] == 0x22 { return skipJSONString(bytes, &index) }
+        if bytes[index] == 0x7B || bytes[index] == 0x5B {
+            let opening = bytes[index]
+            let closing: UInt8 = opening == 0x7B ? 0x7D : 0x5D
+            index += 1
+            skipJSONWhitespace(bytes, &index)
+            if consumeJSONByte(closing, bytes, &index) { return true }
+            while index < bytes.count {
+                if opening == 0x7B {
+                    guard skipJSONString(bytes, &index) else { return false }
+                    skipJSONWhitespace(bytes, &index)
+                    guard consumeJSONByte(0x3A, bytes, &index) else { return false }
+                }
+                guard skipJSONValue(bytes, &index) else { return false }
+                skipJSONWhitespace(bytes, &index)
+                if consumeJSONByte(closing, bytes, &index) { return true }
+                guard consumeJSONByte(0x2C, bytes, &index) else { return false }
+                skipJSONWhitespace(bytes, &index)
+            }
+            return false
+        }
+        let start = index
+        while index < bytes.count && ![0x20, 0x09, 0x0A, 0x0D, 0x2C, 0x5D, 0x7D].contains(bytes[index]) {
+            index += 1
+        }
+        return index > start
+    }
+
+    private static func canonicalBonjourURLString(_ url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.caseInsensitiveCompare("http") == .orderedSame,
+              components.user == nil, components.password == nil,
+              components.query == nil, components.fragment == nil,
+              components.path.isEmpty || components.path == "/",
+              let host = components.host, let port = components.port else { return nil }
+        var canonical = URLComponents()
+        canonical.scheme = "http"
+        canonical.host = host
+        canonical.port = port
+        canonical.path = "/"
+        return canonical.url?.absoluteString
     }
 
     private func sanitizedServerValue(_ value: String, ephemeralSecrets: [String]) -> String {

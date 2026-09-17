@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import RidesTablet
 
@@ -360,6 +361,129 @@ final class BridgeClientTests: XCTestCase {
             }
         }
         XCTAssertTrue(client.hasCredential)
+    }
+
+    func testBonjourRelocationProofMatchesBackendCryptoVector() throws {
+        let bearer = "bearer-vector-1🔐"
+        let nonce = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+        let bridgeId = "0123456789ABCDEF0123456789ABCDEF"
+        let url = "http://192.168.1.20:5080/"
+
+        XCTAssertEqual(
+            BridgeRelocationProof.locator(for: bearer),
+            "5180065A046E3663B726F1677AE2C12DDB3A48B3E5FCE369AB218A538A2BF275"
+        )
+        XCTAssertEqual(
+            BridgeRelocationProof.proof(for: bearer, nonce: nonce, bridgeId: bridgeId, canonicalURL: url),
+            "A124C6B859B167BBFD1FE1F03D21B4DDB089A169855588A7FEC19DE030CE3FB1"
+        )
+    }
+
+    func testBonjourProofIsUnauthenticatedStrictAndPrecedesStatus() async throws {
+        let token = "proof-request-token"
+        let bridgeId = "0123456789ABCDEF0123456789ABCDEF"
+        let nonce = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+        let baseURL = URL(string: "http://192.168.1.20:5080")!
+        var paths: [String] = []
+        StubBridgeURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.url, baseURL.appendingPathComponent("api/v1/pair/proof"))
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            let body = try XCTUnwrap(request.httpBody)
+            let proofRequest = try JSONDecoder().decode(BridgePairRelocationProofRequest.self, from: body)
+            let bodyText = String(decoding: body, as: UTF8.self)
+            XCTAssertTrue(bodyText.contains(BridgeRelocationProof.locator(for: token)))
+            let verifier = BridgeRelocationProof.uppercaseHex(Data(SHA256.hash(data: Data(token.utf8))))
+            XCTAssertFalse(bodyText.contains(token))
+            XCTAssertFalse(bodyText.contains(verifier))
+            let proof = try XCTUnwrap(BridgeRelocationProof.proof(
+                for: token, nonce: proofRequest.nonce, bridgeId: bridgeId, canonicalURL: proofRequest.url
+            ))
+            let responseBody = try JSONSerialization.data(withJSONObject: [
+                "bridgeId": bridgeId,
+                "apiVersion": "v1",
+                "nonce": proofRequest.nonce,
+                "proof": proof
+            ])
+            return (response(for: request), responseBody)
+        }
+        let client = try BridgeClient(
+            baseURL: baseURL,
+            session: stubSession(),
+            credential: BridgeCredential(baseURL: baseURL, accessToken: token)
+        )
+
+        try await client.proveBonjourRelocation(expectedBridgeId: bridgeId, nonce: nonce)
+        XCTAssertEqual(paths, ["/api/v1/pair/proof"])
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 1)
+    }
+
+    func testMalformedBonjourProofFailsClosedBeforeAnyStatusRequest() async throws {
+        let baseURL = URL(string: "http://192.168.1.20:5080")!
+        let bridgeId = "0123456789ABCDEF0123456789ABCDEF"
+        let nonce = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+        StubBridgeURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/pair/proof")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            return (response(for: request), Data(#"{"bridgeId":"wrong","apiVersion":"v2","nonce":"wrong","proof":"bad"}"#.utf8))
+        }
+        let client = try BridgeClient(
+            baseURL: baseURL,
+            session: stubSession(),
+            credential: BridgeCredential(baseURL: baseURL, accessToken: "proof-fail-token")
+        )
+
+        do {
+            try await client.proveBonjourRelocation(expectedBridgeId: bridgeId, nonce: nonce)
+            XCTFail("Expected forged proof rejection")
+        } catch let error as BridgeClientError {
+            XCTAssertEqual(error, .invalidResponse)
+        }
+        XCTAssertEqual(StubBridgeURLProtocol.requestCount, 1)
+    }
+
+    func testBonjourProofRejectsWrongNonceIDAPIVersionAndMalformedResponse() async throws {
+        let baseURL = URL(string: "http://192.168.1.20:5080")!
+        let token = "proof-contract-token"
+        let bridgeId = "0123456789ABCDEF0123456789ABCDEF"
+        let nonce = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+        let proof = try XCTUnwrap(BridgeRelocationProof.proof(
+            for: token, nonce: nonce, bridgeId: bridgeId, canonicalURL: "http://192.168.1.20:5080/"
+        ))
+        let valid: [String: Any] = [
+            "bridgeId": bridgeId, "apiVersion": "v1", "nonce": nonce, "proof": proof
+        ]
+        let responses: [Data] = [
+            try JSONSerialization.data(withJSONObject: valid.merging(["nonce": String(repeating: "A", count: 64)]) { _, new in new }),
+            try JSONSerialization.data(withJSONObject: valid.merging(["bridgeId": String(repeating: "B", count: 32)]) { _, new in new }),
+            try JSONSerialization.data(withJSONObject: valid.merging(["apiVersion": "v2"]) { _, new in new }),
+            try JSONSerialization.data(withJSONObject: valid.merging(["proof": String(repeating: "0", count: 64)]) { _, new in new }),
+            Data("{\"bridgeId\":\"\(bridgeId)\",\"apiVersion\":\"v1\",\"nonce\":\"\(nonce)\",\"proof\":\"\(proof)\",\"proof\":\"\(proof)\"}".utf8),
+            Data(repeating: 0x20, count: 4097),
+            Data("{".utf8)
+        ]
+
+        for responseBody in responses {
+            StubBridgeURLProtocol.requestCount = 0
+            StubBridgeURLProtocol.handler = { request in
+                XCTAssertEqual(request.url?.path, "/api/v1/pair/proof")
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                return (response(for: request), responseBody)
+            }
+            let client = try BridgeClient(
+                baseURL: baseURL,
+                session: stubSession(),
+                credential: BridgeCredential(baseURL: baseURL, accessToken: token)
+            )
+            do {
+                try await client.proveBonjourRelocation(expectedBridgeId: bridgeId, nonce: nonce)
+                XCTFail("Expected invalid proof response")
+            } catch is BridgeClientError {
+                // All response variants fail before a status request exists.
+            }
+            XCTAssertEqual(StubBridgeURLProtocol.requestCount, 1)
+        }
     }
 
     func testPairStatusVerificationUsesCandidateURLBearerAndExactRequestWithoutRetry() async throws {

@@ -22,7 +22,7 @@ public sealed record BonjourServiceDescriptor
             || instanceName.Any(c => c > 0x7f || !(char.IsLetterOrDigit(c) || c == '-')))
             throw new BridgeConfigurationException("Bonjour instance name must be an ASCII DNS label of no more than 63 characters.");
         if (!PairingPayload.IsBridgeId(bridgeId))
-            throw new BridgeConfigurationException("Bonjour bridge identity is invalid.");
+            throw new BridgeConfigurationException("Bonjour bridge identifier is invalid.");
         if (httpUrl is null)
             throw new ArgumentNullException(nameof(httpUrl));
 
@@ -52,13 +52,28 @@ public sealed record BonjourServiceDescriptor
     internal static Uri CanonicalPrivateHttpUrl(Uri url)
     {
         if (!url.IsAbsoluteUri || !string.Equals(url.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            || url.UserInfo.Length != 0 || !string.IsNullOrEmpty(url.Query) || !string.IsNullOrEmpty(url.Fragment)
+            || !HasExplicitPort(url) || url.UserInfo.Length != 0
+            || !string.IsNullOrEmpty(url.Query) || !string.IsNullOrEmpty(url.Fragment)
             || url.AbsolutePath != "/" || !IPAddress.TryParse(url.Host, out var address)
             || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork
             || !BridgeOptions.IsPrivateIpv4(address) || url.Port is < 1 or > 65535)
             throw new BridgeConfigurationException("Bonjour URL must be a canonical explicit-port private IPv4 HTTP URL.");
 
         return new Uri($"http://{address}:{url.Port}/", UriKind.Absolute);
+    }
+
+    internal static bool HasExplicitPort(Uri url)
+    {
+        var original = url.OriginalString;
+        var schemeSeparator = original.IndexOf("://", StringComparison.Ordinal);
+        if (schemeSeparator < 0) return false;
+        var authorityStart = schemeSeparator + 3;
+        var authorityEnd = original.IndexOfAny(['/','?','#'], authorityStart);
+        if (authorityEnd < 0) authorityEnd = original.Length;
+        var authority = original[authorityStart..authorityEnd];
+        var colon = authority.LastIndexOf(':');
+        return colon > 0 && colon < authority.Length - 1
+            && authority[(colon + 1)..].All(c => c is >= '0' and <= '9');
     }
 }
 
@@ -72,7 +87,7 @@ public static class BonjourAdvertisementFactory
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
         if (!PairingPayload.IsBridgeId(bridgeId))
-            throw new BridgeConfigurationException("Bonjour bridge identity is invalid.");
+            throw new BridgeConfigurationException("Bonjour bridge identifier is invalid.");
 
         var urls = activeAddresses is null
             ? options.GetReportedUrls()
@@ -84,8 +99,9 @@ public static class BonjourAdvertisementFactory
 
     private static string CreateInstanceName(string bridgeId, Uri url)
     {
-        // The persistent 128-bit ID is the collision-resistant identity. The URL digest makes
-        // the instances distinct and stable when wildcard binding exposes several addresses.
+        // The persistent 128-bit value is only a public bridge identifier, not an
+        // authenticator. The URL digest makes instances distinct and stable when wildcard
+        // binding exposes several addresses.
         var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url.AbsoluteUri)))
             .ToLowerInvariant()[..12];
         return $"elevator-rides-{bridgeId.ToLowerInvariant()}-{digest}";

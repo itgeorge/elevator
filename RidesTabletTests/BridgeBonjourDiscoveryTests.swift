@@ -37,6 +37,9 @@ private final class FakeBonjourBrowserSource: BridgeBonjourBrowserSource {
 
 private final class BonjourModelURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    nonisolated(unsafe) static var holdRequests = false
+    nonisolated(unsafe) static var pendingProtocol: BonjourModelURLProtocol?
+    nonisolated(unsafe) static var pendingRequest: URLRequest?
     nonisolated(unsafe) static var requestCount = 0
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -45,6 +48,24 @@ private final class BonjourModelURLProtocol: URLProtocol {
     override func startLoading() {
         do {
             Self.requestCount += 1
+            var request = request
+            if request.httpBody == nil, let stream = request.httpBodyStream {
+                stream.open()
+                var body = Data()
+                var buffer = [UInt8](repeating: 0, count: 1024)
+                while stream.hasBytesAvailable {
+                    let read = stream.read(&buffer, maxLength: buffer.count)
+                    if read > 0 { body.append(contentsOf: buffer.prefix(read)) }
+                    else { break }
+                }
+                stream.close()
+                request.httpBody = body
+            }
+            if Self.holdRequests {
+                Self.pendingProtocol = self
+                Self.pendingRequest = request
+                return
+            }
             guard let handler = Self.handler else { throw URLError(.badServerResponse) }
             let (response, data) = try handler(request)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -56,6 +77,19 @@ private final class BonjourModelURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    static func respondPending(
+        statusCode: Int = 200,
+        data: Data = Data(#"{"version":"v1","paired":true}"#.utf8)
+    ) {
+        guard let pending = pendingProtocol, let client = pending.client, let url = pending.request.url else { return }
+        let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client.urlProtocol(pending, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client.urlProtocol(pending, didLoad: data)
+        client.urlProtocolDidFinishLoading(pending)
+        pendingProtocol = nil
+        pendingRequest = nil
+    }
 }
 
 private func bonjourSession() -> URLSession {
@@ -92,6 +126,27 @@ private func validTXT(
     ])
 }
 
+private func validProofResponseData(
+    for request: URLRequest,
+    bearer: String,
+    bridgeId: String
+) throws -> Data {
+    let body = try XCTUnwrap(request.httpBody)
+    let proofRequest = try JSONDecoder().decode(BridgePairRelocationProofRequest.self, from: body)
+    let proof = try XCTUnwrap(BridgeRelocationProof.proof(
+        for: bearer,
+        nonce: proofRequest.nonce,
+        bridgeId: bridgeId,
+        canonicalURL: proofRequest.url
+    ))
+    return try JSONSerialization.data(withJSONObject: [
+        "bridgeId": bridgeId,
+        "apiVersion": "v1",
+        "nonce": proofRequest.nonce,
+        "proof": proof
+    ])
+}
+
 private func serviceResult(
     name: String = "elevator-rides-a",
     type: String = BridgeBonjourConstants.serviceType,
@@ -109,6 +164,64 @@ private func serviceResult(
 private func waitForBonjourCallbacks() async {
     await Task.yield()
     await Task.yield()
+}
+
+@MainActor
+private func waitUntil(
+    _ condition: @escaping @MainActor () -> Bool
+) async {
+    for _ in 0..<1_000 {
+        if condition() { return }
+        await Task.yield()
+    }
+    XCTFail("Timed out waiting for deterministic test condition")
+}
+
+@MainActor
+private func waitForAutomaticReconnect() async {
+    for _ in 0..<10_000 { await Task.yield() }
+}
+
+private final class ControlledAsyncGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [CheckedContinuation<Void, Error>] = []
+    private var count = 0
+
+    var waitCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func wait() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            count += 1
+            continuations.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func resumeNext() {
+        lock.lock()
+        guard !continuations.isEmpty else {
+            lock.unlock()
+            return
+        }
+        let continuation = continuations.removeFirst()
+        lock.unlock()
+        continuation.resume()
+    }
+}
+
+private enum AutomaticReconnectStoreError: Error {
+    case loadFailed
+}
+
+private final class AutomaticReconnectLoadFailureStore: BridgeCredentialStore, @unchecked Sendable {
+    func load() throws -> BridgeCredential? { throw AutomaticReconnectStoreError.loadFailed }
+    func save(_: BridgeCredential) throws {}
+    func remove() throws {}
 }
 
 final class NetworkBonjourBrowserSourceTests: XCTestCase {
@@ -267,8 +380,20 @@ final class BridgeBonjourCandidateParserTests: XCTestCase {
 
 @MainActor
 final class BridgeBonjourDiscoveryModelTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        BonjourModelURLProtocol.handler = nil
+        BonjourModelURLProtocol.holdRequests = false
+        BonjourModelURLProtocol.pendingProtocol = nil
+        BonjourModelURLProtocol.pendingRequest = nil
+        BonjourModelURLProtocol.requestCount = 0
+    }
+
     override func tearDown() {
         BonjourModelURLProtocol.handler = nil
+        BonjourModelURLProtocol.holdRequests = false
+        BonjourModelURLProtocol.pendingProtocol = nil
+        BonjourModelURLProtocol.pendingRequest = nil
         BonjourModelURLProtocol.requestCount = 0
         super.tearDown()
     }
@@ -493,6 +618,13 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         var paths: [String] = []
         BonjourModelURLProtocol.handler = { request in
             paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/pair/proof" {
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                    try validProofResponseData(for: request, bearer: token, bridgeId: bonjourBridgeID)
+                )
+            }
             XCTAssertEqual(request.url, newURL.appendingPathComponent("api/v1/pair/status"))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(token)")
             return (
@@ -513,11 +645,52 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
 
         await model.selectBonjourCandidate(model.bonjourCandidates[0])
 
-        XCTAssertEqual(paths, ["/api/v1/pair/status"])
-        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+        XCTAssertEqual(paths, ["/api/v1/pair/proof", "/api/v1/pair/status"])
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
         XCTAssertEqual(store.credential?.baseURL, URL(string: "http://10.0.0.2:5080")!)
         XCTAssertEqual(model.bridgeURLText, "http://10.0.0.2:5080")
         XCTAssertEqual(model.state, .connected)
+    }
+
+    func testBonjourForgedProofSendsNoStatusAndRollsBack() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let token = "forged-proof-token"
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: token, bridgeId: bonjourBridgeID
+        ))
+        var paths: [String] = []
+        BonjourModelURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            var body = try JSONSerialization.jsonObject(with: try XCTUnwrap(
+                try? validProofResponseData(for: request, bearer: token, bridgeId: bonjourBridgeID)
+            )) as! [String: Any]
+            body["proof"] = String(repeating: "0", count: 64)
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                try JSONSerialization.data(withJSONObject: body)
+            )
+        }
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            relocationNonceGenerator: {
+                "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+            }
+        )
+        model.startBonjourBrowse()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForBonjourCallbacks()
+
+        await model.selectBonjourCandidate(model.bonjourCandidates[0])
+
+        XCTAssertEqual(paths, ["/api/v1/pair/proof"])
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
+        XCTAssertTrue(model.isPaired)
     }
 
     func testMatchingIdentityMigrationRestoresPriorTextOnFailure() async {
@@ -544,5 +717,383 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(model.bridgeURLText, "operator text before selection")
         XCTAssertEqual(store.credential?.baseURL, oldURL)
         XCTAssertTrue(model.isPaired)
+    }
+
+    func testAutomaticLaunchBrowsesOnlyForPersistedCredentialWithValidIdentity() async {
+        let source = FakeBonjourBrowserSource()
+        let unpaired = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await unpaired.startAutomaticBonjourReconnect()
+        XCTAssertEqual(source.startCount, 0)
+
+        let legacy = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(credential: BridgeCredential(
+                baseURL: URL(string: "http://192.168.1.20:5080")!, accessToken: "bearer"
+            )),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await legacy.startAutomaticBonjourReconnect()
+        XCTAssertEqual(source.startCount, 0)
+
+        let eligible = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(credential: BridgeCredential(
+                baseURL: URL(string: "http://192.168.1.20:5080")!, accessToken: "bearer", bridgeId: bonjourBridgeID
+            )),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await eligible.startAutomaticBonjourReconnect()
+        XCTAssertEqual(source.startCount, 1)
+        eligible.stopBonjourBrowse()
+        await eligible.startAutomaticBonjourReconnect()
+        XCTAssertEqual(source.startCount, 1)
+    }
+
+    func testAutomaticReconnectRequiresStableExactSingleMatchAndSendsOneStatusRequest() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(
+            credential: BridgeCredential(baseURL: oldURL, accessToken: "saved-bearer", bridgeId: bonjourBridgeID)
+        )
+        var paths: [String] = []
+        BonjourModelURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            if request.url!.path == "/api/v1/pair/proof" {
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                    try validProofResponseData(for: request, bearer: "saved-bearer", bridgeId: bonjourBridgeID)
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer saved-bearer")
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                Data(#"{"version":"v1","paired":true}"#.utf8)
+            )
+        }
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForAutomaticReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForAutomaticReconnect()
+
+        XCTAssertEqual(paths, ["/api/v1/pair/proof", "/api/v1/pair/status"])
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
+        XCTAssertEqual(store.credential?.baseURL, URL(string: "http://10.0.0.2:5080")!)
+        XCTAssertEqual(model.state, .connected)
+    }
+
+    func testAutomaticReconnectDoesNotRequestForMismatchMultipleIdentityOrSameIdentityMultipleURL() async {
+        let credential = BridgeCredential(
+            baseURL: URL(string: "http://192.168.1.20:5080")!, accessToken: "bearer", bridgeId: bonjourBridgeID
+        )
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(credential: credential),
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await model.startAutomaticBonjourReconnect()
+
+        source.emitResults([serviceResult(txt: validTXT(bridgeId: secondBonjourBridgeID))])
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 0)
+
+        source.emitResults([
+            serviceResult(name: "one"),
+            serviceResult(name: "two", txt: validTXT(bridgeId: secondBonjourBridgeID, url: "http://10.0.0.2:5080/"))
+        ])
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 0)
+
+        source.emitResults([
+            serviceResult(name: "address-a", txt: validTXT(url: "http://192.168.1.20:5080/")),
+            serviceResult(name: "address-b", txt: validTXT(url: "http://10.0.0.2:5080/"))
+        ])
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 0)
+        XCTAssertTrue(model.message?.contains("Multiple") == true)
+    }
+
+    func testAutomaticReconnectCancelsOnCandidateRemovalAndStopBeforeDelay() async {
+        let source = FakeBonjourBrowserSource()
+        let delay = ControlledAsyncGate()
+        let model = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(credential: BridgeCredential(
+                baseURL: URL(string: "http://192.168.1.20:5080")!, accessToken: "bearer", bridgeId: bonjourBridgeID
+            )),
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: { try await delay.wait() }
+        )
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult()])
+        await waitUntil { delay.waitCount == 1 }
+        source.emitResults([])
+        model.stopBonjourBrowse()
+        delay.resumeNext()
+        await waitForBonjourCallbacks()
+
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 0)
+        XCTAssertEqual(source.stopCount, 1)
+    }
+
+    func testAutomaticReconnectFailurePreservesOldCredentialAndAddressAndManualSelectionRemainsAvailable() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(
+            credential: BridgeCredential(baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID)
+        )
+        BonjourModelURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForAutomaticReconnect()
+
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
+        XCTAssertTrue(model.message?.contains("manually") == true)
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+        await model.selectBonjourCandidate(model.bonjourCandidates[0])
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
+    }
+
+    func testAutomaticReconnectStorageErrorDoesNotBrowseOrRequest() async {
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: AutomaticReconnectLoadFailureStore(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await model.startAutomaticBonjourReconnect()
+        XCTAssertEqual(source.startCount, 0)
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 0)
+        XCTAssertTrue(model.message?.contains("saved pairing") == true)
+    }
+
+    func testAutomaticReconnectLaunchOverrideCompletesBeforeBonjourAndDoesNotMigrateTwice() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let overrideURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(
+            credential: BridgeCredential(baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID)
+        )
+        var paths: [String] = []
+        BonjourModelURLProtocol.handler = { request in
+            paths.append(request.url!.path)
+            XCTAssertEqual(request.url, overrideURL.appendingPathComponent("api/v1/pair/status"))
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                Data(#"{"version":"v1","paired":true}"#.utf8)
+            )
+        }
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await model.applyLaunchAddressOverride(overrideURL.absoluteString)
+        await model.startAutomaticBonjourReconnect()
+        XCTAssertEqual(paths, ["/api/v1/pair/status"])
+        XCTAssertEqual(source.startCount, 0)
+        XCTAssertEqual(store.credential?.baseURL, URL(string: "http://10.0.0.2:5080")!)
+    }
+
+    func testAutomaticReconnectAtoBChurnDuringDelayUsesOnlyNewestStableSnapshot() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateA = URL(string: "http://10.0.0.2:5080/")!
+        let candidateB = URL(string: "http://10.0.0.3:5080/")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID
+        ))
+        let delay = ControlledAsyncGate()
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: { try await delay.wait() }
+        )
+        BonjourModelURLProtocol.holdRequests = true
+        await model.startAutomaticBonjourReconnect()
+
+        source.emitResults([serviceResult(txt: validTXT(url: candidateA.absoluteString))])
+        await waitUntil { delay.waitCount == 1 }
+        source.emitResults([serviceResult(txt: validTXT(url: candidateB.absoluteString))])
+        await waitUntil { model.bonjourCandidates.map(\.url) == [candidateB] }
+
+        delay.resumeNext()
+        await waitUntil { delay.waitCount == 2 }
+        delay.resumeNext()
+        await waitUntil { BonjourModelURLProtocol.requestCount == 1 && BonjourModelURLProtocol.pendingRequest != nil }
+        let proofRequest = BonjourModelURLProtocol.pendingRequest!
+        XCTAssertEqual(proofRequest.url, candidateB.appendingPathComponent("api/v1/pair/proof"))
+        BonjourModelURLProtocol.respondPending(data: try! validProofResponseData(
+            for: proofRequest, bearer: "bearer", bridgeId: bonjourBridgeID
+        ))
+        await waitUntil { BonjourModelURLProtocol.requestCount == 2 }
+        XCTAssertEqual(BonjourModelURLProtocol.pendingRequest?.url, candidateB.appendingPathComponent("api/v1/pair/status"))
+        BonjourModelURLProtocol.respondPending()
+        await waitUntil { store.credential?.baseURL == URL(string: "http://10.0.0.3:5080")! }
+
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
+        XCTAssertEqual(model.bridgeURLText, "http://10.0.0.3:5080")
+        XCTAssertEqual(model.state, .connected)
+    }
+
+    func testAutomaticReconnectAtoBChurnDuringInFlightRequestRejectsOldCompletionAndThenRunsBOnce() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateA = URL(string: "http://10.0.0.2:5080/")!
+        let candidateB = URL(string: "http://10.0.0.3:5080/")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID
+        ))
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        BonjourModelURLProtocol.holdRequests = true
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateA.absoluteString))])
+        await waitUntil { BonjourModelURLProtocol.requestCount == 1 && BonjourModelURLProtocol.pendingRequest != nil }
+        XCTAssertEqual(model.state, .relocating)
+
+        source.emitResults([serviceResult(txt: validTXT(url: candidateB.absoluteString))])
+        await waitUntil {
+            model.bonjourCandidates.map(\.url) == [candidateB] && model.state == .connected
+        }
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+
+        let firstProofRequest = BonjourModelURLProtocol.pendingRequest!
+        BonjourModelURLProtocol.respondPending(data: try! validProofResponseData(
+            for: firstProofRequest, bearer: "bearer", bridgeId: bonjourBridgeID
+        ))
+        await waitUntil { BonjourModelURLProtocol.requestCount == 2 && BonjourModelURLProtocol.pendingRequest != nil }
+        let secondProofRequest = BonjourModelURLProtocol.pendingRequest!
+        XCTAssertEqual(secondProofRequest.url, candidateB.appendingPathComponent("api/v1/pair/proof"))
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        BonjourModelURLProtocol.respondPending(data: try! validProofResponseData(
+            for: secondProofRequest, bearer: "bearer", bridgeId: bonjourBridgeID
+        ))
+        await waitUntil { BonjourModelURLProtocol.requestCount == 3 && BonjourModelURLProtocol.pendingRequest != nil }
+        XCTAssertEqual(BonjourModelURLProtocol.pendingRequest?.url, candidateB.appendingPathComponent("api/v1/pair/status"))
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        BonjourModelURLProtocol.respondPending()
+        await waitUntil { store.credential?.baseURL == URL(string: "http://10.0.0.3:5080")! }
+
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 3)
+        XCTAssertEqual(model.bridgeURLText, "http://10.0.0.3:5080")
+        XCTAssertEqual(model.state, .connected)
+    }
+
+    func testAutomaticReconnectStopDuringInFlightRequestRemainsTerminalAfterLateCompletion() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID
+        ))
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        BonjourModelURLProtocol.holdRequests = true
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitUntil { BonjourModelURLProtocol.requestCount == 1 && BonjourModelURLProtocol.pendingRequest != nil }
+
+        model.stopBonjourBrowse()
+        XCTAssertEqual(model.bonjourDiscoveryState, .stopped)
+        XCTAssertEqual(model.state, .connected)
+        BonjourModelURLProtocol.respondPending()
+        await waitForAutomaticReconnect()
+
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
+        XCTAssertEqual(model.bonjourDiscoveryState, .stopped)
+        XCTAssertEqual(model.state, .connected)
+    }
+
+    func testAutomaticReconnectModelDeinitCancelsPendingDelayWithoutRetainingModel() async {
+        let delay = ControlledAsyncGate()
+        let source = FakeBonjourBrowserSource()
+        weak var weakModel: BridgeConnectionModel?
+        var model: BridgeConnectionModel? = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(credential: BridgeCredential(
+                baseURL: URL(string: "http://192.168.1.20:5080")!,
+                accessToken: "bearer",
+                bridgeId: bonjourBridgeID
+            )),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: { try await delay.wait() }
+        )
+        weakModel = model
+        await model?.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult()])
+        await waitUntil { delay.waitCount == 1 }
+
+        model = nil
+        await waitUntil { weakModel == nil }
+        delay.resumeNext()
+        await waitForAutomaticReconnect()
+        XCTAssertNil(weakModel)
+    }
+
+    func testAutomaticReconnectTerminalDiscoveryStateWinsOverLateRequestCompletion() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID
+        ))
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        BonjourModelURLProtocol.holdRequests = true
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitUntil { BonjourModelURLProtocol.requestCount == 1 && BonjourModelURLProtocol.pendingRequest != nil }
+
+        source.emitState(.denied)
+        await waitUntil { model.bonjourDiscoveryState == .denied }
+        BonjourModelURLProtocol.respondPending()
+        await waitForAutomaticReconnect()
+
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+        XCTAssertEqual(store.credential?.baseURL, oldURL)
+        XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
+        XCTAssertEqual(model.bonjourDiscoveryState, .denied)
+        XCTAssertEqual(model.state, .connected)
     }
 }

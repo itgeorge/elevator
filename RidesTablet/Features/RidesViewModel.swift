@@ -153,7 +153,7 @@ public final class RidesViewModel: ObservableObject {
 
     /// The cash controls are deliberately ride controls underneath: €1.50 is 50 rides.
     public func adjustCost(by amount: Decimal) {
-        let rides = Int((amount / configuration.pricePerRideEUR) as NSDecimalNumber)
+        let rides = ((amount / configuration.pricePerRideEUR) as NSDecimalNumber).intValue
         adjustRides(by: rides)
     }
 

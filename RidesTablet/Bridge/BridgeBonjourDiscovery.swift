@@ -4,6 +4,12 @@ import Network
 public enum BridgeBonjourConstants {
     public static let serviceType = "_elevator-rides._tcp"
     public static let domain = "local."
+
+    public static func isValidBridgeID(_ value: String) -> Bool {
+        value.utf8.count == 32 && value.utf8.allSatisfy { byte in
+            (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 70)
+        }
+    }
 }
 
 public struct BridgeBonjourTXTValues: Equatable, Sendable {
@@ -96,9 +102,7 @@ public enum BridgeBonjourTXTParser {
     }
 
     private static func isBridgeID(_ value: String) -> Bool {
-        value.utf8.count == 32 && value.utf8.allSatisfy { byte in
-            (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 70)
-        }
+        BridgeBonjourConstants.isValidBridgeID(value)
     }
 
     /// Mirrors the backend Bonjour contract: HTTP, an explicit port, a root path,
@@ -188,7 +192,7 @@ public struct BridgeBonjourCandidate: Equatable, Hashable, Sendable, Identifiabl
         self.serviceName = serviceName
     }
 
-    /// URL is part of identity intentionally: one bridge can advertise multiple
+    /// URL is part of the candidate key intentionally: one bridge can advertise multiple
     /// private addresses and those must remain separate operator choices.
     public var id: String { "\(bridgeId)|\(url.absoluteString)" }
 }
@@ -394,9 +398,9 @@ public enum BridgeBonjourSelectionError: Error, Equatable, LocalizedError, Senda
     public var errorDescription: String? {
         switch self {
         case .identityUnavailable:
-            "This saved pairing has no bridge identity. Enter the address manually or pair again before relocating."
+            "This saved pairing has no bridge identifier. Enter the address manually or pair again before relocating."
         case .identityMismatch:
-            "This Bonjour bridge has a different identity from the saved pairing. No request was sent."
+            "This Bonjour bridge has a different public identifier from the saved pairing. No request was sent."
         }
     }
 }
@@ -405,6 +409,7 @@ public enum BridgeBonjourDiscoveryState: Equatable, Sendable {
     case idle
     case browsing
     case offered
+    case reconnecting
     case selectionRequired
     case stopped
     case denied
@@ -415,6 +420,7 @@ public enum BridgeBonjourDiscoveryState: Equatable, Sendable {
         case .idle: "Bonjour discovery idle"
         case .browsing: "Searching for local bridges…"
         case .offered: "One compatible bridge found"
+        case .reconnecting: "Reconnecting to saved bridge…"
         case .selectionRequired: "Select a compatible bridge"
         case .stopped: "Bonjour discovery stopped"
         case .denied: "Local Network access denied"

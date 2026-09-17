@@ -50,6 +50,12 @@ private struct MercuryWriteSnapshot: Equatable, Sendable {
     let block6: String
 }
 
+private struct AutomaticReconnectOperation: Equatable, Sendable {
+    let generation: Int
+    let token: Int
+    let candidate: BridgeBonjourCandidate
+}
+
 @MainActor
 public final class BridgeConnectionModel: ObservableObject {
     @Published public var bridgeURLText: String
@@ -74,10 +80,26 @@ public final class BridgeConnectionModel: ObservableObject {
     private let healthRetryDelay: @Sendable () async throws -> Void
     private let now: @Sendable () -> Date
     private let bonjourBrowserSource: any BridgeBonjourBrowserSource
+    private let bonjourQuiescenceDelay: @Sendable () async throws -> Void
+    private let relocationNonceGenerator: @Sendable () -> String
     private var client: BridgeClient?
     private var bonjourBrowseGeneration = 0
+    private var automaticBonjourBrowseGeneration: Int?
+    private var automaticBonjourBridgeId: String?
+    private var automaticBonjourLaunchStarted = false
+    private var automaticBonjourSnapshot: [BridgeBonjourCandidate] = []
+    private var automaticBonjourAttemptedCandidateIDs: Set<String> = []
+    private var automaticReconnectTask: Task<Void, Never>?
+    private var automaticReconnectPredecessorTask: Task<Void, Never>?
+    private var automaticReconnectVerification: (operation: AutomaticReconnectOperation, task: Task<BridgePairStatusResponse, Error>)?
+    private var automaticReconnectMigrationOperation: AutomaticReconnectOperation?
+    private var automaticReconnectToken = 0
+    private var explicitBonjourRelocationTask: Task<Bool, Never>?
+    private var explicitBonjourRelocationToken = 0
     private var mercuryWriteSnapshot: MercuryWriteSnapshot?
+    private var credentialRestoreFailed = false
     private var launchAddressOverrideApplied = false
+    private var launchAddressOverrideWasProvided = false
 #if DEBUG
     private var launchPhysicalAcceptanceAttempted = false
 #endif
@@ -90,13 +112,21 @@ public final class BridgeConnectionModel: ObservableObject {
             try await Task.sleep(nanoseconds: 100_000_000)
         },
         now: @escaping @Sendable () -> Date = { Date() },
-        bonjourBrowserSource: any BridgeBonjourBrowserSource = NetworkBonjourBrowserSource()
+        bonjourBrowserSource: any BridgeBonjourBrowserSource = NetworkBonjourBrowserSource(),
+        bonjourQuiescenceDelay: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: 300_000_000)
+        },
+        relocationNonceGenerator: @escaping @Sendable () -> String = {
+            BridgeRelocationProof.makeNonce()
+        }
     ) {
         self.credentialStore = credentialStore
         self.session = session
         self.healthRetryDelay = healthRetryDelay
         self.now = now
         self.bonjourBrowserSource = bonjourBrowserSource
+        self.bonjourQuiescenceDelay = bonjourQuiescenceDelay
+        self.relocationNonceGenerator = relocationNonceGenerator
         self.bridgeURLText = defaultBridgeURL
         self.state = .unconfigured
         self.message = nil
@@ -116,13 +146,24 @@ public final class BridgeConnectionModel: ObservableObject {
         restore()
     }
 
+    deinit {
+        // Invalidate ownership before cancelling. A late URLSession/continuation
+        // completion must not be able to publish through a task that is being torn
+        // down, and the verification task must not outlive the model's lifecycle.
+        automaticReconnectToken &+= 1
+        automaticReconnectTask?.cancel()
+        automaticReconnectVerification?.task.cancel()
+        explicitBonjourRelocationToken &+= 1
+        explicitBonjourRelocationTask?.cancel()
+    }
+
     public var isBusy: Bool { state.isBusy }
     /// A browse stays live while its result set is being displayed. An offer or a
     /// required selection is not a terminal state: NWBrowser can still remove,
     /// replace, or add services until the operator explicitly stops it.
     public var isBonjourBrowsing: Bool {
         switch bonjourDiscoveryState {
-        case .browsing, .offered, .selectionRequired:
+        case .browsing, .offered, .reconnecting, .selectionRequired:
             true
         case .idle, .stopped, .denied, .failed:
             false
@@ -135,6 +176,43 @@ public final class BridgeConnectionModel: ObservableObject {
     public var hasSavedCredential: Bool {
         do { return try credentialStore.load() != nil }
         catch { return false }
+    }
+
+    /// Starts launch-time reconnect only for a persisted credential whose public bridge
+    /// identifier can be compared safely. Storage failures and legacy credentials without an
+    /// identifier take
+    /// the explicit/manual path and never start a browse.
+    public func startAutomaticBonjourReconnect() async {
+        guard !automaticBonjourLaunchStarted else { return }
+        automaticBonjourLaunchStarted = true
+
+        if launchAddressOverrideWasProvided {
+            // The launch override is authoritative. The caller awaits it before invoking
+            // this method, so a second migration can never race the override transaction.
+            return
+        }
+        if credentialRestoreFailed {
+            message = "Automatic bridge reconnect is unavailable because the saved pairing could not be read. Select a bridge or enter its private address manually."
+            return
+        }
+
+        let credential: BridgeCredential?
+        do {
+            credential = try credentialStore.load()
+        } catch {
+            message = "Automatic bridge reconnect is unavailable because the saved pairing could not be read. Select a bridge or enter its private address manually."
+            return
+        }
+        guard let credential, let bridgeId = credential.bridgeId,
+              BridgeBonjourConstants.isValidBridgeID(bridgeId) else {
+            message = credential == nil
+                ? "No saved bridge pairing was found. Use manual entry, QR pairing, or Find bridges."
+                : "Automatic reconnect requires a saved bridge identifier. Use manual entry or pair again."
+            return
+        }
+
+        automaticBonjourBridgeId = bridgeId
+        startBonjourBrowse(automatic: true)
     }
 
     /// True when the operator has entered a different normalized address while paired.
@@ -170,16 +248,19 @@ public final class BridgeConnectionModel: ObservableObject {
     public func restore() {
         do {
             guard let credential = try credentialStore.load() else {
+                credentialRestoreFailed = false
                 client = nil
                 state = .unconfigured
                 return
             }
             let restoredClient = try BridgeClient(baseURL: credential.baseURL, session: session, credential: credential)
+            credentialRestoreFailed = false
             client = restoredClient
             bridgeURLText = restoredClient.baseURL.absoluteString
             state = .restored
             message = "Saved pairing restored. Readiness will be checked on the next operation."
         } catch {
+            credentialRestoreFailed = true
             client = nil
             let detail = "Saved pairing could not be restored. Pair again."
             state = .failed(detail)
@@ -191,11 +272,11 @@ public final class BridgeConnectionModel: ObservableObject {
         await pair(pin: pin, bridgeId: nil, retryHealthOnUnreachable: true)
     }
 
-    /// Pairs once with an optional stable bridge identity. Manual pairing passes nil; QR pairing
-    /// supplies the parsed identity so the initial Keychain save is complete and transactional.
+    /// Pairs once with an optional public bridge identifier. Manual pairing passes nil; QR pairing
+    /// supplies the parsed public identifier so the initial Keychain save is complete and transactional.
     public func pair(pin: String, bridgeId: String?) async {
-        // Supplying a bridge identity denotes QR pairing. Keep the legacy health
-        // transition retry only for the manual, identity-less entry point.
+        // Supplying a public bridge identifier denotes QR pairing. Keep the legacy health
+        // transition retry only for the manual, identifier-less entry point.
         await pair(pin: pin, bridgeId: bridgeId, retryHealthOnUnreachable: bridgeId == nil)
     }
 
@@ -306,19 +387,33 @@ public final class BridgeConnectionModel: ObservableObject {
         }
     }
 
-    /// Applies the launch-only address override once. Unpaired sessions are only prefilled;
-    /// paired sessions use the same transactional migration as the manual action.
-    /// Starts one explicit Bonjour browse. The source owns the NWBrowser lifecycle;
-    /// the generation gate makes callbacks from a stopped browse harmless.
+    /// Starts an operator-controlled browse. Automatic reconnect uses the same live
+    /// source but is enabled only by `startAutomaticBonjourReconnect()`.
     public func startBonjourBrowse() {
+        startBonjourBrowse(automatic: false)
+    }
+
+    private func startBonjourBrowse(automatic: Bool) {
         guard !isBonjourBrowsing else { return }
         bonjourBrowseGeneration += 1
         let generation = bonjourBrowseGeneration
+        automaticBonjourBrowseGeneration = automatic ? generation : nil
+        if !automatic {
+            automaticBonjourBridgeId = nil
+        }
+        automaticBonjourSnapshot = []
+        automaticReconnectPredecessorTask = nil
+        if automatic {
+            automaticBonjourAttemptedCandidateIDs = []
+        }
+        cancelAutomaticReconnect()
         bonjourCandidates = []
         offeredBonjourCandidate = nil
         rejectedBonjourResultCount = 0
         bonjourDiscoveryState = .browsing
-        message = "Searching for compatible local RidesBridge services…"
+        message = automatic
+            ? "Searching for the saved bridge over Bonjour…"
+            : "Searching for compatible local RidesBridge services…"
 
         bonjourBrowserSource.start(
             onState: { [weak self] sourceState in
@@ -336,6 +431,17 @@ public final class BridgeConnectionModel: ObservableObject {
 
     public func stopBonjourBrowse() {
         bonjourBrowseGeneration += 1
+        automaticBonjourBrowseGeneration = nil
+        automaticBonjourBridgeId = nil
+        automaticBonjourSnapshot = []
+        automaticReconnectPredecessorTask = nil
+        if (automaticReconnectMigrationOperation != nil || explicitBonjourRelocationTask != nil), state == .relocating {
+            bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
+            state = isPaired ? .connected : .unconfigured
+        }
+        automaticReconnectMigrationOperation = nil
+        cancelExplicitBonjourRelocation()
+        cancelAutomaticReconnect()
         bonjourBrowserSource.stop()
         bonjourCandidates = []
         offeredBonjourCandidate = nil
@@ -347,6 +453,19 @@ public final class BridgeConnectionModel: ObservableObject {
     public func selectBonjourCandidate(_ candidate: BridgeBonjourCandidate) async {
         guard !isBusy else { return }
         guard bonjourCandidates.contains(where: { $0.id == candidate.id }) else { return }
+
+        // Explicit selection supersedes an automatic attempt. In particular, do
+        // not let an automatic task that is still in-flight compete with the
+        // operator's migration or later clear its task slot.
+        if automaticBonjourBrowseGeneration != nil {
+            // Once the operator selects a result, this browse is manual. Keep
+            // later identical browser snapshots from scheduling a competing
+            // automatic migration.
+            automaticBonjourBrowseGeneration = nil
+            automaticBonjourBridgeId = nil
+            automaticReconnectPredecessorTask = nil
+            cancelAutomaticReconnect()
+        }
 
         guard isPaired else {
             // Discovery is only an offer. It never pairs or performs a request.
@@ -363,8 +482,8 @@ public final class BridgeConnectionModel: ObservableObject {
             return
         }
         guard let savedCredential, let savedBridgeId = savedCredential.bridgeId else {
-            // A legacy/manual credential has no cryptographic bridge identity. Do
-            // not turn an unverified address change into identity-safe relocation.
+            // A legacy/manual credential has no authenticated bridge binding. Do not
+            // turn an unverified address change into identifier-safe relocation.
             fail(with: BridgeBonjourSelectionError.identityUnavailable)
             return
         }
@@ -375,9 +494,25 @@ public final class BridgeConnectionModel: ObservableObject {
 
         let previousText = bridgeURLText
         bridgeURLText = candidate.url.absoluteString
-        // This is deliberately the sole migration call: the existing transactional
-        // migration performs one status request and reports whether it committed.
-        let migrated = await migrateEnteredBridgeAddress()
+        // Track explicit Bonjour work as well as automatic work so disappearing
+        // views/candidates cancel both proof and status before they can commit.
+        explicitBonjourRelocationToken &+= 1
+        let relocationToken = explicitBonjourRelocationToken
+        let relocationTask = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            return await self.migrateEnteredBridgeAddress(
+                candidate: candidate,
+                explicitToken: relocationToken
+            )
+        }
+        explicitBonjourRelocationTask = relocationTask
+        let migrated = await withTaskCancellationHandler {
+            await relocationTask.value
+        } onCancel: {
+            relocationTask.cancel()
+        }
+        guard explicitBonjourRelocationToken == relocationToken else { return }
+        explicitBonjourRelocationTask = nil
         if !migrated {
             bridgeURLText = previousText
         }
@@ -388,18 +523,40 @@ public final class BridgeConnectionModel: ObservableObject {
         switch sourceState {
         case .ready:
             if bonjourCandidates.isEmpty {
-                message = "Searching for compatible local RidesBridge services…"
+                message = automaticBonjourBrowseGeneration == generation
+                    ? "Searching for the saved bridge over Bonjour…"
+                    : "Searching for compatible local RidesBridge services…"
             }
         case .denied:
             // Terminal source states own the end of this browse. Stop even when
             // an injected source reports the terminal state without cleaning up
             // its underlying browser itself.
             bonjourBrowseGeneration += 1
+            automaticBonjourBrowseGeneration = nil
+            automaticBonjourBridgeId = nil
+            automaticReconnectPredecessorTask = nil
+            if (automaticReconnectMigrationOperation != nil || explicitBonjourRelocationTask != nil), state == .relocating {
+                bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
+                state = isPaired ? .connected : .unconfigured
+            }
+            automaticReconnectMigrationOperation = nil
+            cancelExplicitBonjourRelocation()
+            cancelAutomaticReconnect()
             bonjourBrowserSource.stop()
             bonjourDiscoveryState = .denied
             message = "Bonjour discovery was denied. Allow Local Network access or enter the bridge's private IP manually."
         case .failed:
             bonjourBrowseGeneration += 1
+            automaticBonjourBrowseGeneration = nil
+            automaticBonjourBridgeId = nil
+            automaticReconnectPredecessorTask = nil
+            if (automaticReconnectMigrationOperation != nil || explicitBonjourRelocationTask != nil), state == .relocating {
+                bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
+                state = isPaired ? .connected : .unconfigured
+            }
+            automaticReconnectMigrationOperation = nil
+            cancelExplicitBonjourRelocation()
+            cancelAutomaticReconnect()
             bonjourBrowserSource.stop()
             bonjourDiscoveryState = .failed
             message = "Bonjour discovery failed. Check Local Network access and Wi-Fi, or enter the bridge's private IP manually."
@@ -409,22 +566,198 @@ public final class BridgeConnectionModel: ObservableObject {
     private func receiveBonjourResults(_ results: [BridgeBonjourRawResult], generation: Int) {
         guard generation == bonjourBrowseGeneration, isBonjourBrowsing else { return }
         let snapshot = BridgeBonjourCandidateParser.parseSnapshot(results)
+        let isAutomatic = automaticBonjourBrowseGeneration == generation
+        let previousAutomaticSnapshot = automaticBonjourSnapshot
+        let previousBonjourCandidates = bonjourCandidates
+        automaticBonjourSnapshot = isAutomatic ? snapshot.candidates : []
+        if !isAutomatic,
+           explicitBonjourRelocationTask != nil,
+           previousBonjourCandidates != snapshot.candidates {
+            // A selected TXT service is no longer the same candidate. Cancel its
+            // proof/status owner before accepting the new browser snapshot.
+            if state == .relocating {
+                bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
+                state = isPaired ? .connected : .unconfigured
+            }
+            cancelExplicitBonjourRelocation()
+        }
         bonjourCandidates = snapshot.candidates
         rejectedBonjourResultCount = snapshot.rejectedResultCount
         offeredBonjourCandidate = snapshot.candidates.count == 1 ? snapshot.candidates[0] : nil
+
+        if isAutomatic && previousAutomaticSnapshot != snapshot.candidates {
+            // A newer snapshot cancels the old owner. If its authenticated
+            // request is already in flight, the newer operation waits for the
+            // old task to finish rather than racing a second migration.
+            automaticReconnectPredecessorTask = automaticReconnectVerification == nil
+                ? nil
+                : (automaticReconnectTask ?? automaticReconnectPredecessorTask)
+            automaticReconnectMigrationOperation = nil
+            if state == .relocating {
+                state = isPaired ? .connected : .unconfigured
+            }
+            cancelAutomaticReconnect(preserveVerification: true)
+        }
 
         switch snapshot.candidates.count {
         case 0:
             bonjourDiscoveryState = .browsing
             message = snapshot.rejectedResultCount == 0
-                ? "Searching for compatible local RidesBridge services…"
+                ? (isAutomatic ? "Searching for the saved bridge over Bonjour…" : "Searching for compatible local RidesBridge services…")
                 : "No compatible RidesBridge service was found. Check the bridge version and TXT record, or use manual entry."
         case 1:
             bonjourDiscoveryState = .offered
-            message = "One compatible bridge was found. Select it to review the address; it will not be paired automatically."
+            if isAutomatic {
+                if let expectedBridgeId = automaticBonjourBridgeId,
+                   snapshot.candidates[0].bridgeId != expectedBridgeId {
+                    message = "The discovered bridge identifier does not match the saved pairing. No request was sent; select a bridge manually or enter its private address."
+                } else {
+                    message = "The saved bridge was found. Waiting for a stable Bonjour result before reconnecting…"
+                    scheduleAutomaticReconnectIfEligible(snapshot.candidates, generation: generation)
+                }
+            } else {
+                message = "One compatible bridge was found. Select it to review the address; it will not be paired automatically."
+            }
         default:
             bonjourDiscoveryState = .selectionRequired
-            message = "Multiple compatible bridges were found. Select one explicitly; no bridge will be chosen automatically."
+            message = isAutomatic
+                ? "Multiple local bridge candidates were found. No automatic reconnect was attempted; select one explicitly or enter an address manually."
+                : "Multiple compatible bridges were found. Select one explicitly; no bridge will be chosen automatically."
+        }
+    }
+
+    private func scheduleAutomaticReconnectIfEligible(
+        _ candidates: [BridgeBonjourCandidate],
+        generation: Int
+    ) {
+        guard candidates.count == 1,
+              automaticBonjourBrowseGeneration == generation,
+              let candidate = candidates.first,
+              let expectedBridgeId = automaticBonjourBridgeId,
+              candidate.bridgeId == expectedBridgeId,
+              !automaticBonjourAttemptedCandidateIDs.contains(candidate.id),
+              automaticReconnectTask == nil else { return }
+
+        automaticReconnectToken &+= 1
+        let operation = AutomaticReconnectOperation(
+            generation: generation,
+            token: automaticReconnectToken,
+            candidate: candidate
+        )
+        let predecessor = automaticReconnectPredecessorTask
+        automaticReconnectPredecessorTask = nil
+        automaticReconnectTask = Task { @MainActor [weak self] in
+            do {
+                try await self?.bonjourQuiescenceDelay()
+            } catch {
+                self?.finishAutomaticReconnectIfOwner(operation)
+                return
+            }
+            guard !Task.isCancelled else {
+                self?.finishAutomaticReconnectIfOwner(operation)
+                return
+            }
+            if let predecessor {
+                await predecessor.value
+            }
+            guard !Task.isCancelled else {
+                self?.finishAutomaticReconnectIfOwner(operation)
+                return
+            }
+            await self?.automaticReconnectDelayElapsed(operation: operation)
+        }
+    }
+
+    private func automaticReconnectDelayElapsed(operation: AutomaticReconnectOperation) async {
+        guard isAutomaticReconnectOwner(operation),
+              !Task.isCancelled,
+              !automaticBonjourAttemptedCandidateIDs.contains(operation.candidate.id) else {
+            finishAutomaticReconnectIfOwner(operation)
+            return
+        }
+
+        // Mark before reading storage or starting the transaction. A failed or
+        // cancelled automatic attempt is never retried by later identical snapshots.
+        automaticBonjourAttemptedCandidateIDs.insert(operation.candidate.id)
+        defer { finishAutomaticReconnectIfOwner(operation) }
+        bonjourDiscoveryState = .reconnecting
+
+        do {
+            guard let savedCredential = try credentialStore.load(),
+                  let savedBridgeId = savedCredential.bridgeId,
+                  BridgeBonjourConstants.isValidBridgeID(savedBridgeId),
+                  savedBridgeId == operation.candidate.bridgeId,
+                  isAutomaticReconnectOwner(operation), !Task.isCancelled else {
+                guard isAutomaticReconnectOwner(operation), !Task.isCancelled else { return }
+                message = "Automatic reconnect was not authorized for this bridge. No request was sent; select it manually or enter an address."
+                bonjourDiscoveryState = .offered
+                return
+            }
+            let migrated = await migrateEnteredBridgeAddress(
+                savedCredential: savedCredential,
+                automatic: true,
+                candidate: operation.candidate,
+                automaticOperation: operation
+            )
+            guard isAutomaticReconnectOwner(operation), !Task.isCancelled else { return }
+            automaticReconnectMigrationOperation = nil
+            if migrated {
+                bonjourDiscoveryState = .offered
+            } else if bonjourDiscoveryState == .reconnecting {
+                bonjourDiscoveryState = .offered
+                message = "Automatic reconnect failed. Select the discovered bridge manually or enter its private address."
+            }
+        } catch is CancellationError {
+            // The migration transaction restores the old address/client on cancellation.
+            guard isAutomaticReconnectOwner(operation), !Task.isCancelled else { return }
+            bonjourDiscoveryState = .offered
+            message = "Automatic reconnect was cancelled. Select the bridge manually or enter its private address."
+        } catch {
+            guard isAutomaticReconnectOwner(operation), !Task.isCancelled else { return }
+            bonjourDiscoveryState = .offered
+            message = "Automatic reconnect could not verify the saved pairing. No request was sent; select the bridge manually or enter an address."
+        }
+    }
+
+    private func isAutomaticReconnectOwner(_ operation: AutomaticReconnectOperation) -> Bool {
+        operation.token == automaticReconnectToken
+            && operation.generation == bonjourBrowseGeneration
+            && automaticBonjourBrowseGeneration == operation.generation
+            && automaticBonjourSnapshot == [operation.candidate]
+    }
+
+    private func finishAutomaticReconnectIfOwner(_ operation: AutomaticReconnectOperation) {
+        guard isAutomaticReconnectOwner(operation) else { return }
+        automaticReconnectTask = nil
+    }
+
+    private func clearAutomaticReconnectVerificationIfOwner(_ operation: AutomaticReconnectOperation) {
+        guard automaticReconnectVerification?.operation == operation,
+              isAutomaticReconnectOwner(operation) else { return }
+        automaticReconnectVerification = nil
+    }
+
+    private func clearAutomaticReconnectMigrationIfOwner(_ operation: AutomaticReconnectOperation) {
+        guard automaticReconnectMigrationOperation == operation,
+              isAutomaticReconnectOwner(operation) else { return }
+        automaticReconnectMigrationOperation = nil
+    }
+
+    private func cancelExplicitBonjourRelocation() {
+        explicitBonjourRelocationToken &+= 1
+        explicitBonjourRelocationTask?.cancel()
+        explicitBonjourRelocationTask = nil
+    }
+
+    private func cancelAutomaticReconnect(preserveVerification: Bool = false) {
+        automaticReconnectToken &+= 1
+        automaticReconnectTask?.cancel()
+        automaticReconnectTask = nil
+        automaticReconnectVerification?.task.cancel()
+        if !preserveVerification {
+            automaticReconnectVerification = nil
+            automaticReconnectPredecessorTask = nil
+            automaticReconnectMigrationOperation = nil
         }
     }
 
@@ -432,6 +765,7 @@ public final class BridgeConnectionModel: ObservableObject {
         let override = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !override.isEmpty, !launchAddressOverrideApplied else { return }
         launchAddressOverrideApplied = true
+        launchAddressOverrideWasProvided = true
         bridgeURLText = override
 
         guard isPaired else { return }
@@ -471,7 +805,13 @@ public final class BridgeConnectionModel: ObservableObject {
     /// The Boolean lets Bonjour restore the exact pre-selection text even when the
     /// HTTP request is cancelled and the model returns to `.connected`.
     @discardableResult
-    private func migrateEnteredBridgeAddress() async -> Bool {
+    private func migrateEnteredBridgeAddress(
+        savedCredential: BridgeCredential? = nil,
+        automatic: Bool = false,
+        candidate: BridgeBonjourCandidate? = nil,
+        automaticOperation: AutomaticReconnectOperation? = nil,
+        explicitToken: Int? = nil
+    ) async -> Bool {
         guard !isBusy else { return false }
         guard let oldClient = client, oldClient.hasCredential else {
             state = .authenticationRequired
@@ -480,40 +820,119 @@ public final class BridgeConnectionModel: ObservableObject {
         }
 
         let previousBridgeURLText = oldClient.baseURL.absoluteString
+        if let explicitToken {
+            guard explicitBonjourRelocationToken == explicitToken, !Task.isCancelled else { return false }
+        }
+        if let automaticOperation {
+            guard isAutomaticReconnectOwner(automaticOperation), !Task.isCancelled else { return false }
+            automaticReconnectMigrationOperation = automaticOperation
+        }
         state = .relocating
         message = nil
 
         do {
-            guard let savedCredential = try credentialStore.load() else {
-                throw BridgeClientError.missingCredential
+            let persistedCredential: BridgeCredential
+            if let savedCredential {
+                persistedCredential = savedCredential
+            } else {
+                guard let loadedCredential = try credentialStore.load() else {
+                    throw BridgeClientError.missingCredential
+                }
+                persistedCredential = loadedCredential
             }
-            let candidateURL = try BridgeClient.normalizeBaseURL(bridgeURLText)
+            let candidateURL: URL
+            if let candidate {
+                candidateURL = try BridgeClient.normalizeBaseURL(candidate.url)
+            } else {
+                candidateURL = try BridgeClient.normalizeBaseURL(bridgeURLText)
+            }
             let candidateCredential = BridgeCredential(
                 baseURL: candidateURL,
-                accessToken: savedCredential.accessToken,
-                tokenType: savedCredential.tokenType,
-                bridgeId: savedCredential.bridgeId
+                accessToken: persistedCredential.accessToken,
+                tokenType: persistedCredential.tokenType,
+                bridgeId: persistedCredential.bridgeId
             )
             let candidateClient = try BridgeClient(
                 baseURL: candidateURL,
                 session: session,
                 credential: candidateCredential
             )
-            _ = try await candidateClient.verifyPairing()
+            if let automaticOperation {
+                guard isAutomaticReconnectOwner(automaticOperation), !Task.isCancelled else { return false }
+                let nonce = relocationNonceGenerator()
+                let verificationTask = Task<BridgePairStatusResponse, Error> { @MainActor in
+                    try await candidateClient.proveBonjourRelocation(
+                        expectedBridgeId: automaticOperation.candidate.bridgeId,
+                        nonce: nonce
+                    )
+                    // Churn/cancellation may arrive while the proof request is in
+                    // flight. Never turn a late proof completion into a stale bearer
+                    // status request.
+                    try Task.checkCancellation()
+                    return try await candidateClient.verifyPairing()
+                }
+                automaticReconnectVerification = (automaticOperation, verificationTask)
+                _ = try await verificationTask.value
+                clearAutomaticReconnectVerificationIfOwner(automaticOperation)
+            } else if candidate != nil {
+                try await candidateClient.proveBonjourRelocation(
+                    expectedBridgeId: persistedCredential.bridgeId ?? "",
+                    nonce: relocationNonceGenerator()
+                )
+                // A selected Bonjour result can disappear between proof and
+                // status. Re-check ownership before sending the bearer.
+                try Task.checkCancellation()
+                if let explicitToken {
+                    guard explicitBonjourRelocationToken == explicitToken else { return false }
+                }
+                _ = try await candidateClient.verifyPairing()
+            } else {
+                // Manual entry and launch overrides are operator-selected paths;
+                // retain their existing authenticated status-only verification.
+                _ = try await candidateClient.verifyPairing()
+            }
 
             // Do not alter the active client until secure persistence succeeds.
+            guard explicitToken == nil || (explicitBonjourRelocationToken == explicitToken! && !Task.isCancelled) else {
+                return false
+            }
+            guard automaticOperation == nil || (isAutomaticReconnectOwner(automaticOperation!) && !Task.isCancelled) else {
+                return false
+            }
             try credentialStore.save(candidateCredential)
+            guard explicitToken == nil || (explicitBonjourRelocationToken == explicitToken! && !Task.isCancelled) else {
+                return false
+            }
+            guard automaticOperation == nil || (isAutomaticReconnectOwner(automaticOperation!) && !Task.isCancelled) else {
+                return false
+            }
             client = candidateClient
             bridgeURLText = candidateClient.baseURL.absoluteString
             state = .connected
-            message = "Bridge address updated. The saved pairing was kept."
+            message = automatic
+                ? "Automatic reconnect succeeded. The saved bridge address was updated."
+                : "Bridge address updated. The saved pairing was kept."
             return true
         } catch is CancellationError {
+            if let explicitToken, explicitBonjourRelocationToken != explicitToken || Task.isCancelled {
+                return false
+            }
+            if let automaticOperation {
+                clearAutomaticReconnectVerificationIfOwner(automaticOperation)
+                guard isAutomaticReconnectOwner(automaticOperation), !Task.isCancelled else { return false }
+            }
             bridgeURLText = previousBridgeURLText
             state = .connected
             message = "Address change was cancelled. The previous bridge address remains active."
             return false
         } catch {
+            if let explicitToken, explicitBonjourRelocationToken != explicitToken || Task.isCancelled {
+                return false
+            }
+            if let automaticOperation {
+                clearAutomaticReconnectVerificationIfOwner(automaticOperation)
+                guard isAutomaticReconnectOwner(automaticOperation), !Task.isCancelled else { return false }
+            }
             // oldClient is intentionally retained; it remains the recovery path for every
             // candidate network, authentication, response, and Keychain failure.
             _ = oldClient

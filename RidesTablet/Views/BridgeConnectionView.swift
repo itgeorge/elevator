@@ -169,7 +169,7 @@ public struct BridgeConnectionView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(candidate.serviceName)
-                                    Text("\(candidate.url.absoluteString) · bridge \(candidate.bridgeId)")
+                                    Text(candidate.url.absoluteString)
                                         .font(.footnote.monospaced())
                                         .foregroundStyle(.secondary)
                                 }
@@ -279,9 +279,11 @@ public struct BridgeConnectionView: View {
             guard !didApplyLaunchAddressOverride else { return }
             didApplyLaunchAddressOverride = true
             await model.applyLaunchAddressOverride(launchConfiguration.addressOverride)
+            guard !Task.isCancelled else { return }
+            await model.startAutomaticBonjourReconnect()
 
 #if DEBUG
-            guard !didRunLaunchPhysicalAcceptance else { return }
+            guard !didRunLaunchPhysicalAcceptance, !Task.isCancelled else { return }
             didRunLaunchPhysicalAcceptance = true
             guard launchConfiguration.physicalAcceptanceEnabled else { return }
             await model.runLaunchPhysicalAcceptanceIfRequested()
@@ -312,6 +314,7 @@ public struct BridgeConnectionView: View {
     private var bonjourStatusSymbol: String {
         switch model.bonjourDiscoveryState {
         case .offered: "checkmark.circle"
+        case .reconnecting: "arrow.triangle.2.circlepath"
         case .selectionRequired: "person.2"
         case .browsing: "dot.radiowaves.left.and.right"
         case .denied, .failed: "exclamationmark.triangle"
