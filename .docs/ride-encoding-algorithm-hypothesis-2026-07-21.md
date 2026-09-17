@@ -10,9 +10,9 @@ python3 debug/ride-encoding-hypothesis.py
 
 ## Production status (post-generalization)
 
-Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, and Mars use rotation 4. **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`. **Uranus** (formerly Candidate C) is registered for `0..500` with `zeroBlock=891249D0`, `rotation=0`, and canonical identity `FBFE002A-F1003C92-F5D1D766-F5D1D766`. **Neptune** is registered for `0..500` with `zeroBlock=8F1249B0`, `rotation=0`, and canonical identity `8BFE002A-F100C6A2-95D15917-95D15917`.
+Production represents each registered sequence as `(zeroBlock, rotation, minRides, maxRides)` and performs registered-sequence structural decode rather than high16 family lookup. Mercury, Venus, Earth, Pluto, Mars, and **Nix** use rotation 4. **Jupiter** is registered for `0..500` with `zeroBlock=8C124980`, `rotation=0`, and canonical EBFE identity `EBFE002A-F100CC5B-A5045936-A5045936`. **Saturn** (formerly Candidate B) is registered for `0..500` with `zeroBlock=8B1249F0`, `rotation=0`, and canonical identity `23FE007B-D88CBD8A-5D04593D-5D04593D`. **Uranus** (formerly Candidate C) is registered for `0..500` with `zeroBlock=891249D0`, `rotation=0`, and canonical identity `FBFE002A-F1003C92-F5D1D766-F5D1D766`. **Neptune** is registered for `0..500` with `zeroBlock=8F1249B0`, `rotation=0`, and canonical identity `8BFE002A-F100C6A2-95D15917-95D15917`. **Charon** is registered for `0..500` with `zeroBlock=C0121244`, `rotation=0`, and canonical identity `EBFE0077-7BECB142-610412F3-610412F3`. **Nix** is registered for `0..500` with `zeroBlock=0DC7C70D`, `rotation=4`, and canonical identity `1BFE002A-F100C605-82045966-82045966`. Charon and Nix are production sequences and are **not** the historical Jupiter "Candidate D" exploration path.
 
-Jupiter, Saturn, Uranus, and Neptune reset/profile support are enabled. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
+Jupiter, Saturn, Uranus, Neptune, Charon, and Nix reset/profile support are enabled. Blocks 1..4 are identity/reset metadata, not ride-encoding inputs.
 
 ## Main finding
 
@@ -108,7 +108,7 @@ This immediately explains the observed B/C/D decrement. All three anchors have o
 
 The formula reproduces all currently implemented values in their confirmed ranges and all Mercury/Venus/Mars values through 500.
 
-### Rotation 0 — Jupiter, Saturn, Uranus, and Neptune
+### Rotation 0 — Jupiter, Saturn, Uranus, Neptune, and Charon
 
 | Sequence | Inferred zero block | Evidence / production state |
 |---|---:|---|
@@ -116,6 +116,7 @@ The formula reproduces all currently implemented values in their confirmed range
 | Uranus (formerly Candidate C) | `891249D0` | 107 anchor, 106 post-ride; boundary tests and `1 -> 0` validated 2026-07-22; registered/resettable 0..500 |
 | Jupiter (formerly Candidate D) | `8C124980` | 57 anchor, 56 post-ride, historical 238..261 states, confirmed 1 -> 0 transition; registered/resettable 0..500 |
 | Neptune | `8F1249B0` | Canonical zero capture; 128/256/384 boundaries and 500→497 use validated; registered/resettable 0..500 |
+| Charon | `C0121244` | Production sequence with EBFE0077 identity; not historical Jupiter Candidate D; registered/resettable 0..500 |
 
 For rotation 0, middle bytes make the count directly visible:
 
@@ -296,6 +297,8 @@ The current `baseLow XOR inferred-xor` synthesized values use rotation 4 and are
 | Uranus (registered) | `891249D0` | `891248D1` | `8912C950` | `7A12B62F` | `891349D1` | `8913BD25` |
 | Jupiter (registered) | `8C124980` | `8C124881` | `8C12C900` | `7F12B67F` | `8C134981` | `8C13BD75` |
 | Neptune (registered) | `8F1249B0` | `8F1248B1` | `8F12C930` | `7C12B64F` | `8F1349B1` | `8F13BD45` |
+| Charon (registered) | `C0121244` | `C0121345` | `C01292C4` | `3312EDBB` | `C0131245` | `C013E6B1` |
+| Nix (registered) | `0DC7C70D` | `0DC7C61D` | `FEC74705` | `FEC738F2` | `0DC6C71D` | `FEC63352` |
 
 Notably, Saturn's predicted 130 block is `8B12CB72`, exactly matching the independent unlabeled dump. Jupiter's predicted 256/255 blocks exactly match the historical EBFE states.
 
@@ -305,7 +308,7 @@ Saturn, Uranus, and Neptune boundary tests listed above are hardware-validated.
 
 `debug/ride-encoding-hypothesis.py` checks:
 
-- all nine registered sequences (five rotation-4 plus Jupiter, Saturn, Uranus, and Neptune),
+- all eleven registered sequences (six rotation-4 including Nix, plus five rotation-0: Jupiter, Saturn, Uranus, Neptune, and Charon),
 - every value 0..500,
 - and the complete 9-bit range 0..511.
 

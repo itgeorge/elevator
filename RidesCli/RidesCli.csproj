@@ -22,6 +22,8 @@
     <EmbeddedResource Include="Data\saturn-0-rides.bin" />
     <EmbeddedResource Include="Data\uranus-0-rides.bin" />
     <EmbeddedResource Include="Data\neptune-0-rides.bin" />
+    <EmbeddedResource Include="Data\charon-0-rides.bin" />
+    <EmbeddedResource Include="Data\nix-0-rides.bin" />
   </ItemGroup>
 
 </Project>

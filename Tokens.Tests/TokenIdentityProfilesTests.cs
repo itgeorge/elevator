@@ -40,6 +40,14 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.Neptune.RideSequence, Is.EqualTo(EncodingSequences.Neptune));
         Assert.That(TokenIdentityProfiles.Neptune.TokenId, Is.EqualTo("8BFE002A-F100C6A2-95D15917-95D15917"));
         Assert.That(TokenIdentityProfiles.Neptune.CanReset, Is.True);
+
+        Assert.That(TokenIdentityProfiles.Charon.RideSequence, Is.EqualTo(EncodingSequences.Charon));
+        Assert.That(TokenIdentityProfiles.Charon.TokenId, Is.EqualTo("EBFE0077-7BECB142-610412F3-610412F3"));
+        Assert.That(TokenIdentityProfiles.Charon.CanReset, Is.True);
+
+        Assert.That(TokenIdentityProfiles.Nix.RideSequence, Is.EqualTo(EncodingSequences.Nix));
+        Assert.That(TokenIdentityProfiles.Nix.TokenId, Is.EqualTo("1BFE002A-F100C605-82045966-82045966"));
+        Assert.That(TokenIdentityProfiles.Nix.CanReset, Is.True);
     }
 
     [Test]
@@ -54,6 +62,8 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.Saturn.ResetImageFileName, Is.EqualTo("saturn-0-rides.bin"));
         Assert.That(TokenIdentityProfiles.Uranus.ResetImageFileName, Is.EqualTo("uranus-0-rides.bin"));
         Assert.That(TokenIdentityProfiles.Neptune.ResetImageFileName, Is.EqualTo("neptune-0-rides.bin"));
+        Assert.That(TokenIdentityProfiles.Charon.ResetImageFileName, Is.EqualTo("charon-0-rides.bin"));
+        Assert.That(TokenIdentityProfiles.Nix.ResetImageFileName, Is.EqualTo("nix-0-rides.bin"));
         Assert.That(TokenIdentityProfiles.Mercury.CanReset, Is.True);
         Assert.That(TokenIdentityProfiles.Venus.CanReset, Is.True);
         Assert.That(TokenIdentityProfiles.Earth.CanReset, Is.True);
@@ -104,6 +114,12 @@ public class TokenIdentityProfilesTests
 
         Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("NEPTUNE", out var neptune), Is.True);
         Assert.That(neptune, Is.EqualTo(TokenIdentityProfiles.Neptune));
+
+        Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("CHARON", out var charon), Is.True);
+        Assert.That(charon, Is.EqualTo(TokenIdentityProfiles.Charon));
+
+        Assert.That(TokenIdentityProfiles.TryGetByFriendlyName("NIX", out var nix), Is.True);
+        Assert.That(nix, Is.EqualTo(TokenIdentityProfiles.Nix));
     }
 
     [Test]
@@ -123,12 +139,22 @@ public class TokenIdentityProfilesTests
             TokenIdentityProfiles.TryGetByTokenId("8BFE002A-F100C6A2-95D15917-95D15917", out var neptune),
             Is.True);
         Assert.That(neptune, Is.EqualTo(TokenIdentityProfiles.Neptune));
+
+        Assert.That(
+            TokenIdentityProfiles.TryGetByTokenId("EBFE0077-7BECB142-610412F3-610412F3", out var charon),
+            Is.True);
+        Assert.That(charon, Is.EqualTo(TokenIdentityProfiles.Charon));
+
+        Assert.That(
+            TokenIdentityProfiles.TryGetByTokenId("1BFE002A-F100C605-82045966-82045966", out var nix),
+            Is.True);
+        Assert.That(nix, Is.EqualTo(TokenIdentityProfiles.Nix));
     }
 
     [Test]
     public void Resettable_contains_only_profiles_with_reset_images()
     {
-        Assert.That(TokenIdentityProfiles.Resettable, Has.Count.EqualTo(9));
+        Assert.That(TokenIdentityProfiles.Resettable, Has.Count.EqualTo(11));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Mercury));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Venus));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Earth));
@@ -138,6 +164,8 @@ public class TokenIdentityProfilesTests
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Saturn));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Uranus));
         Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Neptune));
+        Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Charon));
+        Assert.That(TokenIdentityProfiles.Resettable, Does.Contain(TokenIdentityProfiles.Nix));
         Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.Venus21Ff));
         Assert.That(TokenIdentityProfiles.Resettable, Has.None.EqualTo(TokenIdentityProfiles.EarthA457));
     }

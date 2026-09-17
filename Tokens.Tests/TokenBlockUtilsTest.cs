@@ -20,12 +20,14 @@ public class TokenBlockUtilsTest
         (EncodingSequences.Saturn, 0x8B1249F0, 0),
         (EncodingSequences.Uranus, 0x891249D0, 0),
         (EncodingSequences.Neptune, 0x8F1249B0, 0),
+        (EncodingSequences.Charon, 0xC0121244, 0),
+        (EncodingSequences.Nix, 0x0DC7C70D, 4),
     ];
 
     [Test]
     public void Existing_rotation_four_sequences_match_the_independent_family_oracle_through_500()
     {
-        foreach (var (sequence, _, _) in Registered.Where(item => item.Rotation == 4))
+        foreach (var (sequence, _, _) in Registered.Where(item => item.Rotation == 4 && item.Sequence.FriendlyName != "nix"))
         {
             for (uint rides = 0; rides <= 500; rides++)
                 Assert.That(sequence.Encode(rides).Value, Is.EqualTo(EncodeLegacyFamily(sequence.FriendlyName, rides)),
@@ -155,6 +157,44 @@ public class TokenBlockUtilsTest
         Assert.That(EncodingSequences.Neptune.Encode(rides).Value, Is.EqualTo(block));
         Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
         Assert.That(sequence, Is.EqualTo(EncodingSequences.Neptune));
+        Assert.That(decoded, Is.EqualTo(rides));
+    }
+
+    [TestCase(0u, 0xC0121244u)]
+    [TestCase(1u, 0xC0121345u)]
+    [TestCase(8u, 0x33121A4Cu)]
+    [TestCase(127u, 0x33126D3Bu)]
+    [TestCase(128u, 0xC01292C4u)]
+    [TestCase(136u, 0x33129ACCu)]
+    [TestCase(255u, 0x3312EDBBu)]
+    [TestCase(256u, 0xC0131245u)]
+    [TestCase(383u, 0x33136D3Au)]
+    [TestCase(384u, 0xC01392C5u)]
+    [TestCase(500u, 0xC013E6B1u)]
+    public void Charon_hardware_observations_are_encoded_and_decoded(uint rides, uint block)
+    {
+        Assert.That(EncodingSequences.Charon.Encode(rides).Value, Is.EqualTo(block));
+        Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Charon));
+        Assert.That(decoded, Is.EqualTo(rides));
+    }
+
+    [TestCase(0u, 0x0DC7C70Du)]
+    [TestCase(1u, 0x0DC7C61Du)]
+    [TestCase(50u, 0x0DC7F52Eu)]
+    [TestCase(127u, 0x0DC7B8FAu)]
+    [TestCase(128u, 0xFEC74705u)]
+    [TestCase(180u, 0xFEC77346u)]
+    [TestCase(255u, 0xFEC738F2u)]
+    [TestCase(256u, 0x0DC6C71Du)]
+    [TestCase(383u, 0x0DC6B8EAu)]
+    [TestCase(384u, 0xFEC64715u)]
+    [TestCase(500u, 0xFEC63352u)]
+    public void Nix_hardware_observations_are_encoded_and_decoded(uint rides, uint block)
+    {
+        Assert.That(EncodingSequences.Nix.Encode(rides).Value, Is.EqualTo(block));
+        Assert.That(EncodingSequences.TryDecode(new T55Block(block), out var sequence, out var decoded), Is.True);
+        Assert.That(sequence, Is.EqualTo(EncodingSequences.Nix));
         Assert.That(decoded, Is.EqualTo(rides));
     }
 

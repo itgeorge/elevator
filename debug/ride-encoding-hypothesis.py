@@ -67,6 +67,8 @@ SEQUENCES = (
     SequenceHypothesis("saturn", 0x8B1249F0, 0),
     SequenceHypothesis("uranus", 0x891249D0, 0),
     SequenceHypothesis("neptune", 0x8F1249B0, 0),
+    SequenceHypothesis("charon", 0xC0121244, 0),
+    SequenceHypothesis("nix", 0x0DC7C70D, 4),
 )
 
 # Earth and Pluto are hardware-validated through the corrected 256/384 boundaries.
@@ -182,6 +184,22 @@ OBSERVATIONS = (
     ("neptune 383 post-ride", "neptune", 383, 0x7C1336CE),
     ("neptune 497 post-rides", "neptune", 497, 0x8F13B840),
     ("neptune 500 boundary", "neptune", 500, 0x8F13BD45),
+    ("charon zero", "charon", 0, 0xC0121244),
+    ("charon 128 boundary", "charon", 128, 0xC01292C4),
+    ("charon 127 post-ride", "charon", 127, 0x33126D3B),
+    ("charon 256 boundary", "charon", 256, 0xC0131245),
+    ("charon 255 post-ride", "charon", 255, 0x3312EDBB),
+    ("charon 384 boundary", "charon", 384, 0xC01392C5),
+    ("charon 383 post-ride", "charon", 383, 0x33136D3A),
+    ("charon 500 boundary", "charon", 500, 0xC013E6B1),
+    ("nix zero", "nix", 0, 0x0DC7C70D),
+    ("nix 128 boundary", "nix", 128, 0xFEC74705),
+    ("nix 127 post-ride", "nix", 127, 0x0DC7B8FA),
+    ("nix 256 boundary", "nix", 256, 0x0DC6C71D),
+    ("nix 255 post-ride", "nix", 255, 0xFEC738F2),
+    ("nix 384 boundary", "nix", 384, 0xFEC64715),
+    ("nix 383 post-ride", "nix", 383, 0x0DC6B8EA),
+    ("nix 500 boundary", "nix", 500, 0xFEC63352),
 )
 
 
@@ -277,6 +295,8 @@ def main() -> None:
         "uranus",
         "jupiter",
         "neptune",
+        "charon",
+        "nix",
     ):
         sequence = by_name[name]
         values = " ".join(

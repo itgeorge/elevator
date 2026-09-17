@@ -4,6 +4,8 @@ This document summarizes hardware exploration of unknown ride-encoding candidate
 
 **Audience:** a new agent investigating the general encoding algorithm from known families and dumps.
 
+> **Update 2026-08-05:** **Charon** and **Nix** are registered production sequences. **Charon** uses `zeroBlock=C0121244`, rotation 0, range 0..500, identity `EBFE0077-7BECB142-610412F3-610412F3`, reset image `charon-0-rides.bin`. **Nix** uses `zeroBlock=0DC7C70D`, rotation 4, range 0..500, identity `1BFE002A-F100C605-82045966-82045966`, reset image `nix-0-rides.bin`. These are distinct production sequences and are **not** the historical Jupiter "Candidate D" exploration path.
+
 > **Update 2026-08-04:** **Neptune** is registered with `zeroBlock=8F1249B0`, rotation 0, range 0..500, and canonical identity `8BFE002A-F100C6A2-95D15917-95D15917`. Its 128/256/384 boundaries and 500→497 decrement were hardware-validated; reset image `neptune-0-rides.bin` is implemented.
 
 > **Update 2026-07-22:** Candidate B is registered as **Saturn** and Candidate C as **Uranus** (both rotation 0, range 0..500). Boundary transitions and `1 -> 0` were hardware-validated; reset images `saturn-0-rides.bin` and `uranus-0-rides.bin` are implemented.
@@ -57,6 +59,8 @@ These tests strongly support page-0 **block 4** as custom application storage on
 | **Saturn** | **0..500** | **rotation 0, zeroBlock 8B1249F0** | **23FE007B-D88CBD8A-5D04593D-5D04593D** | Candidate B registered; reset enabled |
 | **Uranus** | **0..500** | **rotation 0, zeroBlock 891249D0** | **FBFE002A-F1003C92-F5D1D766-F5D1D766** | Candidate C registered; reset enabled |
 | **Neptune** | **0..500** | **rotation 0, zeroBlock 8F1249B0** | **8BFE002A-F100C6A2-95D15917-95D15917** | Boundaries/high-count decrement validated; reset enabled |
+| **Charon** | **0..500** | **rotation 0, zeroBlock C0121244** | **EBFE0077-7BECB142-610412F3-610412F3** | Production sequence; not historical Jupiter Candidate D; reset enabled |
+| **Nix** | **0..500** | **rotation 4, zeroBlock 0DC7C70D** | **1BFE002A-F100C605-82045966-82045966** | Production sequence; not historical Jupiter Candidate D; reset enabled |
 
 Pluto reset image: `RidesCli/Data/pluto-0-rides.bin`. Profile name: `pluto`.
 

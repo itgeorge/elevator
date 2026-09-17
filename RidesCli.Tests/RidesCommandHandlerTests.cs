@@ -180,6 +180,50 @@ public class RidesCommandHandlerTests
         Assert.That(pm3.GetBlockHex(6), Is.EqualTo("8F1249B0"));
     }
 
+    [TestCase("--profile")]
+    [TestCase("--sequence")]
+    public void Reset_charon_writes_only_canonical_identity_and_zero_ride_blocks(string option)
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", option, "charon"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(0));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(7));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("EBFE0077"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("7BECB142"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("610412F3"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("610412F3"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("C0121244"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("C0121244"));
+    }
+
+    [TestCase("--profile")]
+    [TestCase("--sequence")]
+    public void Reset_nix_writes_only_canonical_identity_and_zero_ride_blocks(string option)
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", option, "nix"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 1, 2, 3, 4, 5, 6 }));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(0));
+        Assert.That(pm3.WrittenBlocks, Has.None.EqualTo(7));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("1BFE002A"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("F100C605"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("82045966"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("82045966"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("0DC7C70D"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("0DC7C70D"));
+    }
+
     [Test]
     public void Reset_recognition_only_profile_prints_error_without_writing()
     {
@@ -1508,6 +1552,87 @@ public class RidesCommandHandlerTests
             Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Neptune.Encode(expected).ToHex()), $"{start} + 1");
             Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Neptune.Encode(expected).ToHex()), $"{start} + 1");
         }
+    }
+
+    [Test]
+    public void Charon_blocks_on_noncanonical_identity_are_recognized_and_set_preserves_charon()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithBlocks5And6(EncodingSequences.Charon.Encode(127), EncodingSequences.Charon.Encode(127));
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+
+        handler.Execute(["read"]);
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 127"));
+        Assert.That(output.Lines, Has.Some.EqualTo("sequence: charon"));
+
+        handler.Execute(["set", "128"]);
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("C01292C4"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("C01292C4"));
+    }
+
+    [Test]
+    public void Charon_add_crosses_observed_counter_boundaries()
+    {
+        foreach (var (start, expected) in new[]
+                 {
+                     (127u, 128u), (255u, 256u), (383u, 384u), (499u, 500u),
+                 })
+        {
+            var pm3 = FakeRidesPm3Api.WithBlocks5And6(EncodingSequences.Charon.Encode(start), EncodingSequences.Charon.Encode(start));
+            var handler = new RidesCommandHandler(pm3, new StringBuilderRidesOutput(), new RidesConfig());
+            handler.Execute(["read"]);
+            handler.Execute(["add", "1"]);
+            Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Charon.Encode(expected).ToHex()), $"{start} + 1");
+            Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Charon.Encode(expected).ToHex()), $"{start} + 1");
+        }
+    }
+
+    [Test]
+    public void Set_preserves_nix_profile_within_confirmed_second_family()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Nix, 128);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+
+        handler.Execute(["set", "255"]);
+
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("FEC738F2"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("FEC738F2"));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Earth.Encode(255).ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.Not.EqualTo(EncodingSequences.Pluto.Encode(255).ToHex()));
+    }
+
+    [Test]
+    public void Set_nix_uses_corrected_fourth_family_at_500()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Nix, 255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+        output.Clear();
+
+        handler.Execute(["set", "500"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("FEC63352"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("FEC63352"));
+    }
+
+    [Test]
+    public void Add_nix_crossing_255_uses_corrected_third_family()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Nix, 255);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig());
+        handler.Execute(["read"]);
+        output.Clear();
+
+        handler.Execute(["add", "1"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo("0DC6C71D"));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo("0DC6C71D"));
     }
 
     [Test]

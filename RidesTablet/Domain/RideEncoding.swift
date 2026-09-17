@@ -2,7 +2,7 @@ import Foundation
 
 /// Registered ride-counter encodings adapted from Tokens/EncodingSequence.cs.
 public enum RideSequence: String, CaseIterable, Codable, Sendable {
-    case mercury, venus, earth, pluto, mars, jupiter, saturn, uranus, neptune
+    case mercury, venus, earth, pluto, mars, jupiter, saturn, uranus, neptune, charon, nix
 
     public var zeroBlock: UInt32 {
         switch self {
@@ -15,13 +15,15 @@ public enum RideSequence: String, CaseIterable, Codable, Sendable {
         case .saturn: 0x8B1249F0
         case .uranus: 0x891249D0
         case .neptune: 0x8F1249B0
+        case .charon: 0xC0121244
+        case .nix: 0x0DC7C70D
         }
     }
 
     public var rotation: UInt8 {
         switch self {
-        case .mercury, .venus, .earth, .pluto, .mars: 4
-        case .jupiter, .saturn, .uranus, .neptune: 0
+        case .mercury, .venus, .earth, .pluto, .mars, .nix: 4
+        case .jupiter, .saturn, .uranus, .neptune, .charon: 0
         }
     }
 

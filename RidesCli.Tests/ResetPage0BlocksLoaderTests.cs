@@ -39,4 +39,32 @@ public class ResetPage0BlocksLoaderTests
         Assert.That(blocks[5], Is.EqualTo(EncodingSequences.Neptune.Encode(0)));
         Assert.That(blocks[6], Is.EqualTo(EncodingSequences.Neptune.Encode(0)));
     }
+
+    [Test]
+    public void Charon_reset_image_is_the_canonical_zero_ride_capture()
+    {
+        var blocks = ResetPage0BlocksLoader.Load(TokenIdentityProfiles.Charon);
+
+        Assert.That(blocks.Select(block => block.ToHex()), Is.EqualTo(new[]
+        {
+            "00148040", "EBFE0077", "7BECB142", "610412F3",
+            "610412F3", "C0121244", "C0121244", "00000000",
+        }));
+        Assert.That(blocks[5], Is.EqualTo(EncodingSequences.Charon.Encode(0)));
+        Assert.That(blocks[6], Is.EqualTo(EncodingSequences.Charon.Encode(0)));
+    }
+
+    [Test]
+    public void Nix_reset_image_is_the_canonical_zero_ride_capture()
+    {
+        var blocks = ResetPage0BlocksLoader.Load(TokenIdentityProfiles.Nix);
+
+        Assert.That(blocks.Select(block => block.ToHex()), Is.EqualTo(new[]
+        {
+            "00148040", "1BFE002A", "F100C605", "82045966",
+            "82045966", "0DC7C70D", "0DC7C70D", "00000000",
+        }));
+        Assert.That(blocks[5], Is.EqualTo(EncodingSequences.Nix.Encode(0)));
+        Assert.That(blocks[6], Is.EqualTo(EncodingSequences.Nix.Encode(0)));
+    }
 }
