@@ -611,6 +611,7 @@ public static class BridgeTerminalDisplay
 
         var pairingCode = pairing.GetActiveCode() ?? pairing.IssueCode();
         output.WriteLine($"RidesBridge API {BridgeOptions.ApiVersion} listening.");
+        output.WriteLine($"Listening bind: {options.BindUrl}");
         output.WriteLine($"Pairing PIN: {pairingCode.Value} (expires {pairingCode.ExpiresAt:O})");
 
         var payloads = artifactLease?.Payloads ?? (addresses is null

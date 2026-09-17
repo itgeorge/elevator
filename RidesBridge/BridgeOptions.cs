@@ -17,8 +17,10 @@ public sealed record BridgeOptions
     public string? Pm3Port { get; init; }
     public bool Pm3AutoDiscover { get; init; } = true;
     public string? Pm3ClientPath { get; init; }
-    public string DataDirectory { get; init; } = Path.Combine(
+    public static string DefaultDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ElevatorTokens", "RidesBridge");
+
+    public string DataDirectory { get; init; } = DefaultDataDirectory;
     public string? PairedClientsPath { get; init; }
     public string? BridgeIdentityPath { get; init; }
     /// <summary>Directory for temporary pairing QR PNGs; defaults to the private data directory.</summary>
@@ -71,21 +73,30 @@ public sealed record BridgeOptions
         return this;
     }
 
-    public static BridgeOptions FromConfiguration(IConfiguration configuration)
+    public static BridgeOptions FromConfiguration(IConfiguration configuration) =>
+        FromConfiguration(configuration, everydayMode: false);
+
+    internal static BridgeOptions FromConfiguration(IConfiguration configuration, bool everydayMode)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        var bindUrl = configuration["Bridge:BindUrl"] ?? configuration["BRIDGE_BIND_URL"] ?? DefaultBindUrl;
+        var bindUrl = everydayMode
+            ? DefaultBindUrl
+            : configuration["Bridge:BindUrl"] ?? configuration["BRIDGE_BIND_URL"] ?? DefaultBindUrl;
         var dataDirectory = configuration["Bridge:DataDirectory"]
             ?? configuration["BRIDGE_DATA_DIRECTORY"]
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ElevatorTokens", "RidesBridge");
-        var pairedPath = configuration["Bridge:PairedClientsPath"] ?? configuration["BRIDGE_PAIRED_CLIENTS_PATH"];
-        var identityPath = configuration["Bridge:IdentityPath"] ?? configuration["BRIDGE_IDENTITY_PATH"];
+            ?? DefaultDataDirectory;
+        var pairedPath = configuration["Bridge:PairedClientsPath"]
+            ?? configuration["BRIDGE_PAIRED_CLIENTS_PATH"];
+        var identityPath = configuration["Bridge:IdentityPath"]
+            ?? configuration["BRIDGE_IDENTITY_PATH"];
         var pairingQrArtifactDirectory = configuration["Bridge:PairingQrArtifactDirectory"]
             ?? configuration["BRIDGE_PAIRING_QR_ARTIFACT_DIRECTORY"];
-        var port = configuration["Pm3:Port"] ?? configuration["PM3_PORT"];
+        var port = everydayMode
+            ? null
+            : configuration["Pm3:Port"] ?? configuration["PM3_PORT"];
         var autoKey = configuration["Pm3:AutoDiscover"] is not null ? "Pm3:AutoDiscover" : "PM3_AUTO_DISCOVER";
-        var auto = configuration[autoKey];
-        var autoDiscover = ParseBoolean(auto, autoKey, defaultValue: true);
+        var auto = everydayMode ? null : configuration[autoKey];
+        var autoDiscover = everydayMode || ParseBoolean(auto, autoKey, defaultValue: true);
         var pairingLifetime = ParseSeconds(configuration,
             "Bridge:PairingLifetimeSeconds", "BRIDGE_PAIRING_LIFETIME_SECONDS", 120);
         var operationWait = ParseSeconds(configuration,
