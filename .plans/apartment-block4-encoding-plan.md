@@ -297,6 +297,7 @@ Leave the repo coherent for the next agent/human smoke test without doing device
 ## Agent notes / assumptions
 
 - Notes: Help already listed `apt` / `aptsecret` / `reset [--resetapt]` from Phases 2–3. Exploration doc now points at this plan and the preserve/`--resetapt` reset behavior. No `.env` secret loading (intentional plan non-goal). Reviewer fixed same-identity junk block4 restore during Phase 3. Software validation: `Tokens.Tests` + `RidesCli.Tests` green on `apartment-block4` worktree.
+- Follow-up fix (hardware smoke): cross-profile reset with a sealed apartment previously kept the old block-4 bytes while rewriting block 3, so `apt` decoded as not encoded after e.g. mercury→venus. Reset now reseals the decoded apartment onto the destination block 3 when the secret is available (`PrepareResetBlock4`). Covered by `Reset_crossProfileWithSealedApt_resealsApartmentOntoNewBlock3`.
 - Assumptions: Hardware smoke remains a human follow-up outside this plan’s completion gate.
 
 ---

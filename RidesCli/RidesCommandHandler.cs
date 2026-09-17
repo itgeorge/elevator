@@ -382,7 +382,7 @@ public sealed class RidesCommandHandler
 
         var includeBlock4 = resetApt
             || currentBlocks is null
-            || ShouldWriteResetBlock4(currentBlocks, resetBlocks);
+            || PrepareResetBlock4(currentBlocks, resetBlocks);
         var targetBlockNumbers = SelectResetTargetBlockNumbers(
             force,
             resetApt,
@@ -446,20 +446,36 @@ public sealed class RidesCommandHandler
             && IsBlockFromSequence(currentBlocks[6], profile.RideSequence);
     }
 
-    private bool ShouldWriteResetBlock4(
+    /// <summary>
+    /// Classifies block 4 for reset. Returns true when block 4 should be written from
+    /// <paramref name="resetBlocks"/>. For a sealed apartment under a changing block 3,
+    /// reseals the payload into <c>resetBlocks[4]</c> so preserve still decodes after identity change.
+    /// </summary>
+    private bool PrepareResetBlock4(
         IReadOnlyList<T55Block> currentBlocks,
-        IReadOnlyList<T55Block> resetBlocks)
+        IList<T55Block> resetBlocks)
     {
         var currentBlock3 = currentBlocks[3];
         var currentBlock4 = currentBlocks[4];
         var profileBlock4 = resetBlocks[4];
+        var newBlock3 = resetBlocks[3];
 
         if (_apartmentSecretStore.TryGetSecret(out var secret))
         {
-            if (ApartmentBlockCodec.TryDecode(secret, currentBlock3, currentBlock4, out _))
+            if (ApartmentBlockCodec.TryDecode(secret, currentBlock3, currentBlock4, out var payload))
             {
                 _output.WriteLine("Preserving apartment in block 4.");
-                return false;
+                if (currentBlock3.Value == newBlock3.Value)
+                    return false;
+
+                // Apartment seal/mask bind to block 3; re-encode onto the destination identity.
+                var secretBytes = secret.ToArray();
+                resetBlocks[4] = ApartmentBlockCodec.Encode(
+                    secretBytes,
+                    newBlock3,
+                    payload.Building,
+                    payload.Apt);
+                return true;
             }
 
             return true;

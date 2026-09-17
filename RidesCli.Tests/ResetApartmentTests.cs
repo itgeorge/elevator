@@ -98,6 +98,38 @@ public class ResetApartmentTests
     }
 
     [Test]
+    public void Reset_crossProfileWithSealedApt_resealsApartmentOntoNewBlock3()
+    {
+        var output = new StringBuilderRidesOutput();
+        var store = new ApartmentSecretStore();
+        store.SetSecretFromUtf8(TestSecret);
+        var pm3 = CreateMercuryWithSealedApt(500, 64);
+        var oldSealedBlock4Hex = pm3.GetBlockHex(4);
+        var handler = CreateHandler(pm3, output, store);
+
+        handler.Execute(["reset", "-f", "--sequence", "venus"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("Preserving apartment in block 4"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo(TokenIdentityProfiles.Venus.Block1.ToHex()));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo(TokenIdentityProfiles.Venus.Block2.ToHex()));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo(TokenIdentityProfiles.Venus.Block3.ToHex()));
+        Assert.That(pm3.WrittenBlocks, Does.Contain(4u));
+        Assert.That(pm3.GetBlockHex(4), Is.Not.EqualTo(oldSealedBlock4Hex));
+
+        var expectedBlock4 = ApartmentBlockCodec.Encode(
+            SecretBytes,
+            TokenIdentityProfiles.Venus.Block3,
+            building: 0,
+            apt: 64);
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo(expectedBlock4.ToHex()));
+
+        handler.Execute(["apt"]);
+        Assert.That(output.Lines, Has.Some.EqualTo("building: 0, apt: 64"));
+        Assert.That(output.Lines, Has.None.EqualTo("Apartment not encoded in block 4."));
+    }
+
+    [Test]
     public void Reset_secretMissingWithDivergentBlock4_preservesBlock4AndWarns()
     {
         var output = new StringBuilderRidesOutput();
