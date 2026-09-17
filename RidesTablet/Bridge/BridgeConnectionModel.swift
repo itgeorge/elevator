@@ -91,7 +91,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private var automaticBonjourSnapshot: [BridgeBonjourCandidate] = []
     private var automaticBonjourAttemptedCandidateIDs: Set<String> = []
     /// The candidate whose proof and authenticated status last established the
-    /// current automatic connection. A credential alone never establishes this.
+    /// current Bonjour connection. A credential alone never establishes this.
     private var automaticBonjourConnectedCandidateID: String?
     private var stateBeforeBonjourRelocation: BridgeConnectionState?
     private var automaticReconnectTask: Task<Void, Never>?
@@ -436,10 +436,14 @@ public final class BridgeConnectionModel: ObservableObject {
             state = .searching
         }
         cancelAutomaticReconnect()
+        automaticBonjourConnectedCandidateID = nil
         bonjourCandidates = []
         offeredBonjourCandidate = nil
         rejectedBonjourResultCount = 0
         bonjourDiscoveryState = .browsing
+        if isPaired {
+            state = .searching
+        }
         message = automatic
             ? "Searching for the saved bridge over Bonjour…"
             : "Searching for compatible local RidesBridge services…"
@@ -466,9 +470,11 @@ public final class BridgeConnectionModel: ObservableObject {
         automaticReconnectPredecessorTask = nil
         if (automaticReconnectMigrationOperation != nil || explicitBonjourRelocationTask != nil), state == .relocating {
             bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
-            state = stateAfterBonjourRelocationEnds()
-        } else if state == .searching {
             state = isPaired ? .restored : .unconfigured
+        } else if isPaired && automaticBonjourConnectedCandidateID == nil {
+            state = .restored
+        } else if state == .searching {
+            state = .unconfigured
         }
         stateBeforeBonjourRelocation = nil
         automaticBonjourConnectedCandidateID = nil
@@ -556,6 +562,17 @@ public final class BridgeConnectionModel: ObservableObject {
         switch sourceState {
         case .ready:
             if bonjourCandidates.isEmpty {
+                automaticBonjourConnectedCandidateID = nil
+                if explicitBonjourRelocationTask != nil {
+                    bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
+                    cancelExplicitBonjourRelocation()
+                }
+                if automaticReconnectTask != nil || automaticReconnectVerification != nil {
+                    cancelAutomaticReconnect()
+                }
+                if isPaired {
+                    state = .searching
+                }
                 message = automaticBonjourBrowseGeneration == generation
                     ? "Searching for the saved bridge over Bonjour…"
                     : "Searching for compatible local RidesBridge services…"
@@ -570,10 +587,8 @@ public final class BridgeConnectionModel: ObservableObject {
             automaticReconnectPredecessorTask = nil
             if (automaticReconnectMigrationOperation != nil || explicitBonjourRelocationTask != nil), state == .relocating {
                 bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
-                state = stateAfterBonjourRelocationEnds()
-            } else if state == .searching {
-                state = isPaired ? .restored : .unconfigured
             }
+            state = isPaired ? .restored : .unconfigured
             stateBeforeBonjourRelocation = nil
             automaticBonjourConnectedCandidateID = nil
             automaticReconnectMigrationOperation = nil
@@ -589,10 +604,8 @@ public final class BridgeConnectionModel: ObservableObject {
             automaticReconnectPredecessorTask = nil
             if (automaticReconnectMigrationOperation != nil || explicitBonjourRelocationTask != nil), state == .relocating {
                 bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
-                state = stateAfterBonjourRelocationEnds()
-            } else if state == .searching {
-                state = isPaired ? .restored : .unconfigured
             }
+            state = isPaired ? .restored : .unconfigured
             stateBeforeBonjourRelocation = nil
             automaticBonjourConnectedCandidateID = nil
             automaticReconnectMigrationOperation = nil
@@ -611,16 +624,19 @@ public final class BridgeConnectionModel: ObservableObject {
         let previousAutomaticSnapshot = automaticBonjourSnapshot
         let previousBonjourCandidates = bonjourCandidates
         automaticBonjourSnapshot = isAutomatic ? snapshot.candidates : []
-        if isAutomatic {
-            let currentIDs = Set(snapshot.candidates.map(\.id))
+        let currentIDs = Set(snapshot.candidates.map(\.id))
+        if let connectedCandidateID = automaticBonjourConnectedCandidateID,
+           !currentIDs.contains(connectedCandidateID) {
             // A removed advertisement is a new lifecycle event, not a request
-            // failure. Permit a later re-advertisement to restore the connection.
-            automaticBonjourAttemptedCandidateIDs.formIntersection(currentIDs)
-            if let connectedCandidateID = automaticBonjourConnectedCandidateID,
-               !currentIDs.contains(connectedCandidateID) {
-                automaticBonjourConnectedCandidateID = nil
+            // failure. A saved credential alone is not proof that the service is
+            // still present, so keep the connection UI in the searching state.
+            automaticBonjourConnectedCandidateID = nil
+            if isPaired {
                 state = .searching
             }
+        }
+        if isAutomatic {
+            automaticBonjourAttemptedCandidateIDs.formIntersection(currentIDs)
         }
         if !isAutomatic,
            explicitBonjourRelocationTask != nil,
@@ -629,7 +645,7 @@ public final class BridgeConnectionModel: ObservableObject {
             // proof/status owner before accepting the new browser snapshot.
             if state == .relocating {
                 bridgeURLText = client?.baseURL.absoluteString ?? bridgeURLText
-                state = stateAfterBonjourRelocationEnds()
+                state = isPaired ? .searching : .unconfigured
             }
             cancelExplicitBonjourRelocation()
         }
@@ -658,9 +674,12 @@ public final class BridgeConnectionModel: ObservableObject {
         switch snapshot.candidates.count {
         case 0:
             bonjourDiscoveryState = .browsing
+            if isPaired {
+                state = .searching
+            }
             message = snapshot.rejectedResultCount == 0
                 ? (isAutomatic ? "Searching for the saved bridge over Bonjour…" : "Searching for compatible local RidesBridge services…")
-                : "No compatible RidesBridge service was found. Check the bridge version and TXT record, or use manual entry."
+                : "No compatible RidesBridge service was found. Searching continues; check the bridge version and TXT record, or use manual entry."
         case 1:
             bonjourDiscoveryState = .offered
             if isAutomatic {
@@ -999,7 +1018,7 @@ public final class BridgeConnectionModel: ObservableObject {
             }
             client = candidateClient
             bridgeURLText = candidateClient.baseURL.absoluteString
-            if automatic, let candidate {
+            if let candidate {
                 automaticBonjourConnectedCandidateID = candidate.id
             }
             stateBeforeBonjourRelocation = nil
@@ -1288,8 +1307,9 @@ public final class BridgeConnectionModel: ObservableObject {
     }
 
     private func publishAuthenticatedConnection() {
-        if automaticBonjourBrowseGeneration != nil,
-           automaticBonjourConnectedCandidateID == nil {
+        if isBonjourBrowsing,
+           automaticBonjourConnectedCandidateID == nil,
+           isPaired {
             state = .searching
         } else {
             state = .connected
@@ -1297,8 +1317,9 @@ public final class BridgeConnectionModel: ObservableObject {
     }
 
     private func restoreStateAfterCancellation() {
-        if automaticBonjourBrowseGeneration != nil,
-           automaticBonjourConnectedCandidateID == nil {
+        if isBonjourBrowsing,
+           automaticBonjourConnectedCandidateID == nil,
+           isPaired {
             state = .searching
         } else {
             state = isPaired ? .connected : .unconfigured
