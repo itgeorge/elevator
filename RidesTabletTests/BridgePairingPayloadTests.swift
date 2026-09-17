@@ -347,7 +347,7 @@ final class BridgePairingImportModelTests: XCTestCase {
         XCTAssertEqual(PairingImportURLProtocol.paths, ["/api/v1/health", "/api/v1/pair", "/api/v1/pair/revoke"])
         XCTAssertNil(store.stored)
         XCTAssertFalse(model.isPaired)
-        XCTAssertTrue(model.message?.contains("revoked") == true)
+        XCTAssertTrue(model.message?.contains("cleaned up") == true)
     }
 
     func testImportRefusesAlreadyPairedWithoutNetwork() async {

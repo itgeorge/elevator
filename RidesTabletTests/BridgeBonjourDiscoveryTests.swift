@@ -1042,6 +1042,47 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(model.state, .connected)
     }
 
+    func testForgetCancelsInFlightBonjourProofLocallyAndRejectsLateCompletion() async {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "bearer", bridgeId: bonjourBridgeID
+        ))
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        BonjourModelURLProtocol.holdRequests = true
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitUntil { BonjourModelURLProtocol.requestCount == 1 && BonjourModelURLProtocol.pendingRequest != nil }
+        XCTAssertEqual(model.state, .relocating)
+        XCTAssertTrue(model.hasPairingToForget)
+
+        await model.forget()
+
+        XCTAssertEqual(model.state, .unconfigured)
+        XCTAssertFalse(model.isPaired)
+        XCTAssertNil(store.credential)
+        XCTAssertEqual(model.bonjourCandidates, [])
+        XCTAssertNil(model.offeredBonjourCandidate)
+        XCTAssertEqual(model.bonjourDiscoveryState, .stopped)
+        XCTAssertGreaterThanOrEqual(source.stopCount, 1)
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+
+        // A completion already queued by the old proof must not send status or restore state.
+        BonjourModelURLProtocol.respondPending(data: try! validProofResponseData(
+            for: BonjourModelURLProtocol.pendingRequest!, bearer: "bearer", bridgeId: bonjourBridgeID
+        ))
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 1)
+        XCTAssertEqual(model.state, .unconfigured)
+        XCTAssertFalse(model.isPaired)
+    }
+
     func testAutomaticReconnectModelDeinitCancelsPendingDelayWithoutRetainingModel() async {
         let delay = ControlledAsyncGate()
         let source = FakeBonjourBrowserSource()

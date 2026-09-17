@@ -10,7 +10,6 @@ public enum BridgeConnectionState: Equatable, Sendable {
     case readingMercury
     case settingMercury
     case relocating
-    case forgetting
     case authenticationRequired
     case failed(String)
 
@@ -24,7 +23,6 @@ public enum BridgeConnectionState: Equatable, Sendable {
         case .readingMercury: "Reading Mercury rides…"
         case .settingMercury: "Setting Mercury rides…"
         case .relocating: "Checking new bridge address…"
-        case .forgetting: "Revoking pairing…"
         case .authenticationRequired: "Pairing required"
         case .failed: "Action failed"
         }
@@ -32,14 +30,14 @@ public enum BridgeConnectionState: Equatable, Sendable {
 
     public var isBusy: Bool {
         switch self {
-        case .pairing, .reading, .readingMercury, .settingMercury, .relocating, .forgetting: true
+        case .pairing, .reading, .readingMercury, .settingMercury, .relocating: true
         default: false
         }
     }
 
     public var isPaired: Bool {
         switch self {
-        case .restored, .connected, .reading, .readingMercury, .settingMercury, .relocating, .forgetting: true
+        case .restored, .connected, .reading, .readingMercury, .settingMercury, .relocating: true
         default: false
         }
     }
@@ -84,6 +82,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private let relocationNonceGenerator: @Sendable () -> String
     private var client: BridgeClient?
     private var bonjourBrowseGeneration = 0
+    private var localOperationGeneration = 0
     private var automaticBonjourBrowseGeneration: Int?
     private var automaticBonjourBridgeId: String?
     private var automaticBonjourLaunchStarted = false
@@ -169,8 +168,14 @@ public final class BridgeConnectionModel: ObservableObject {
             false
         }
     }
-    /// A saved credential remains usable for retry/forget even after a transient failure.
+    /// A saved credential remains usable for local reset even after a transient failure.
     public var isPaired: Bool { client?.hasCredential == true }
+
+    /// Forget is available for either the live bearer or a credential that is still in storage,
+    /// including while Bonjour is relocating the live client.
+    public var hasPairingToForget: Bool {
+        isPaired || hasSavedCredential || credentialRestoreFailed
+    }
 
     /// Address migration is only offered for a credential that is actually persisted.
     public var hasSavedCredential: Bool {
@@ -291,6 +296,7 @@ public final class BridgeConnectionModel: ObservableObject {
         message = nil
         clearMercurySnapshot()
         lastBlock5Value = nil
+        let operationGeneration = localOperationGeneration
 
         let newClient: BridgeClient
         do {
@@ -310,6 +316,14 @@ public final class BridgeConnectionModel: ObservableObject {
                 bridgeId: bridgeId,
                 retryHealthOnUnreachable: retryHealthOnUnreachable
             )
+            guard operationGeneration == localOperationGeneration else {
+                // A local reset won while the pairing request was in flight. The bearer
+                // was not securely saved, so use the only allowed server cleanup path,
+                // then drop it regardless of the cleanup result.
+                try? await newClient.revoke()
+                newClient.clearCredential()
+                return
+            }
             do {
                 try credentialStore.save(credential)
             } catch {
@@ -318,23 +332,28 @@ public final class BridgeConnectionModel: ObservableObject {
                     try await newClient.revoke()
                     newClient.clearCredential()
                     client = nil
-                    let detail = "Pairing succeeded, but the secure credential could not be saved. The server pairing was revoked; pair again."
+                    let detail = "Pairing succeeded, but the secure credential could not be saved. The temporary server pairing was cleaned up; pair again."
                     state = .failed(detail)
                     message = detail
                 } catch BridgeClientError.unauthorized {
                     newClient.clearCredential()
                     client = nil
-                    let detail = "Pairing succeeded, but the secure credential could not be saved. The server pairing was already invalid; pair again."
+                    let detail = "Pairing succeeded, but the secure credential could not be saved. The temporary server pairing was already invalid; pair again."
                     state = .failed(detail)
                     message = detail
                 } catch {
-                    // Keep the live bearer reachable through Forget so it can be revoked on retry.
-                    client = newClient
-                    bridgeURLText = credential.baseURL.absoluteString
-                    let detail = "Pairing could not be saved or revoked. Keep this app open and tap Forget to retry revocation."
+                    // Never retain an active bearer when secure local storage failed.
+                    newClient.clearCredential()
+                    client = nil
+                    let detail = "Pairing succeeded, but the secure credential could not be saved or cleaned up. No active local pairing was retained; pair again."
                     state = .failed(detail)
                     message = detail
                 }
+                return
+            }
+            guard operationGeneration == localOperationGeneration else {
+                newClient.clearCredential()
+                client = nil
                 return
             }
             client = newClient
@@ -342,8 +361,10 @@ public final class BridgeConnectionModel: ObservableObject {
             state = .connected
             message = "Paired with the local bridge."
         } catch is CancellationError {
+            guard operationGeneration == localOperationGeneration else { return }
             restoreStateAfterCancellation()
         } catch {
+            guard operationGeneration == localOperationGeneration else { return }
             fail(with: error)
         }
     }
@@ -743,6 +764,33 @@ public final class BridgeConnectionModel: ObservableObject {
         automaticReconnectMigrationOperation = nil
     }
 
+    private func invalidateBonjourWorkForLocalReset() {
+        bonjourBrowseGeneration &+= 1
+        automaticBonjourBrowseGeneration = nil
+        automaticBonjourBridgeId = nil
+        automaticBonjourSnapshot = []
+        automaticBonjourAttemptedCandidateIDs = []
+        automaticReconnectMigrationOperation = nil
+
+        automaticReconnectToken &+= 1
+        automaticReconnectTask?.cancel()
+        automaticReconnectTask = nil
+        automaticReconnectPredecessorTask?.cancel()
+        automaticReconnectPredecessorTask = nil
+        automaticReconnectVerification?.task.cancel()
+        automaticReconnectVerification = nil
+
+        explicitBonjourRelocationToken &+= 1
+        explicitBonjourRelocationTask?.cancel()
+        explicitBonjourRelocationTask = nil
+
+        bonjourBrowserSource.stop()
+        bonjourCandidates = []
+        offeredBonjourCandidate = nil
+        rejectedBonjourResultCount = 0
+        bonjourDiscoveryState = .stopped
+    }
+
     private func cancelExplicitBonjourRelocation() {
         explicitBonjourRelocationToken &+= 1
         explicitBonjourRelocationTask?.cancel()
@@ -813,6 +861,7 @@ public final class BridgeConnectionModel: ObservableObject {
         explicitToken: Int? = nil
     ) async -> Bool {
         guard !isBusy else { return false }
+        let operationGeneration = localOperationGeneration
         guard let oldClient = client, oldClient.hasCredential else {
             state = .authenticationRequired
             message = BridgeClientError.missingCredential.localizedDescription
@@ -882,6 +931,7 @@ public final class BridgeConnectionModel: ObservableObject {
                 // A selected Bonjour result can disappear between proof and
                 // status. Re-check ownership before sending the bearer.
                 try Task.checkCancellation()
+                guard operationGeneration == localOperationGeneration else { return false }
                 if let explicitToken {
                     guard explicitBonjourRelocationToken == explicitToken else { return false }
                 }
@@ -889,10 +939,12 @@ public final class BridgeConnectionModel: ObservableObject {
             } else {
                 // Manual entry and launch overrides are operator-selected paths;
                 // retain their existing authenticated status-only verification.
+                guard operationGeneration == localOperationGeneration, !Task.isCancelled else { return false }
                 _ = try await candidateClient.verifyPairing()
             }
 
             // Do not alter the active client until secure persistence succeeds.
+            guard operationGeneration == localOperationGeneration, !Task.isCancelled else { return false }
             guard explicitToken == nil || (explicitBonjourRelocationToken == explicitToken! && !Task.isCancelled) else {
                 return false
             }
@@ -900,6 +952,7 @@ public final class BridgeConnectionModel: ObservableObject {
                 return false
             }
             try credentialStore.save(candidateCredential)
+            guard operationGeneration == localOperationGeneration, !Task.isCancelled else { return false }
             guard explicitToken == nil || (explicitBonjourRelocationToken == explicitToken! && !Task.isCancelled) else {
                 return false
             }
@@ -914,6 +967,7 @@ public final class BridgeConnectionModel: ObservableObject {
                 : "Bridge address updated. The saved pairing was kept."
             return true
         } catch is CancellationError {
+            if operationGeneration != localOperationGeneration { return false }
             if let explicitToken, explicitBonjourRelocationToken != explicitToken || Task.isCancelled {
                 return false
             }
@@ -926,6 +980,7 @@ public final class BridgeConnectionModel: ObservableObject {
             message = "Address change was cancelled. The previous bridge address remains active."
             return false
         } catch {
+            if operationGeneration != localOperationGeneration { return false }
             if let explicitToken, explicitBonjourRelocationToken != explicitToken || Task.isCancelled {
                 return false
             }
@@ -942,26 +997,30 @@ public final class BridgeConnectionModel: ObservableObject {
         }
     }
 
+    /// Immediately drops the local pairing. This operation is deliberately local: Forget never
+    /// contacts the bridge, so it remains usable while offline or while Bonjour relocation is busy.
     public func forget() async {
-        guard !isBusy else { return }
-        guard let client, client.hasCredential else {
-            clearLocalCredential()
-            return
-        }
+        localOperationGeneration &+= 1
+        // A launch task may still be unwinding after relocation cancellation. Do not let
+        // its deferred automatic-reconnect step start a new browse after this reset.
+        automaticBonjourLaunchStarted = true
+        invalidateBonjourWorkForLocalReset()
 
-        state = .forgetting
-        message = nil
+        // Clear the bearer before touching storage. Even a Keychain failure must not leave an
+        // active client or a browser able to publish the old pairing again.
+        client?.clearCredential()
+        client = nil
+        lastBlock5Value = nil
+        clearMercurySnapshot()
+        state = .unconfigured
+
         do {
-            try await client.revoke()
-            clearLocalCredential()
-        } catch BridgeClientError.unauthorized {
-            // The server already considers this credential invalid; local cleanup is safe.
-            clearLocalCredential()
-        } catch is CancellationError {
-            restoreStateAfterCancellation()
+            try credentialStore.remove()
+            message = "Saved pairing removed from this iPad. Pair or scan a QR code to connect again."
         } catch {
-            // Keep the client and store intact so the operator can retry Forget and revoke later.
-            fail(with: error)
+            // The Keychain may still contain the credential, but the app has failed safe:
+            // there is no active bearer, no browser, and QR pairing is enabled.
+            message = "The saved pairing could not be removed from this iPad. No active bearer was retained; try Forget again or scan a new pairing QR."
         }
     }
 
@@ -975,16 +1034,21 @@ public final class BridgeConnectionModel: ObservableObject {
 
         state = .reading
         message = nil
+        let operationGeneration = localOperationGeneration
         do {
             let response = try await client.readBlock5()
+            guard operationGeneration == localOperationGeneration else { return }
             lastBlock5Value = response.value
             state = .connected
             message = "Block 5 read successfully."
         } catch BridgeClientError.unauthorized {
+            guard operationGeneration == localOperationGeneration else { return }
             handleUnauthorized()
         } catch is CancellationError {
+            guard operationGeneration == localOperationGeneration else { return }
             restoreStateAfterCancellation()
         } catch {
+            guard operationGeneration == localOperationGeneration else { return }
             fail(with: error)
         }
     }
@@ -1001,8 +1065,10 @@ public final class BridgeConnectionModel: ObservableObject {
 
         state = .readingMercury
         message = nil
+        let operationGeneration = localOperationGeneration
         do {
             let response = try await client.readMercuryMirrors()
+            guard operationGeneration == localOperationGeneration else { return }
             applyMercurySnapshot(block5: response.block5, block6: response.block6)
             state = .connected
             if lastMercuryRead?.status == .success {
@@ -1011,11 +1077,14 @@ public final class BridgeConnectionModel: ObservableObject {
                 message = "Mercury mirrors read, but the ride encoding is unknown."
             }
         } catch BridgeClientError.unauthorized {
+            guard operationGeneration == localOperationGeneration else { return }
             handleUnauthorized()
         } catch is CancellationError {
+            guard operationGeneration == localOperationGeneration else { return }
             invalidateMercurySnapshot()
             failMercury("Mercury read was cancelled. Read Mercury rides again before setting a value.")
         } catch {
+            guard operationGeneration == localOperationGeneration else { return }
             invalidateMercurySnapshot()
             failMercury("Mercury read failed: \(errorDescription(error)). Read Mercury rides again before setting a value.")
         }
@@ -1048,6 +1117,7 @@ public final class BridgeConnectionModel: ObservableObject {
             return
         }
 
+        let operationGeneration = localOperationGeneration
         let desiredHex = String(format: "%08X", desired)
         do {
             let request = try BridgeMercuryMutationRequest(mutations: [
@@ -1057,6 +1127,7 @@ public final class BridgeConnectionModel: ObservableObject {
             state = .settingMercury
             message = nil
             let response = try await client.mutateMercury(request)
+            guard operationGeneration == localOperationGeneration else { return }
             if response.status == "conflict" {
                 invalidateMercurySnapshot()
                 failMercury("Mercury set conflicted with a changed token. No blocks were written and no retry was sent; read Mercury rides again before setting a value.")
@@ -1076,12 +1147,15 @@ public final class BridgeConnectionModel: ObservableObject {
                 message = "Mercury rides written and verified."
             }
         } catch BridgeClientError.unauthorized {
+            guard operationGeneration == localOperationGeneration else { return }
             invalidateMercurySnapshot()
             handleUnauthorized()
         } catch is CancellationError {
+            guard operationGeneration == localOperationGeneration else { return }
             invalidateMercurySnapshot()
             failMercury("Mercury set was cancelled. No retry was sent; read Mercury rides again before setting a value.")
         } catch {
+            guard operationGeneration == localOperationGeneration else { return }
             // Conflict, verify failure, no chip, timeout, disconnect, and malformed
             // responses all invalidate the expected-value snapshot. Never replay them.
             invalidateMercurySnapshot()
@@ -1141,23 +1215,6 @@ public final class BridgeConnectionModel: ObservableObject {
 
     private var isWritableMercurySnapshot: Bool {
         mercuryWriteSnapshot != nil && lastMercuryRead?.status == .success && lastMercuryRead?.rides != nil
-    }
-
-    private func clearLocalCredential() {
-        do {
-            try credentialStore.remove()
-            client?.clearCredential()
-            client = nil
-            lastBlock5Value = nil
-            clearMercurySnapshot()
-            state = .unconfigured
-            message = "Saved pairing revoked and removed."
-        } catch {
-            // Keep the client so Forget can be retried. The server-side revoke has already succeeded.
-            let detail = "Pairing was revoked, but the saved credential could not be removed. Tap Forget to retry."
-            state = .failed(detail)
-            message = detail
-        }
     }
 
     private func handleUnauthorized() {
