@@ -305,7 +305,7 @@ public struct BridgeConnectionView: View {
     private var statusSymbol: String {
         switch model.state {
         case .connected, .restored: "checkmark.circle.fill"
-        case .pairing, .reading, .readingMercury, .settingMercury, .relocating: "arrow.triangle.2.circlepath"
+        case .searching, .pairing, .reading, .readingMercury, .settingMercury, .relocating: "arrow.triangle.2.circlepath"
         case .failed, .authenticationRequired: "exclamationmark.triangle.fill"
         case .unconfigured: "link.badge.plus"
         }
