@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace RidesBridge;
 
@@ -13,7 +14,8 @@ public static class BridgeApplication
     public static IServiceCollection AddRidesBridge(
         this IServiceCollection services,
         BridgeOptions options,
-        IBridgePm3Device? device = null)
+        IBridgePm3Device? device = null,
+        IBonjourPublisher? publisher = null)
     {
         options.Validate();
         services.AddSingleton(options);
@@ -25,11 +27,27 @@ public static class BridgeApplication
             services.AddSingleton<IBridgePm3Device, Pm3BridgeDeviceAdapter>();
         else
             services.AddSingleton(device);
+        if (publisher is null)
+            services.AddSingleton<IBonjourPublisher, HaukcodeBonjourPublisher>();
+        else
+            services.AddSingleton(publisher);
         services.AddSingleton<MercuryConditionalWriter>(serviceProvider =>
             new MercuryConditionalWriter(
                 serviceProvider.GetRequiredService<IBridgePm3Device>(),
                 serviceProvider.GetRequiredService<BridgeOptions>().HardwareRecoveryTimeout));
-        services.AddHostedService<BridgeLifecycleService>();
+        services.AddSingleton<BridgeLifecycleService>(serviceProvider =>
+        {
+            // Resolve identity before the device so an invalid persistent identity cannot
+            // leave a constructed hardware adapter behind during host startup.
+            var options = serviceProvider.GetRequiredService<BridgeOptions>();
+            var identity = serviceProvider.GetRequiredService<BridgeIdentityService>();
+            var publisher = serviceProvider.GetRequiredService<IBonjourPublisher>();
+            var gate = serviceProvider.GetRequiredService<BridgeOperationGate>();
+            var device = serviceProvider.GetRequiredService<IBridgePm3Device>();
+            var logger = serviceProvider.GetRequiredService<ILogger<BridgeLifecycleService>>();
+            return new BridgeLifecycleService(device, gate, options, identity, publisher, logger);
+        });
+        services.AddSingleton<IHostedService>(serviceProvider => serviceProvider.GetRequiredService<BridgeLifecycleService>());
         return services;
     }
 
@@ -268,36 +286,4 @@ public static class BridgeApplication
     };
 
     private static bool IsBlockHex(string? value) => value is not null && value.Length == 8 && value.All(Uri.IsHexDigit);
-}
-
-public sealed class BridgeLifecycleService : IHostedService
-{
-    private readonly IBridgePm3Device _device;
-    private readonly BridgeOperationGate _operationGate;
-    private readonly object _stopSync = new();
-    private Task? _stopTask;
-
-    public BridgeLifecycleService(IBridgePm3Device device, BridgeOperationGate? operationGate = null)
-    {
-        _device = device;
-        _operationGate = operationGate ?? new BridgeOperationGate();
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken) => _device.StartAsync(cancellationToken);
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        lock (_stopSync)
-        {
-            // Do not dispose outside the operation gate. In particular, do not let a host
-            // cancellation token interrupt the gate wait and race an in-flight USB read.
-            return _stopTask ??= StopCoreAsync();
-        }
-    }
-
-    private Task StopCoreAsync() => _operationGate.ExecuteAsync(async _ =>
-    {
-        await _device.DisposeAsync().ConfigureAwait(false);
-        return true;
-    }, CancellationToken.None, waitTimeout: null);
 }

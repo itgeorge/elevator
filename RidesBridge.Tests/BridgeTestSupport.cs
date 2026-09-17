@@ -15,6 +15,7 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
     private readonly Func<CancellationToken, Task<string>> _read;
     public int ReadCalls;
     public int StartCalls;
+    public Exception? StartException { get; init; }
     public bool Disposed { get; private set; }
 
     public FakeBridgePm3Device(string value = "A1B2C3D4", Func<CancellationToken, Task<string>>? read = null)
@@ -29,6 +30,8 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
     {
         StartCalls++;
         ct.ThrowIfCancellationRequested();
+        if (StartException is not null)
+            return Task.FromException(StartException);
         return Task.CompletedTask;
     }
 
