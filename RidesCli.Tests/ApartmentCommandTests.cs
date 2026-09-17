@@ -225,4 +225,60 @@ public class ApartmentCommandTests
 
         Assert.That(output.Lines, Has.Some.EqualTo("Usage: apt [<0-255>]"));
     }
+
+    [Test]
+    public void Read_withSecretSet_andSealedApt_alsoDisplaysApartment()
+    {
+        var output = new StringBuilderRidesOutput();
+        var store = new ApartmentSecretStore();
+        store.SetSecretFromUtf8(TestSecret);
+        var block3 = TokenIdentityProfiles.Mercury.Block3;
+        var block4 = ApartmentBlockCodec.Encode(SecretBytes, block3, building: 0, apt: 64);
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 120)
+            .WithPage0Block(4, block4);
+        var handler = CreateHandler(pm3, output, store);
+
+        handler.Execute(["read"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 120"));
+        Assert.That(output.Lines, Has.Some.EqualTo("sequence: mercury"));
+        Assert.That(output.Lines, Has.Some.EqualTo("building: 0, apt: 64"));
+        Assert.That(output.Lines, Has.None.Contains("Enter apartment secret"));
+    }
+
+    [Test]
+    public void Read_withSecretSet_andUnsealedApt_displaysNotEncoded()
+    {
+        var output = new StringBuilderRidesOutput();
+        var store = new ApartmentSecretStore();
+        store.SetSecretFromUtf8(TestSecret);
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 50);
+        var handler = CreateHandler(pm3, output, store);
+
+        handler.Execute(["read"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 50"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Apartment not encoded in block 4."));
+    }
+
+    [Test]
+    public void Read_withoutSecret_doesNotDisplayApartmentOrPrompt()
+    {
+        var output = new StringBuilderRidesOutput();
+        var store = new ApartmentSecretStore();
+        var block3 = TokenIdentityProfiles.Mercury.Block3;
+        var block4 = ApartmentBlockCodec.Encode(SecretBytes, block3, building: 0, apt: 64);
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 120)
+            .WithPage0Block(4, block4);
+        var input = new ScriptedRidesInput([], []);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), input, store);
+
+        handler.Execute(["read"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 120"));
+        Assert.That(output.Lines, Has.None.EqualTo("building: 0, apt: 64"));
+        Assert.That(output.Lines, Has.None.Contains("Apartment not encoded"));
+        Assert.That(output.Lines, Has.None.Contains("Enter apartment secret"));
+        Assert.That(input.ReadSecretLineCallCount, Is.EqualTo(0));
+    }
 }

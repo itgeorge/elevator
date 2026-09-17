@@ -84,17 +84,65 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
-    public void Reset_without_sequence_prints_usage()
+    public void Reset_without_profile_uses_current_recognized_sequence()
     {
         var output = new StringBuilderRidesOutput();
-        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Venus, 256);
         var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
 
         handler.Execute(["reset"]);
 
-        Assert.That(output.Lines, Has.Some.Contains("Usage: reset --sequence"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(output.Lines, Has.Some.Contains("profile 'venus'"));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo(TokenIdentityProfiles.Venus.Block1.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetRides(), Is.EqualTo(0u));
+    }
+
+    [Test]
+    public void Reset_without_profile_unrecognized_without_force_prints_error()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("no recognized ride sequence"));
         Assert.That(output.Lines, Has.None.EqualTo("Success."));
-        Assert.That(pm3.GetRides(), Is.EqualTo(73u));
+        Assert.That(pm3.WrittenBlocks, Is.Empty);
+    }
+
+    [Test]
+    public void Reset_without_profile_unrecognized_with_force_defaults_to_mercury()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithUnknownFamilyBlock5();
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput());
+
+        handler.Execute(["reset", "-f"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo(TokenIdentityProfiles.Mercury.Block1.ToHex()));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo(TokenIdentityProfiles.Mercury.Block2.ToHex()));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo(TokenIdentityProfiles.Mercury.Block3.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mercury.Encode(0).ToHex()));
+        Assert.That(pm3.GetRides(), Is.EqualTo(0u));
+    }
+
+    [Test]
+    public void Reset_force_without_profile_uses_recognized_sequence_not_mercury()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Venus, 100);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput());
+
+        handler.Execute(["reset", "-f"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo(TokenIdentityProfiles.Venus.Block1.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
     }
 
     [Test]

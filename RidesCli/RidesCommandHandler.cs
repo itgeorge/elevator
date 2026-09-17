@@ -214,7 +214,22 @@ public sealed class RidesCommandHandler
 
     private bool ExecuteReset(string[] args)
     {
-        if (!TryParseResetArgs(args, out var profile, out var force, out var resetApt, out var error))
+        if (!TryParseResetArgs(args, out var profileName, out var force, out var resetApt, out var error))
+        {
+            _output.WriteLine(error);
+            return true;
+        }
+
+        TokenIdentityProfile? profile;
+        if (profileName is not null)
+        {
+            if (!TryResolveNamedResetProfile(profileName, out profile, out error))
+            {
+                _output.WriteLine(error);
+                return true;
+            }
+        }
+        else if (!TryResolveDefaultResetProfile(force, out profile, out error))
         {
             _output.WriteLine(error);
             return true;
@@ -225,16 +240,15 @@ public sealed class RidesCommandHandler
 
     private static bool TryParseResetArgs(
         string[] args,
-        out TokenIdentityProfile? profile,
+        out string? profileName,
         out bool force,
         out bool resetApt,
         out string error)
     {
-        profile = null;
+        profileName = null;
         force = false;
         resetApt = false;
         error = string.Empty;
-        string? profileName = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -260,11 +274,16 @@ public sealed class RidesCommandHandler
             return false;
         }
 
-        if (profileName is null)
-        {
-            error = FormatResetUsage();
-            return false;
-        }
+        return true;
+    }
+
+    private static bool TryResolveNamedResetProfile(
+        string profileName,
+        out TokenIdentityProfile? profile,
+        out string error)
+    {
+        profile = null;
+        error = string.Empty;
 
         if (!TokenIdentityProfiles.TryGetByFriendlyName(profileName, out profile) || profile is null)
         {
@@ -281,8 +300,51 @@ public sealed class RidesCommandHandler
         return true;
     }
 
+    private bool TryResolveDefaultResetProfile(
+        bool force,
+        out TokenIdentityProfile? profile,
+        out string error)
+    {
+        profile = null;
+        error = string.Empty;
+
+        try
+        {
+            var block5 = T55Block.FromHex(_pm3.ReadPage0BlockAsync(5).GetAwaiter().GetResult());
+            var block6 = T55Block.FromHex(_pm3.ReadPage0BlockAsync(6).GetAwaiter().GetResult());
+            var describe = RideBlockResolver.Resolve(block5, block6);
+            if (describe.Status == RideReadStatus.Success
+                && describe.SourceBlock is T55Block sourceBlock
+                && EncodingSequences.TryGetSequenceFromBlock(sourceBlock, out var sequence)
+                && sequence is not null
+                && TokenIdentityProfiles.TryGetByFriendlyName(sequence.FriendlyName, out profile)
+                && profile is not null
+                && profile.CanReset)
+            {
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!force)
+            {
+                error = $"Error: no token detected. {ex.Message}";
+                return false;
+            }
+        }
+
+        if (force)
+        {
+            profile = TokenIdentityProfiles.Mercury;
+            return true;
+        }
+
+        error = "Error: no recognized ride sequence on token; specify --sequence|--profile <name>, or use -f to default to mercury.";
+        return false;
+    }
+
     private static string FormatResetUsage() =>
-        $"Usage: reset --sequence|--profile <name> [-f] [--resetapt]   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
+        $"Usage: reset [--sequence|--profile <name>] [-f] [--resetapt]   Reset token using current sequence, or a named resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
 
     private async Task<bool> ExecuteTuneCore()
     {
@@ -321,12 +383,14 @@ public sealed class RidesCommandHandler
                 _output.WriteLine($"rides remaining: {_rides.Value}");
                 if (_encodingSequence is not null)
                     _output.WriteLine($"sequence: {_encodingSequence.FriendlyName}");
+                await WriteApartmentStatusIfSecretPresentAsync().ConfigureAwait(false);
                 return true;
             }
 
             _rides = null;
             _encodingSequence = null;
             await HandleUnknownEncodingSequenceAsync(block5).ConfigureAwait(false);
+            await WriteApartmentStatusIfSecretPresentAsync().ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
@@ -915,9 +979,10 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  tune          Run signal check and show antenna strength");
         _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
-        _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump)");
-        _output.WriteLine($"  reset [-f] [--resetapt] --sequence|--profile <name>   Reset token using a resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
-        _output.WriteLine("                -f skips the current-token read, decode warning, and confirmation prompt");
+        _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump); also shows apartment when secret is set");
+        _output.WriteLine($"  reset [--sequence|--profile <name>] [-f] [--resetapt]   Reset using current sequence, or a named profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
+        _output.WriteLine("                omit profile to use the token's recognized sequence; -f with no recognized sequence defaults to mercury");
+        _output.WriteLine("                -f skips the confirmation prompt (and decode warning when a profile is named)");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token [0-500]");
         _output.WriteLine("  price set <number>   Preview cost for set");
@@ -989,6 +1054,30 @@ public sealed class RidesCommandHandler
             return false;
         apt = (byte)parsed;
         return true;
+    }
+
+    private async Task WriteApartmentStatusIfSecretPresentAsync(CancellationToken ct = default)
+    {
+        if (!_apartmentSecretStore.TryGetSecret(out var secretSpan))
+            return;
+
+        var secret = secretSpan.ToArray();
+        try
+        {
+            var block3 = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(3, ct).ConfigureAwait(false));
+            var block4 = T55Block.FromHex(await _pm3.ReadPage0BlockAsync(4, ct).ConfigureAwait(false));
+            if (!ApartmentBlockCodec.TryDecode(secret, block3, block4, out var payload))
+            {
+                _output.WriteLine("Apartment not encoded in block 4.");
+                return;
+            }
+
+            _output.WriteLine($"building: {payload.Building}, apt: {payload.Apt}");
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Error: {ex.Message}");
+        }
     }
 
     private async Task<bool> ExecuteAptReadCore(CancellationToken ct = default)
