@@ -1049,7 +1049,7 @@ final class BridgeConnectionModelTests: XCTestCase {
         await model.useEnteredBridgeAddress()
 
         XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
-        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(model.state, .restored)
         XCTAssertEqual(store.credential?.baseURL, oldURL)
     }
 

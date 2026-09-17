@@ -753,6 +753,36 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(source.startCount, 1)
     }
 
+    func testAutomaticBonjourStartupSearchIsNotPresentedAsConnected() async {
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: InMemoryBridgeCredentialStore(credential: BridgeCredential(
+                baseURL: URL(string: "http://192.168.1.20:5080")!,
+                accessToken: "saved-bearer",
+                bridgeId: bonjourBridgeID
+            )),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+
+        XCTAssertEqual(model.state, .restored)
+        await model.startAutomaticBonjourReconnect()
+        XCTAssertEqual(model.state, .searching)
+        XCTAssertEqual(model.state.title, "Searching for saved bridge…")
+        XCTAssertTrue(model.isPaired)
+        XCTAssertTrue(model.isBonjourBrowsing)
+
+        source.emitResults([])
+        await waitForBonjourCallbacks()
+        XCTAssertEqual(model.state, .searching)
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 0)
+
+        source.emitState(.denied)
+        await waitForBonjourCallbacks()
+        XCTAssertEqual(model.state, .restored)
+        XCTAssertTrue(model.isPaired)
+    }
+
     func testAutomaticReconnectRequiresStableExactSingleMatchAndSendsOneStatusRequest() async {
         let oldURL = URL(string: "http://192.168.1.20:5080")!
         let candidateURL = URL(string: "http://10.0.0.2:5080/")!
@@ -792,6 +822,83 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
         XCTAssertEqual(store.credential?.baseURL, URL(string: "http://10.0.0.2:5080")!)
         XCTAssertEqual(model.state, .connected)
+    }
+
+    func testAutomaticReconnectAdvertisementRemovalSearchesWithoutBearerRetryAndRestoresOnReadvertisement() async throws {
+        let oldURL = URL(string: "http://192.168.1.20:5080")!
+        let candidateURL = URL(string: "http://10.0.0.2:5080/")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "saved-bearer", bridgeId: bonjourBridgeID
+        ))
+        BonjourModelURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/pair/proof" {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                    try validProofResponseData(for: request, bearer: "saved-bearer", bridgeId: bonjourBridgeID)
+                )
+            }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                Data(#"{"version":"v1","paired":true}"#.utf8)
+            )
+        }
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source,
+            bonjourQuiescenceDelay: {}
+        )
+        await model.startAutomaticBonjourReconnect()
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
+
+        source.emitResults([])
+        await waitForBonjourCallbacks()
+        XCTAssertEqual(model.state, .searching)
+        XCTAssertTrue(model.isPaired)
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 2)
+
+        source.emitResults([serviceResult(txt: validTXT(url: candidateURL.absoluteString))])
+        await waitForAutomaticReconnect()
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(BonjourModelURLProtocol.requestCount, 4)
+        XCTAssertEqual(store.credential?.baseURL, URL(string: "http://10.0.0.2:5080")!)
+    }
+
+    func testManualBrowseResultChurnDoesNotDisconnectVerifiedConnection() async {
+        let oldURL = URL(string: "http://127.0.0.1:8080")!
+        let newURL = URL(string: "http://192.168.1.20:8080")!
+        let store = InMemoryBridgeCredentialStore(credential: BridgeCredential(
+            baseURL: oldURL, accessToken: "saved-bearer"
+        ))
+        BonjourModelURLProtocol.handler = { request in
+            XCTAssertEqual(request.url, newURL.appendingPathComponent("api/v1/pair/status"))
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                Data(#"{"version":"v1","paired":true}"#.utf8)
+            )
+        }
+        let source = FakeBonjourBrowserSource()
+        let model = BridgeConnectionModel(
+            credentialStore: store,
+            session: bonjourSession(),
+            bonjourBrowserSource: source
+        )
+        model.bridgeURLText = newURL.absoluteString
+        await model.useEnteredBridgeAddress()
+        XCTAssertEqual(model.state, .connected)
+
+        model.startBonjourBrowse()
+        source.emitResults([serviceResult(txt: validTXT(bridgeId: secondBonjourBridgeID))])
+        await waitForBonjourCallbacks()
+        source.emitResults([])
+        await waitForBonjourCallbacks()
+
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertTrue(model.isPaired)
     }
 
     func testAutomaticReconnectDoesNotRequestForMismatchMultipleIdentityOrSameIdentityMultipleURL() async {
@@ -985,7 +1092,7 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
 
         source.emitResults([serviceResult(txt: validTXT(url: candidateB.absoluteString))])
         await waitUntil {
-            model.bonjourCandidates.map(\.url) == [candidateB] && model.state == .connected
+            model.bonjourCandidates.map(\.url) == [candidateB] && model.state == .searching
         }
         XCTAssertEqual(store.credential?.baseURL, oldURL)
 
@@ -1031,7 +1138,7 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
 
         model.stopBonjourBrowse()
         XCTAssertEqual(model.bonjourDiscoveryState, .stopped)
-        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(model.state, .restored)
         BonjourModelURLProtocol.respondPending()
         await waitForAutomaticReconnect()
 
@@ -1039,7 +1146,7 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(store.credential?.baseURL, oldURL)
         XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
         XCTAssertEqual(model.bonjourDiscoveryState, .stopped)
-        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(model.state, .restored)
     }
 
     func testForgetCancelsInFlightBonjourProofLocallyAndRejectsLateCompletion() async {
@@ -1135,6 +1242,6 @@ final class BridgeBonjourDiscoveryModelTests: XCTestCase {
         XCTAssertEqual(store.credential?.baseURL, oldURL)
         XCTAssertEqual(model.bridgeURLText, oldURL.absoluteString)
         XCTAssertEqual(model.bonjourDiscoveryState, .denied)
-        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(model.state, .restored)
     }
 }

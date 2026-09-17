@@ -356,7 +356,7 @@ final class BridgePairingImportModelTests: XCTestCase {
         await model.importPairingPayload(validJSON())
 
         XCTAssertEqual(PairingImportURLProtocol.paths, [])
-        XCTAssertEqual(model.state, .connected)
+        XCTAssertEqual(model.state, .restored)
         XCTAssertTrue(model.message?.contains("already paired") == true)
     }
 
