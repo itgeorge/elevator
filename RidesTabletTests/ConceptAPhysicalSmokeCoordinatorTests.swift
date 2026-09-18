@@ -16,6 +16,16 @@ final class ConceptAPhysicalSmokeCoordinatorTests: XCTestCase {
         ]).slice5ConceptASmokeEnabled)
     }
 
+    func testLaunchConfigurationUsesExactBridgeUnavailableDetectKeyAndValue() {
+        let enabled = BridgeConnectionLaunchConfiguration(environment: [
+            "RIDES_BRIDGE_UNAVAILABLE_DETECT": "1"
+        ])
+        XCTAssertTrue(enabled.bridgeUnavailableDetectEnabled)
+        XCTAssertFalse(BridgeConnectionLaunchConfiguration(environment: [
+            "RIDES_BRIDGE_UNAVAILABLE_DETECT": "true"
+        ]).bridgeUnavailableDetectEnabled)
+    }
+
     func testSmokePassesForNonVenusRegisteredToken() async {
         let token = Token.sample(rideCount: 500, sequence: .nix)
         let fake = ConceptAPhysicalSmokeFakeDevice(token: token, signalMillivolts: 46354)

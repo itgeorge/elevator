@@ -124,6 +124,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private var launchSlice4PhysicalAcceptanceAttempted = false
     private var launchSlice5ConceptASmokeAttempted = false
     private var launchNoChipDetectAttempted = false
+    private var launchBridgeUnavailableDetectAttempted = false
 #endif
 
     public init(
@@ -1028,6 +1029,77 @@ public final class BridgeConnectionModel: ObservableObject {
         default:
             print("RIDES_NOCHIP_DETECT_FAILURE stage=detect detail=unexpected-state-\(model.state.title)")
             message = "No-chip detect expected .noChip, got \(model.state.title)."
+        }
+    }
+
+    /// One-shot Detect through Concept A against an unreachable override address.
+    /// Performs no mutations; migration failure on the override already surfaces
+    /// `BridgeClientError.unreachable` before this probe when applicable.
+    public func runLaunchBridgeUnavailableDetectIfRequested(overrideAddress: String?) async {
+        guard !launchBridgeUnavailableDetectAttempted else { return }
+        launchBridgeUnavailableDetectAttempted = true
+
+        for _ in 0..<100 {
+            if Task.isCancelled { return }
+            if launchAddressOverrideApplied, !state.isBusy { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        let override = overrideAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !override.isEmpty else {
+            print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=config detail=missing-override")
+            return
+        }
+
+        let persistedCredential: BridgeCredential
+        do {
+            guard let loadedCredential = try credentialStore.load() else {
+                print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=connect detail=no-saved-credential")
+                return
+            }
+            persistedCredential = loadedCredential
+        } catch {
+            print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=connect detail=credential-load-failed")
+            return
+        }
+
+        let device: NetworkRideTokenDevice
+        do {
+            let candidateURL = try BridgeClient.normalizeBaseURL(override)
+            let candidateCredential = BridgeCredential(
+                baseURL: candidateURL,
+                accessToken: persistedCredential.accessToken,
+                tokenType: persistedCredential.tokenType,
+                bridgeId: persistedCredential.bridgeId
+            )
+            let candidateClient = try BridgeClient(
+                baseURL: candidateURL,
+                session: session,
+                credential: candidateCredential
+            )
+            device = NetworkRideTokenDevice(client: candidateClient)
+        } catch {
+            print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=connect detail=\(errorDescription(error))")
+            return
+        }
+
+        let model = RidesViewModel(device: device)
+        await model.detect()
+        let unreachableMessage = BridgeClientError.unreachable.localizedDescription ?? ""
+        switch model.state {
+        case .failed(let error):
+            if error.contains(unreachableMessage) {
+                print("RIDES_BRIDGE_UNAVAILABLE_DETECT_SUCCESS state=failed message=\(error)")
+            } else {
+                print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=detect detail=unexpected-message-\(error)")
+            }
+            message = error
+        case .noChip:
+            print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=detect detail=unexpected-noChip")
+            message = "Bridge-unavailable detect expected unreachable failure, got no-chip."
+        default:
+            print("RIDES_BRIDGE_UNAVAILABLE_DETECT_FAILURE stage=detect detail=unexpected-state-\(model.state.title)")
+            message = "Bridge-unavailable detect expected failed/unreachable, got \(model.state.title)."
         }
     }
 #endif
