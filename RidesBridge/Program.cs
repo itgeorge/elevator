@@ -19,6 +19,7 @@ if (launch.ShowHelp)
     Console.WriteLine("      Expose on wildcard IPv4, select the first bindable port from 5080..5179, and enable PM3 USB auto-discovery.");
     Console.WriteLine("  dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3");
     Console.WriteLine("      Same local-network bind as everyday, but inject a deterministic in-process fake PM3 (no USB).");
+    Console.WriteLine($"      Profile: {FakePm3ProfileResolver.GetDisplayName(FakePm3Profile.Venus)} (default) via {FakePm3ProfileResolver.ConfigurationKey} or {FakePm3ProfileResolver.EnvironmentKey}; no-chip for empty-antenna simulation.");
     Console.WriteLine($"      Seeded scan: block4 {FakePm3Device.SeedBlock4Hex}, mirrors {FakePm3Device.SeedBlock5Hex}/{FakePm3Device.SeedBlock6Hex} ({FakePm3Device.SeedSequenceName}, {FakePm3Device.SeedRidesRemaining} rides), signal {FakePm3Device.SeedSignalMillivolts} mV.");
     Console.WriteLine($"      Unknown-mirrors test seed: block5/block6 {FakePm3Device.UnknownSeedBlock5Hex}/{FakePm3Device.UnknownSeedBlock6Hex} via {nameof(FakePm3Device.CreateUnknownMirrorsSeeded)}().");
     Console.WriteLine($"      Venus mirrors-only reset seed: default {nameof(FakePm3Device.CreateSeeded)}(); identity mismatch via {nameof(FakePm3Device.CreateVenusIdentityMismatchSeeded)}().");
@@ -51,8 +52,25 @@ catch (PortSelectionException ex)
     Console.Error.WriteLine($"RidesBridge port selection error: {ex.Message}");
     return 2;
 }
+
+FakePm3Device? fakePm3Device = null;
+FakePm3Profile? fakePm3Profile = null;
+if (launch.FakePm3)
+{
+    try
+    {
+        fakePm3Profile = FakePm3ProfileResolver.Resolve(builder.Configuration);
+        fakePm3Device = FakePm3ProfileResolver.CreateDevice(fakePm3Profile.Value);
+    }
+    catch (BridgeConfigurationException ex)
+    {
+        Console.Error.WriteLine($"RidesBridge configuration error: {ex.Message}");
+        return 2;
+    }
+}
+
 builder.WebHost.UseUrls(options.BindUrl);
-builder.Services.AddRidesBridge(options, launch.FakePm3 ? FakePm3Device.CreateSeeded() : null);
+builder.Services.AddRidesBridge(options, fakePm3Device);
 
 var app = builder.Build();
 app.MapRidesBridge();
@@ -78,6 +96,8 @@ try
         pairingCode,
         bridgeIdentity.Id,
         clock: TimeProvider.System);
+    if (fakePm3Profile is not null)
+        Console.WriteLine($"Fake PM3 profile: {FakePm3ProfileResolver.GetDisplayName(fakePm3Profile.Value)}");
     BridgeTerminalDisplay.Write(options, pairing, bridgeIdentity.Id, Console.Out, artifactLease: pairingQrArtifacts);
     if (pairingQrArtifacts is not null)
         pairingQrCleanupTask = pairingQrArtifacts.RunAsync(pairingQrLifetime.Token);

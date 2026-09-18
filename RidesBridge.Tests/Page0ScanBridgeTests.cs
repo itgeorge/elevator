@@ -143,6 +143,18 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
+    public async Task FakePm3NoChipScanReturns409NoChip()
+    {
+        await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateNoChip());
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var response = await host.Client.GetAsync("/api/v1/hardware/page0/scan");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+        Assert.That((await response.Content.ReadFromJsonAsync<BridgeErrorResponse>())!.Code, Is.EqualTo("no_chip"));
+    }
+
+    [Test]
     public async Task FakePm3UnknownMirrorsSeedReturnsUndecodableScanAndDeterministicMissingBlocks()
     {
         await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateUnknownMirrorsSeeded());

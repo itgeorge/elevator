@@ -107,6 +107,56 @@ public sealed class FakePm3LaunchTests
     }
 
     [Test]
+    public void ProfileResolverDefaultsToVenusWhenUnset()
+    {
+        var profile = FakePm3ProfileResolver.Resolve(new ConfigurationBuilder().Build());
+
+        Assert.That(profile, Is.EqualTo(FakePm3Profile.Venus));
+        Assert.That(FakePm3ProfileResolver.CreateDevice(profile), Is.TypeOf<FakePm3Device>());
+    }
+
+    [TestCase("venus", FakePm3Profile.Venus)]
+    [TestCase("default", FakePm3Profile.Venus)]
+    [TestCase("VENUS", FakePm3Profile.Venus)]
+    [TestCase("no-chip", FakePm3Profile.NoChip)]
+    [TestCase("nochip", FakePm3Profile.NoChip)]
+    [TestCase("no_chip", FakePm3Profile.NoChip)]
+    public void ProfileResolverAcceptsDocumentedAliases(string raw, FakePm3Profile expected)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [FakePm3ProfileResolver.EnvironmentKey] = raw,
+        }).Build();
+
+        Assert.That(FakePm3ProfileResolver.Resolve(configuration), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ProfileResolverPrefersBridgeConfigurationOverEnvironment()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [FakePm3ProfileResolver.ConfigurationKey] = "no-chip",
+            [FakePm3ProfileResolver.EnvironmentKey] = "venus",
+        }).Build();
+
+        Assert.That(FakePm3ProfileResolver.Resolve(configuration), Is.EqualTo(FakePm3Profile.NoChip));
+    }
+
+    [TestCase("unknown")]
+    [TestCase("empty-antenna")]
+    public void ProfileResolverRejectsInvalidProfiles(string raw)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [FakePm3ProfileResolver.ConfigurationKey] = raw,
+        }).Build();
+
+        var error = Assert.Throws<BridgeConfigurationException>(() => FakePm3ProfileResolver.Resolve(configuration));
+        Assert.That(error!.Message, Does.Contain("no-chip"));
+    }
+
+    [Test]
     public async Task ProcessRejectsMalformedFakePm3FlagBeforeStartingTheBridge()
     {
         var result = await RunBridgeProcessAsync("--fake-pm3=true");
