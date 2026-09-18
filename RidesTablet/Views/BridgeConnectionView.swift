@@ -6,6 +6,7 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     public static let slice4PhysicalAcceptanceEnvironmentKey = "RIDES_PHASE4_PHYSICAL_ACCEPTANCE"
     public static let slice5ConceptASmokeEnvironmentKey = "RIDES_SLICE5_CONCEPTA_SMOKE"
     public static let noChipDetectEnvironmentKey = "RIDES_NOCHIP_DETECT"
+    public static let unknownDetectEnvironmentKey = "RIDES_UNKNOWN_DETECT"
     public static let bridgeUnavailableDetectEnvironmentKey = "RIDES_BRIDGE_UNAVAILABLE_DETECT"
 
     public let addressOverride: String?
@@ -13,6 +14,7 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     public let slice4PhysicalAcceptanceEnabled: Bool
     public let slice5ConceptASmokeEnabled: Bool
     public let noChipDetectEnabled: Bool
+    public let unknownDetectEnabled: Bool
     public let bridgeUnavailableDetectEnabled: Bool
 
     public init(
@@ -21,6 +23,7 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
         slice4PhysicalAcceptanceEnabled: Bool = false,
         slice5ConceptASmokeEnabled: Bool = false,
         noChipDetectEnabled: Bool = false,
+        unknownDetectEnabled: Bool = false,
         bridgeUnavailableDetectEnabled: Bool = false
     ) {
         self.addressOverride = addressOverride
@@ -28,6 +31,7 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
         self.slice4PhysicalAcceptanceEnabled = slice4PhysicalAcceptanceEnabled
         self.slice5ConceptASmokeEnabled = slice5ConceptASmokeEnabled
         self.noChipDetectEnabled = noChipDetectEnabled
+        self.unknownDetectEnabled = unknownDetectEnabled
         self.bridgeUnavailableDetectEnabled = bridgeUnavailableDetectEnabled
     }
 
@@ -38,6 +42,7 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
             slice4PhysicalAcceptanceEnabled: environment[Self.slice4PhysicalAcceptanceEnvironmentKey] == "1",
             slice5ConceptASmokeEnabled: environment[Self.slice5ConceptASmokeEnvironmentKey] == "1",
             noChipDetectEnabled: environment[Self.noChipDetectEnvironmentKey] == "1",
+            unknownDetectEnabled: environment[Self.unknownDetectEnvironmentKey] == "1",
             bridgeUnavailableDetectEnabled: environment[Self.bridgeUnavailableDetectEnvironmentKey] == "1"
         )
     }
@@ -49,6 +54,7 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
             slice4PhysicalAcceptanceEnabled: environmentLookup(Self.slice4PhysicalAcceptanceEnvironmentKey) == "1",
             slice5ConceptASmokeEnabled: environmentLookup(Self.slice5ConceptASmokeEnvironmentKey) == "1",
             noChipDetectEnabled: environmentLookup(Self.noChipDetectEnvironmentKey) == "1",
+            unknownDetectEnabled: environmentLookup(Self.unknownDetectEnvironmentKey) == "1",
             bridgeUnavailableDetectEnabled: environmentLookup(Self.bridgeUnavailableDetectEnvironmentKey) == "1"
         )
     }
@@ -66,6 +72,7 @@ public struct BridgeConnectionView: View {
     public static let slice4PhysicalAcceptanceEnvironmentKey = BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey
     public static let slice5ConceptASmokeEnvironmentKey = BridgeConnectionLaunchConfiguration.slice5ConceptASmokeEnvironmentKey
     public static let noChipDetectEnvironmentKey = BridgeConnectionLaunchConfiguration.noChipDetectEnvironmentKey
+    public static let unknownDetectEnvironmentKey = BridgeConnectionLaunchConfiguration.unknownDetectEnvironmentKey
     public static let bridgeUnavailableDetectEnvironmentKey = BridgeConnectionLaunchConfiguration.bridgeUnavailableDetectEnvironmentKey
 
     @StateObject private var model: BridgeConnectionModel
@@ -93,6 +100,7 @@ public struct BridgeConnectionView: View {
             slice4PhysicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey] == "1",
             slice5ConceptASmokeEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice5ConceptASmokeEnvironmentKey] == "1",
             noChipDetectEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.noChipDetectEnvironmentKey] == "1",
+            unknownDetectEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.unknownDetectEnvironmentKey] == "1",
             bridgeUnavailableDetectEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.bridgeUnavailableDetectEnvironmentKey] == "1"
         )
     }
