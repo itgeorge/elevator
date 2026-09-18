@@ -60,7 +60,8 @@ public sealed class FakePm3Device : IBridgePm3Device
     /// <summary>Wrong block 1 with Venus mirrors; full blocks 1..6 reset is required.</summary>
     public static FakePm3Device CreateVenusIdentityMismatchSeeded() => new(VenusIdentityMismatchBlocks(), SeedSignalMillivolts);
 
-    internal static FakePm3Device CreateFailingTune() => new(KnownVenusBlocks(), SeedSignalMillivolts, failTune: true);
+    /// <summary>Venus seed present but LF tune fails with <see cref="BridgeHardwareError.TuneFailed"/>.</summary>
+    public static FakePm3Device CreateTuneFailed() => new(KnownVenusBlocks(), SeedSignalMillivolts, failTune: true);
 
     internal static FakePm3Device CreateFailingScanReads() => new(KnownVenusBlocks(), SeedSignalMillivolts, failScanReads: true);
 

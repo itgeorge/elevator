@@ -43,6 +43,7 @@ Select a fake PM3 profile without extra launch flags:
 | --- | --- | --- |
 | `venus` / `default` | unset or `Bridge:FakePm3Profile` / `RIDES_FAKE_PM3_PROFILE` | Known Venus seed above |
 | `no-chip` | `RIDES_FAKE_PM3_PROFILE=no-chip` (aliases: `nochip`, `no_chip`) | Empty antenna: scan returns HTTP 409 `no_chip` |
+| `tune-failed` | `RIDES_FAKE_PM3_PROFILE=tune-failed` (aliases: `tunefailed`, `lf_tune_failed`) | LF tune failure: scan returns HTTP 503 `lf_tune_failed` |
 
 Example no-chip smoke:
 
@@ -50,7 +51,13 @@ Example no-chip smoke:
 RIDES_FAKE_PM3_PROFILE=no-chip dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
 ```
 
-Startup prints the selected profile briefly (for example `Fake PM3 profile: no-chip`).
+Example tune-failed smoke:
+
+```sh
+RIDES_FAKE_PM3_PROFILE=tune-failed dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
+```
+
+Startup prints the selected profile briefly (for example `Fake PM3 profile: no-chip` or `Fake PM3 profile: tune-failed`).
 
 ## Durable state and precedence
 
