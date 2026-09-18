@@ -953,7 +953,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 - [x] Route Reset through explicit-profile conditional mutations; confirmation remains disabled until selection.
 - [x] Preserve exact user-facing requirements already tested in `RidesViewModel`.
 - [x] Remove the temporary root/diagnostic-only workflow once Concept A covers the proven operations; retain useful connection diagnostics without duplicate business logic.
-- [x] Update `RidesTablet/README.md` (minimal operator/bridge wording; screenshots deferred — blocked without iPad).
+- [x] Update `RidesTablet/README.md` (Concept A + bridge wording; simulator screenshots embedded — see `RidesTablet/Screenshots/`).
 
 ## Validation
 
@@ -1114,7 +1114,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - Known-token path: `NetworkRideTokenDevice.scan()` returns `.known` immediately after successful `RideBlockResolver.resolve`; `/missing` is reached only on the unknown branch (`NetworkRideTokenDeviceTests.testKnownScanUsesPage0ScanOnly`, `testNoChipScanDoesNotRequestMissingBlocks`).
 - **Physical evidence already recorded (prior sessions; not re-run this handoff):** nix Concept A end-to-end on real PM3 (`--everyday`), no-chip, unknown dump, bridge-unavailable (cross-network), pm3-unavailable (USB absent). See agent notes below.
 - **`--fake-pm3` profiles (`RIDES_FAKE_PM3_PROFILE` / `Bridge:FakePm3Profile`):** `venus`/`default` (known Venus @ 180), `no-chip`, `tune-failed`, `read-failed`, `unknown` (undecodable mirrors → `/missing` once), `pm3-unavailable` (aliases `pm3_unavailable`, `unavailable`).
-- **Deferred without physical iPad:** fresh QR/manual first pairing, network-loss mid-write and post-write refresh on device, Concept A screenshot refresh, identity-mismatch reset seed on real hardware. Simulator/unit coverage and fake-pm3 profiles cover the failure classes; device-only matrix rows remain open until hardware is available.
+- **Deferred without physical iPad:** fresh QR/manual first pairing, network-loss mid-write and post-write refresh on device, identity-mismatch reset seed on real hardware. Concept A screenshots were refreshed on the iPad Air 4 simulator (see Slice 5 validation todo). Simulator/unit coverage and fake-pm3 profiles cover the failure classes; remaining device-only matrix rows stay open until hardware is available.
 - **Remaining risks:** prototype plaintext HTTP on trusted LAN; physical antenna coupling can flip scan between success, `no_chip`, and `pm3_timeout`; Bonjour TXT URL is an untrusted hint (mitigated by pair/proof); everyday-mode port selection has documented TOCTOU; real-hardware network-loss timing not exercised on device.
 
 ## Agent notes / assumptions
@@ -1197,8 +1197,8 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 - Notes (2026-09-19, final handoff — simulator + dotnet only, no physical iPad/USB PM3):
   - Re-ran full deterministic suites and `git diff --check` / `git status`; recorded counts in **Final handoff summary** above.
   - Repo hygiene grep: no staged `debug/` or `post-ride-captures.log`; committed tree free of operator secrets/logs/dumps.
-  - Minimal `RidesTablet/README.md` refresh (Concept A + bridge default; fake reader DEBUG-only). Screenshots remain deferred.
-  - Physical-iPad-only matrix rows (fresh pairing/QR, network-loss mid/post-write, screenshots) explicitly left open with **blocked without iPad** note; prior physical evidence (nix Concept A, no-chip, unknown dump, bridge-unavailable, pm3-unavailable) stands.
+  - Minimal `RidesTablet/README.md` refresh (Concept A + bridge default; fake reader DEBUG-only).
+  - Follow-up (2026-09-19): Concept A screenshots refreshed on iPad Air 4 simulator via DEBUG `RIDES_SIMULATOR_FAKE_READER` / `RIDES_SCREENSHOT_SCENE` (`9864fe3`); README embeds them. Physical-iPad-only matrix rows still open: fresh pairing/QR, network-loss mid/post-write; prior physical evidence (nix Concept A, no-chip, unknown dump, bridge-unavailable, pm3-unavailable) stands.
 
 ---
 
