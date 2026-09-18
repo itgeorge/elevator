@@ -127,6 +127,10 @@ public sealed class FakePm3LaunchTests
     [TestCase("read-failed", FakePm3Profile.ReadFailed)]
     [TestCase("readfailed", FakePm3Profile.ReadFailed)]
     [TestCase("page0_read_failed", FakePm3Profile.ReadFailed)]
+    [TestCase("unknown", FakePm3Profile.Unknown)]
+    [TestCase("unknown-mirrors", FakePm3Profile.Unknown)]
+    [TestCase("unknown_mirrors", FakePm3Profile.Unknown)]
+    [TestCase("UNKNOWN", FakePm3Profile.Unknown)]
     public void ProfileResolverAcceptsDocumentedAliases(string raw, FakePm3Profile expected)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -149,8 +153,8 @@ public sealed class FakePm3LaunchTests
         Assert.That(FakePm3ProfileResolver.Resolve(configuration), Is.EqualTo(FakePm3Profile.NoChip));
     }
 
-    [TestCase("unknown")]
     [TestCase("empty-antenna")]
+    [TestCase("pm3-unavailable")]
     public void ProfileResolverRejectsInvalidProfiles(string raw)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -159,7 +163,16 @@ public sealed class FakePm3LaunchTests
         }).Build();
 
         var error = Assert.Throws<BridgeConfigurationException>(() => FakePm3ProfileResolver.Resolve(configuration));
-        Assert.That(error!.Message, Does.Contain("read-failed"));
+        Assert.That(error!.Message, Does.Contain("unknown"));
+    }
+
+    [Test]
+    public void ProfileResolverUnknownCreatesUndecodableMirrorsDevice()
+    {
+        var device = FakePm3ProfileResolver.CreateDevice(FakePm3Profile.Unknown);
+
+        Assert.That(FakePm3ProfileResolver.GetDisplayName(FakePm3Profile.Unknown), Is.EqualTo("unknown"));
+        Assert.That(device, Is.TypeOf<FakePm3Device>());
     }
 
     [Test]

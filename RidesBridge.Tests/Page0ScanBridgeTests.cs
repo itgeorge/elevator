@@ -121,7 +121,7 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
-    public async Task FakePm3KnownScanReturnsSeededVenusValuesAndMissingBlocksSupportUnknownDumpAssembly()
+    public async Task FakePm3KnownScanReturnsSeededVenusValuesWithoutRequiringMissingBlocks()
     {
         await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateKnownVenusSeeded());
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
@@ -136,10 +136,7 @@ public sealed class Page0ScanBridgeTests
             FakePm3Device.SeedSignalMillivolts)));
         Assert.That(EncodingSequences.Venus.TryDecode(T55Block.FromHex(scan!.Block5), out var rides), Is.True);
         Assert.That(rides, Is.EqualTo((uint)FakePm3Device.SeedRidesRemaining));
-
-        var missingResponse = await host.Client.GetAsync("/api/v1/hardware/page0/missing");
-        var missing = await missingResponse.Content.ReadFromJsonAsync<Page0MissingBlocksResponse>();
-        Assert.That(missing!.Blocks.Select(entry => entry.Block), Is.EqualTo(Page0MissingBlocks.Allowlist));
+        // Concept A known-Venus path stops after scan; /missing is only for unknown decode.
     }
 
     [Test]
@@ -179,19 +176,33 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
-    public async Task FakePm3UnknownMirrorsSeedReturnsUndecodableScanAndDeterministicMissingBlocks()
+    public async Task FakePm3UnknownProfileScanReturnsUndecodableMirrorsNotNoChip()
     {
-        await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateUnknownMirrorsSeeded());
+        await using var host = await ScanTestHost.CreateAsync(FakePm3ProfileResolver.CreateDevice(FakePm3Profile.Unknown));
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
-        var scan = await (await host.Client.GetAsync("/api/v1/hardware/page0/scan")).Content.ReadFromJsonAsync<Page0ScanResponse>();
+        var scanResponse = await host.Client.GetAsync("/api/v1/hardware/page0/scan");
+        var scan = await scanResponse.Content.ReadFromJsonAsync<Page0ScanResponse>();
+
+        Assert.That(scanResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(scan!.Block4, Is.EqualTo(FakePm3Device.UnknownSeedBlock4Hex));
         Assert.That(scan.Block5, Is.EqualTo(FakePm3Device.UnknownSeedBlock5Hex));
         Assert.That(scan.Block6, Is.EqualTo(FakePm3Device.UnknownSeedBlock6Hex));
         Assert.That(EncodingSequences.All.Any(sequence => sequence.TryDecode(T55Block.FromHex(scan.Block5), out _)), Is.False);
+    }
 
-        var missing = await (await host.Client.GetAsync("/api/v1/hardware/page0/missing")).Content.ReadFromJsonAsync<Page0MissingBlocksResponse>();
-        Assert.That(missing!.Blocks.Select(entry => (entry.Block, entry.Value)), Is.EqualTo(new[]
+    [Test]
+    public async Task FakePm3UnknownProfileMissingReturnsDeterministicAllowlistedBlocks()
+    {
+        await using var host = await ScanTestHost.CreateAsync(FakePm3ProfileResolver.CreateDevice(FakePm3Profile.Unknown));
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var missingResponse = await host.Client.GetAsync("/api/v1/hardware/page0/missing");
+        var missing = await missingResponse.Content.ReadFromJsonAsync<Page0MissingBlocksResponse>();
+
+        Assert.That(missingResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(missing!.Blocks.Select(entry => entry.Block), Is.EqualTo(Page0MissingBlocks.Allowlist));
+        Assert.That(missing.Blocks.Select(entry => (entry.Block, entry.Value)), Is.EqualTo(new[]
         {
             (0, "00148040"),
             (1, "00000001"),
