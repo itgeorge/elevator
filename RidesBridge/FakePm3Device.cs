@@ -63,7 +63,8 @@ public sealed class FakePm3Device : IBridgePm3Device
     /// <summary>Venus seed present but LF tune fails with <see cref="BridgeHardwareError.TuneFailed"/>.</summary>
     public static FakePm3Device CreateTuneFailed() => new(KnownVenusBlocks(), SeedSignalMillivolts, failTune: true);
 
-    internal static FakePm3Device CreateFailingScanReads() => new(KnownVenusBlocks(), SeedSignalMillivolts, failScanReads: true);
+    /// <summary>Venus seed present but page-0 scan read fails with <see cref="BridgeHardwareError.ReadFailed"/>.</summary>
+    public static FakePm3Device CreateReadFailed() => new(KnownVenusBlocks(), SeedSignalMillivolts, failScanReads: true);
 
     internal static FakePm3Device CreateCancelMissingOnBlock(int block) =>
         new(UnknownMirrorsBlocks(), SeedSignalMillivolts, cancelMissingOnBlock: block);
