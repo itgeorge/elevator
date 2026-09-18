@@ -797,12 +797,12 @@ Complete the non-UI operator behavior while preserving the low-read-pressure rul
 ## Physical acceptance — black card
 
 - [x] Deferred to plan-end Proxmark3 hardware validation. Slice 4 physical network checkpoint is iPad Wi-Fi smoke against `--fake-pm3` only (no USB card writes).
-- [ ] Record read-only blocks 1...6 before reset testing; do not read 0/7 unless the unknown-dump test specifically requires the complete image.
-- [ ] Exercise one explicit reset profile through the conditional path only after confirming restoration values are available.
-- [ ] Verify only expected target blocks changed and the app reports verified hardware state.
-- [ ] Restore the original 1...6 values when safe/required and verify each target block.
-- [ ] Never write blocks 0 or 7.
-- [ ] Keep the number of repeated reads/writes minimal and record any antenna instability.
+- [x] Record read-only blocks 1...6 before reset testing; do not read 0/7 unless the unknown-dump test specifically requires the complete image.
+- [x] Exercise one explicit reset profile through the conditional path only after confirming restoration values are available.
+- [x] Verify only expected target blocks changed and the app reports verified hardware state.
+- [x] Restore the original 1...6 values when safe/required and verify each target block.
+- [x] Never write blocks 0 or 7.
+- [x] Keep the number of repeated reads/writes minimal and record any antenna instability.
 
 ## Acceptance
 
@@ -959,20 +959,21 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 
 - [x] Run full Swift XCTest suite in simulator with fakes and network stubs.
 - [x] Run full non-integration .NET suite including `RidesBridge.Tests`.
-- [x] Run physical iPad smoke matrix over Wi-Fi against `--fake-pm3` (real Proxmark3/black-card steps deferred to plan end):
+- [x] Run physical iPad smoke matrix over Wi-Fi against `--fake-pm3` (real Proxmark3/black-card steps deferred to plan end).
+- [x] Run physical iPad + real PM3 matrix over Wi-Fi against `--everyday` (2026-09-18; see Final validation notes):
   - [ ] first pairing/manual or QR (existing Keychain credential reused; no fresh PIN/QR this run);
-  - [x] reconnect;
-  - [x] known read;
-  - [x] ride adjustment/write and verified reread;
-  - [x] stale expected conflict;
-  - [ ] no chip;
-  - [ ] unknown dump;
-  - [x] explicit reset/cancel;
+  - [x] reconnect (`GET /api/v1/pair/status` HTTP 200);
+  - [x] known read (bridge `page0/scan`; **nix** token, not Venus fake seed);
+  - [x] ride adjustment/write and verified reread (bridge mutations 500→490→0→500 with restore);
+  - [x] stale expected conflict (`status=conflict`, no write);
+  - [ ] no chip — **skipped** (user away; card must stay on antenna);
+  - [ ] unknown dump — **skipped** (known nix token on antenna);
+  - [x] explicit reset/cancel (Concept A smoke reset-cancel + nix mirrors-only reset via parameterized coordinator);
   - [ ] bridge/PM3 unavailable;
   - [ ] network loss before a write;
   - [ ] network loss after server accepted a write, followed by required refresh.
 - [x] Confirm known read/write paths did not issue a full dump.
-- [ ] Deferred: confirm the black card's final state on real Proxmark3 hardware.
+- [x] Deferred: confirm the black card's final state on real Proxmark3 hardware (2026-09-18; nix @ 500 rides — see Final validation notes; blocks 1..6 restored).
 - [ ] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke.
 
 ## Acceptance
@@ -1097,8 +1098,32 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes (2026-09-18, plan-end real Proxmark3 hardware validation — user away, card left on antenna):
+  - **Card identity mismatch (material):** Physical token on `/dev/cu.usbmodem1301` is registered **nix** profile `1BFE002A-F100C605-82045966-82045966` @ **500** rides (`FEC63352` mirrors), **not** the `--fake-pm3` / `ConceptAPhysicalSmokeCoordinator` Venus seed (`D6D1C733` / `BBC7FD03` @ 180). `RidesCli read` confirmed `sequence: nix`, `rides remaining: 500`. Safe restore of blocks 1..6 was still guaranteed for this token.
+  - **Preflight snapshot (blocks 1..6, read-only via Pm3Cli then bridge):**
+    - 1 `1BFE002A` · 2 `F100C605` · 3 `82045966` · 4 `82045966` · 5 `FEC63352` · 6 `FEC63352`
+  - **Post-restore snapshot (Pm3Cli):** identical to preflight.
+  - **Serial / bridge startup:**
+    - Port free before launch (`lsof` empty on `/dev/cu.usbmodem1301`).
+    - Everyday bridge: `dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday`
+    - Bound `http://0.0.0.0:5080`; reachable `http://192.168.0.163:5080/` (also `http://10.2.0.2:5080/`).
+    - API `v1` / bridge `1.0.0`; real USB opened on first hardware request (`RidesBridge` held `/dev/cu.usbmodem1301`, not `--fake-pm3`).
+  - **Bridge authenticated mutation matrix (localhost bearer via one-time PIN; blocks 0/7 never touched):**
+    - charge 500→490 (`FEC63352`→`FEC62DB3`) → `written`
+    - `alreadyApplied` at 490
+    - stale-expected conflict (`expected` `11111111`/`22222222`) → `conflict`, mirrors unchanged at `FEC62DB3`
+    - reset to 0 (`FEC62DB3`→`0DC7C70D`) → `written`
+    - restore to 500 (`0DC7C70D`→`FEC63352`) → `written`
+  - **iPad Concept A smoke (`RIDES_SLICE5_CONCEPTA_SMOKE=1`, address override `192.168.0.163:5080`, pre-parameterization run):** Debug build installed (`/tmp/RidesTabletFinalValDerived`, team `TJY5296P7S`, bundle `com.itgeorge.RidesTablet`). Observed HTTP: `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` only — **no mutations** (smoke failed at detect: coordinator expected Venus/180/`D6D1C733`). **No** `/missing`, `/mirrors`, `/block5`, or full dump on known path.
+  - **iPad Concept A smoke rerun (2026-09-18, parameterized coordinator):** Same Debug build path/team/bundle; bridge `dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday` on `http://192.168.0.163:5080/`. Authenticated HTTP sequence: `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` (nix @ 500) → `POST /api/v1/hardware/page0/mutations` (charge 500→490) → `POST /api/v1/hardware/page0/mutations` (`alreadyApplied` at 490) → `POST /api/v1/hardware/page0/mutations` (stale-expected conflict) → `GET /api/v1/hardware/page0/scan` (refresh) → `GET /api/v1/hardware/page0/blocks1to6` (reset plan) → `POST /api/v1/hardware/page0/mutations` (nix reset to 0) → `POST /api/v1/hardware/page0/mutations` (restore to 500). **No** `/missing`. Postflight Pm3Cli blocks 1..6 identical to preflight; `RidesCli read` confirmed `sequence: nix`, `rides remaining: 500`.
+  - **Antenna instability:** `page0/scan` / `Pm3Cli tune` reported peak ~`46354`–`46483` mV on real PM3 vs fake-pm3 doc seed `420` mV — tune value out of simulator range; reads/writes still succeeded on both bridge-direct and parameterized Concept A smoke runs.
+  - **Skipped (user away):** no-chip, unknown-dump, network-loss, bridge-unavailable, fresh pairing/QR, identity-mismatch reset seed on real hardware.
+  - **Shutdown:** `kill -TERM` on bridge released TCP 5080 and `/dev/cu.usbmodem1301`.
+- Notes (2026-09-18, Slice 5 Concept A smoke parameterization — left uncommitted):
+  - `ConceptAPhysicalSmokeCoordinator` no longer asserts Venus/`--fake-pm3` constants. On Detect it snapshots any `.known` registered token (sequence, rides, block4, mirrors 5/6, signal), charges by ±10 within 0…500, exercises already-applied/conflict/reset-cancel/reset/restore, and resets using the detected sequence. Venus seed values remain as optional `fakePm3*` documentation only.
+  - Unit coverage: `ConceptAPhysicalSmokeCoordinatorTests` adds deterministic `ConceptAPhysicalSmokeFakeDevice` path for **nix** @ 500 and low-ride +10 charge branch.
+  - Physical rerun: `--everyday` bridge + `RIDES_SLICE5_CONCEPTA_SMOKE=1` on paired iPad against nix @ 500 (see Final validation notes below).
+- Assumptions: Orchestrator will run deterministic suites and commit; this session updated coordinator/tests/plan only (no commit).
 
 ---
 
