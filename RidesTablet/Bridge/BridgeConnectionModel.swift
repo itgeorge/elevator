@@ -123,6 +123,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private var launchPhysicalAcceptanceAttempted = false
     private var launchSlice4PhysicalAcceptanceAttempted = false
     private var launchSlice5ConceptASmokeAttempted = false
+    private var launchNoChipDetectAttempted = false
 #endif
 
     public init(
@@ -993,6 +994,40 @@ public final class BridgeConnectionModel: ObservableObject {
             } else {
                 message = "Slice 5 Concept A smoke failed at \(failure.stage)."
             }
+        }
+    }
+
+    /// One-shot Detect through Concept A for physical no-chip validation.
+    public func runLaunchNoChipDetectIfRequested() async {
+        guard !launchNoChipDetectAttempted else { return }
+        launchNoChipDetectAttempted = true
+
+        var device: NetworkRideTokenDevice?
+        for _ in 0..<100 {
+            if Task.isCancelled { return }
+            if !isBusy, hasSavedCredential, let ready = makeRideTokenDevice() {
+                device = ready
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard let device else {
+            print("RIDES_NOCHIP_DETECT_FAILURE stage=connect detail=bridge-not-ready")
+            return
+        }
+
+        let model = RidesViewModel(device: device)
+        await model.detect()
+        switch model.state {
+        case .noChip:
+            print("RIDES_NOCHIP_DETECT_SUCCESS state=noChip message=\(model.message ?? RidesViewModel.noChipMessage)")
+            message = model.message
+        case .failed(let error):
+            print("RIDES_NOCHIP_DETECT_FAILURE stage=detect detail=\(error)")
+            message = error
+        default:
+            print("RIDES_NOCHIP_DETECT_FAILURE stage=detect detail=unexpected-state-\(model.state.title)")
+            message = "No-chip detect expected .noChip, got \(model.state.title)."
         }
     }
 #endif

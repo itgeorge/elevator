@@ -966,7 +966,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - [x] known read (bridge `page0/scan`; **nix** token, not Venus fake seed);
   - [x] ride adjustment/write and verified reread (bridge mutations 500→490→0→500 with restore);
   - [x] stale expected conflict (`status=conflict`, no write);
-  - [ ] no chip — **skipped** (user away; card must stay on antenna);
+  - [x] no chip — card removed from antenna (2026-09-18; see Final validation notes);
   - [ ] unknown dump — **skipped** (known nix token on antenna);
   - [x] explicit reset/cancel (Concept A smoke reset-cancel + nix mirrors-only reset via parameterized coordinator);
   - [ ] bridge/PM3 unavailable;
@@ -1117,7 +1117,13 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - **iPad Concept A smoke (`RIDES_SLICE5_CONCEPTA_SMOKE=1`, address override `192.168.0.163:5080`, pre-parameterization run):** Debug build installed (`/tmp/RidesTabletFinalValDerived`, team `TJY5296P7S`, bundle `com.itgeorge.RidesTablet`). Observed HTTP: `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` only — **no mutations** (smoke failed at detect: coordinator expected Venus/180/`D6D1C733`). **No** `/missing`, `/mirrors`, `/block5`, or full dump on known path.
   - **iPad Concept A smoke rerun (2026-09-18, parameterized coordinator):** Same Debug build path/team/bundle; bridge `dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday` on `http://192.168.0.163:5080/`. Authenticated HTTP sequence: `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` (nix @ 500) → `POST /api/v1/hardware/page0/mutations` (charge 500→490) → `POST /api/v1/hardware/page0/mutations` (`alreadyApplied` at 490) → `POST /api/v1/hardware/page0/mutations` (stale-expected conflict) → `GET /api/v1/hardware/page0/scan` (refresh) → `GET /api/v1/hardware/page0/blocks1to6` (reset plan) → `POST /api/v1/hardware/page0/mutations` (nix reset to 0) → `POST /api/v1/hardware/page0/mutations` (restore to 500). **No** `/missing`. Postflight Pm3Cli blocks 1..6 identical to preflight; `RidesCli read` confirmed `sequence: nix`, `rides remaining: 500`.
   - **Antenna instability:** `page0/scan` / `Pm3Cli tune` reported peak ~`46354`–`46483` mV on real PM3 vs fake-pm3 doc seed `420` mV — tune value out of simulator range; reads/writes still succeeded on both bridge-direct and parameterized Concept A smoke runs.
-  - **Skipped (user away):** no-chip, unknown-dump, network-loss, bridge-unavailable, fresh pairing/QR, identity-mismatch reset seed on real hardware.
+  - **Skipped (user away):** unknown-dump, network-loss, bridge-unavailable, fresh pairing/QR, identity-mismatch reset seed on real hardware.
+  - **No-chip validation (2026-09-18, card removed from PM3 antenna):**
+    - Preconditions: `/dev/cu.usbmodem1301` free before launch; token physically absent from reader; **no writes**.
+    - Bridge: `dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday` on `http://192.168.0.163:5080/`.
+    - Authenticated localhost scan (`POST /api/v1/pair` one-time PIN → bearer): `GET /api/v1/hardware/page0/scan` → HTTP **409** `{"code":"no_chip","message":"No supported T55xx chip is present."}`; **no** `/api/v1/hardware/page0/missing` or `/api/v1/hardware/page0/mutations` in bridge logs.
+    - Unauthenticated scan: HTTP **401**.
+    - iPad Concept A (`RIDES_NOCHIP_DETECT=1`, `RIDES_BRIDGE_ADDRESS_OVERRIDE=192.168.0.163:5080`, existing Keychain credential): Debug build `/tmp/RidesTabletNoChipDerived`, team `TJY5296P7S`, bundle `com.itgeorge.RidesTablet`. Observed HTTP from iPad: `GET /api/v1/pair/status` (200) → `GET /api/v1/hardware/page0/scan` (409) only — **no** `/missing`, **no** `/mutations`, **no** charge/reset attempts. DEBUG one-shot helper calls `RidesViewModel.detect()` via `NetworkRideTokenDevice`; expected `.noChip` / `RidesViewModel.noChipMessage`.
   - **Shutdown:** `kill -TERM` on bridge released TCP 5080 and `/dev/cu.usbmodem1301`.
 - Notes (2026-09-18, Slice 5 Concept A smoke parameterization — left uncommitted):
   - `ConceptAPhysicalSmokeCoordinator` no longer asserts Venus/`--fake-pm3` constants. On Detect it snapshots any `.known` registered token (sequence, rides, block4, mirrors 5/6, signal), charges by ±10 within 0…500, exercises already-applied/conflict/reset-cancel/reset/restore, and resets using the detected sequence. Venus seed values remain as optional `fakePm3*` documentation only.
