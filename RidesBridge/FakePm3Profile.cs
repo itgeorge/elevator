@@ -13,6 +13,9 @@ public enum FakePm3Profile
 
     /// <summary>Chip present but scan tune fails with <see cref="BridgeHardwareError.TuneFailed"/>.</summary>
     TuneFailed,
+
+    /// <summary>Chip present but page-0 scan read fails with <see cref="BridgeHardwareError.ReadFailed"/>.</summary>
+    ReadFailed,
 }
 
 public static class FakePm3ProfileResolver
@@ -34,6 +37,7 @@ public static class FakePm3ProfileResolver
         FakePm3Profile.Venus => FakePm3Device.CreateSeeded(),
         FakePm3Profile.NoChip => FakePm3Device.CreateNoChip(),
         FakePm3Profile.TuneFailed => FakePm3Device.CreateTuneFailed(),
+        FakePm3Profile.ReadFailed => FakePm3Device.CreateReadFailed(),
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Unsupported fake PM3 profile."),
     };
 
@@ -42,6 +46,7 @@ public static class FakePm3ProfileResolver
         FakePm3Profile.Venus => "venus",
         FakePm3Profile.NoChip => "no-chip",
         FakePm3Profile.TuneFailed => "tune-failed",
+        FakePm3Profile.ReadFailed => "read-failed",
         _ => profile.ToString().ToLowerInvariant(),
     };
 
@@ -53,9 +58,11 @@ public static class FakePm3ProfileResolver
             return FakePm3Profile.NoChip;
         if (IsProfile(value, "tune-failed", "tunefailed", "lf_tune_failed"))
             return FakePm3Profile.TuneFailed;
+        if (IsProfile(value, "read-failed", "readfailed", "page0_read_failed"))
+            return FakePm3Profile.ReadFailed;
 
         throw new BridgeConfigurationException(
-            $"{ConfigurationKey} / {EnvironmentKey} must be venus, default, no-chip, or tune-failed; received '{value}'.");
+            $"{ConfigurationKey} / {EnvironmentKey} must be venus, default, no-chip, tune-failed, or read-failed; received '{value}'.");
     }
 
     private static bool IsProfile(string value, params string[] names)
