@@ -37,6 +37,21 @@ The seeded mirror blocks are fixed for repeatable iPad decode smoke:
 
 These values match `EncodingSequences.Venus.Encode(180)` and decode on the iPad through the registered Venus sequence.
 
+Select a fake PM3 profile without extra launch flags:
+
+| Profile | Setting | Behavior |
+| --- | --- | --- |
+| `venus` / `default` | unset or `Bridge:FakePm3Profile` / `RIDES_FAKE_PM3_PROFILE` | Known Venus seed above |
+| `no-chip` | `RIDES_FAKE_PM3_PROFILE=no-chip` (aliases: `nochip`, `no_chip`) | Empty antenna: scan returns HTTP 409 `no_chip` |
+
+Example no-chip smoke:
+
+```sh
+RIDES_FAKE_PM3_PROFILE=no-chip dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
+```
+
+Startup prints the selected profile briefly (for example `Fake PM3 profile: no-chip`).
+
 ## Durable state and precedence
 
 The default state directory remains the platform ApplicationData location under `ElevatorTokens/RidesBridge`. Everyday and fake-pm3 modes preserve it, so the bridge identity and paired-client credentials survive port changes. Explicit durable paths are honored:

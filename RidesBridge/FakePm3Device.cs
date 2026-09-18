@@ -26,6 +26,7 @@ public sealed class FakePm3Device : IBridgePm3Device
     private readonly bool _failTune;
     private readonly bool _failScanReads;
     private readonly int? _cancelMissingOnBlock;
+    private readonly bool _noChip;
     private bool _disposed;
 
     private FakePm3Device(
@@ -33,16 +34,21 @@ public sealed class FakePm3Device : IBridgePm3Device
         int signalMillivolts,
         bool failTune = false,
         bool failScanReads = false,
-        int? cancelMissingOnBlock = null)
+        int? cancelMissingOnBlock = null,
+        bool noChip = false)
     {
         _blocks = blocks.ToDictionary(pair => pair.Key, pair => pair.Value);
         _signalMillivolts = signalMillivolts;
         _failTune = failTune;
         _failScanReads = failScanReads;
         _cancelMissingOnBlock = cancelMissingOnBlock;
+        _noChip = noChip;
     }
 
     public static FakePm3Device CreateSeeded() => CreateKnownVenusSeeded();
+
+    /// <summary>Empty antenna: chip-dependent reads throw <see cref="BridgeHardwareError.NoChip"/>.</summary>
+    public static FakePm3Device CreateNoChip() => new(new Dictionary<int, string>(), signalMillivolts: 0, noChip: true);
 
     public static FakePm3Device CreateKnownVenusSeeded() => new(KnownVenusBlocks(), SeedSignalMillivolts);
 
@@ -85,6 +91,7 @@ public sealed class FakePm3Device : IBridgePm3Device
         lock (_sync)
         {
             ThrowIfDisposed();
+            ThrowIfNoChip();
             if (_failTune)
                 throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "Fake PM3 tune failed.");
             if (_failScanReads)
@@ -104,6 +111,7 @@ public sealed class FakePm3Device : IBridgePm3Device
         lock (_sync)
         {
             ThrowIfDisposed();
+            ThrowIfNoChip();
             var results = new List<Page0BlockReadResult>(Page0MissingBlocks.Allowlist.Length);
             foreach (var block in Page0MissingBlocks.Allowlist)
             {
@@ -139,6 +147,7 @@ public sealed class FakePm3Device : IBridgePm3Device
         lock (_sync)
         {
             ThrowIfDisposed();
+            ThrowIfNoChip();
             var results = new List<Page0BlockReadResult>(Page0Blocks1To6.Allowlist.Length);
             foreach (var block in Page0Blocks1To6.Allowlist)
                 results.Add(new Page0BlockReadResult(block, _blocks[block]));
@@ -159,6 +168,7 @@ public sealed class FakePm3Device : IBridgePm3Device
         lock (_sync)
         {
             ThrowIfDisposed();
+            ThrowIfNoChip();
             return Task.FromResult(_blocks[block]);
         }
     }
@@ -169,6 +179,7 @@ public sealed class FakePm3Device : IBridgePm3Device
         lock (_sync)
         {
             ThrowIfDisposed();
+            ThrowIfNoChip();
             _blocks[block] = NormalizeBlockHex(value);
         }
         return Task.CompletedTask;
@@ -178,6 +189,12 @@ public sealed class FakePm3Device : IBridgePm3Device
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(FakePm3Device));
+    }
+
+    private void ThrowIfNoChip()
+    {
+        if (_noChip)
+            throw new BridgeHardwareException(BridgeHardwareError.NoChip, "No supported T55xx chip is present.");
     }
 
     private static string NormalizeBlockHex(string value)
