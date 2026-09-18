@@ -17,6 +17,8 @@ public sealed record BridgeOptions
     public string? Pm3Port { get; init; }
     public bool Pm3AutoDiscover { get; init; } = true;
     public string? Pm3ClientPath { get; init; }
+    /// <summary>When true, the bridge uses an in-process fake PM3 and never opens USB.</summary>
+    public bool FakePm3Device { get; init; }
     public static string DefaultDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ElevatorTokens", "RidesBridge");
 
@@ -68,7 +70,7 @@ public sealed record BridgeOptions
         if (PairingQrArtifactDirectory is not null
             && (string.IsNullOrWhiteSpace(PairingQrArtifactDirectory) || !Path.IsPathFullyQualified(PairingQrArtifactDirectory)))
             throw new BridgeConfigurationException("PairingQrArtifactDirectory must be a non-empty absolute path.");
-        if (!Pm3AutoDiscover && string.IsNullOrWhiteSpace(Pm3Port))
+        if (!FakePm3Device && !Pm3AutoDiscover && string.IsNullOrWhiteSpace(Pm3Port))
             throw new BridgeConfigurationException("Pm3Port is required when Pm3AutoDiscover is false.");
         return this;
     }

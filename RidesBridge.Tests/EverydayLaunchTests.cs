@@ -17,7 +17,9 @@ public sealed class EverydayLaunchTests
 
         Assert.That(result.ExitCode, Is.Zero);
         Assert.That(result.Stdout, Does.Contain("--everyday"));
+        Assert.That(result.Stdout, Does.Contain("--fake-pm3"));
         Assert.That(result.Stdout, Does.Contain("5080..5179"));
+        Assert.That(result.Stdout, Does.Contain(FakePm3Device.SeedBlock5Hex));
         Assert.That(result.Stdout, Does.Not.Contain("Pairing PIN:"));
     }
 
@@ -54,6 +56,7 @@ public sealed class EverydayLaunchTests
         var launch = BridgeLaunchOptions.Parse(["--everyday"]);
 
         Assert.That(launch.Everyday, Is.True);
+        Assert.That(launch.FakePm3, Is.False);
         Assert.That(launch.ShowHelp, Is.False);
         Assert.That(launch.AspNetCoreArguments, Is.Empty);
     }
@@ -64,6 +67,7 @@ public sealed class EverydayLaunchTests
         var launch = BridgeLaunchOptions.Parse(["--urls", "http://127.0.0.1:6000"]);
 
         Assert.That(launch.Everyday, Is.False);
+        Assert.That(launch.FakePm3, Is.False);
         Assert.That(launch.AspNetCoreArguments, Is.EqualTo(new[] { "--urls", "http://127.0.0.1:6000" }));
     }
 
@@ -99,6 +103,7 @@ public sealed class EverydayLaunchTests
 
         Assert.That(launch.ShowHelp, Is.True);
         Assert.That(launch.Everyday, Is.False);
+        Assert.That(launch.FakePm3, Is.False);
         Assert.That(launch.AspNetCoreArguments, Is.Empty);
     }
 

@@ -17,4 +17,9 @@
     <ProjectReference Include="..\Tokens\Tokens.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\TestFixtures\RideEncoding\RideEncodingFixtureModels.cs" Link="RideEncodingFixtureModels.cs" />
+    <Compile Include="..\TestFixtures\RideEncoding\RideEncodingFixtureSupport.cs" Link="RideEncodingFixtureSupport.cs" />
+  </ItemGroup>
+
 </Project>

@@ -40,7 +40,7 @@ public enum BridgePhysicalAcceptanceResult: Equatable, Sendable {
 
 /// Runs the deliberately destructive Slice 2 acceptance sequence exactly once.
 ///
-/// This type is DEBUG-only because it performs real Mercury mutations. It has no
+/// This type is DEBUG-only because it performs real page0 mutations. It has no
 /// retry or recovery path: an error ends the run at the stage that observed it.
 public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
     public static let initialReadStage = "initial-read"
@@ -66,20 +66,21 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
         var originalBlock5: String?
         var originalBlock6: String?
 
-        let initial: BridgeMercuryMirrorResponse
-        let initialResolution: MercuryRideRead
+        let initial: BridgePage0MirrorResponse
+        let initialResolution: RideRead
         do {
-            initial = try await client.readMercuryMirrors()
+            initial = try await client.readPage0Mirrors()
             originalBlock5 = initial.block5
             originalBlock6 = initial.block6
             guard let raw5 = UInt32(initial.block5, radix: 16),
                   let raw6 = UInt32(initial.block6, radix: 16) else {
                 throw AcceptanceError.invalidInitialResolution
             }
-            initialResolution = MercuryMirrorResolver.resolve(block5: raw5, block6: raw6)
+            initialResolution = RideBlockResolver.resolve(block5: raw5, block6: raw6)
             guard initialResolution.status == .success,
                   let currentRides = initialResolution.rides,
-                  MercuryRideCodec.encode(currentRides) != nil else {
+                  let sequence = initialResolution.sequence,
+                  sequence.encode(currentRides) != nil else {
                 throw AcceptanceError.invalidInitialResolution
             }
             // This is intentionally before the first mutation. Raw mirror values
@@ -92,8 +93,9 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
         guard let currentRides = initialResolution.rides,
               let targetRides = adjacentValidRides(to: currentRides),
               let secondTargetRides = secondValidRides(current: currentRides, first: targetRides),
-              let targetRaw = encodedHex(targetRides),
-              let secondTargetRaw = encodedHex(secondTargetRides) else {
+              let sequence = initialResolution.sequence,
+              let targetRaw = encodedHex(targetRides, sequence: sequence),
+              let secondTargetRaw = encodedHex(secondTargetRides, sequence: sequence) else {
             return failure(stage: Self.initialReadStage, originalBlock5: originalBlock5, originalBlock6: originalBlock6)
         }
 
@@ -104,7 +106,7 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
                 desired5: targetRaw,
                 desired6: targetRaw
             )
-            let response = try await client.mutateMercury(request)
+            let response = try await client.mutatePage0(request)
             try requireSuccessfulMutation(
                 response,
                 matching: request,
@@ -124,7 +126,7 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
                 desired5: targetRaw,
                 desired6: targetRaw
             )
-            let response = try await client.mutateMercury(request)
+            let response = try await client.mutatePage0(request)
             try requireSuccessfulMutation(
                 response,
                 matching: request,
@@ -144,7 +146,7 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
                 desired5: secondTargetRaw,
                 desired6: secondTargetRaw
             )
-            let response = try await client.mutateMercury(request)
+            let response = try await client.mutatePage0(request)
             guard response.status == "conflict",
                   matchingResults(response, request: request),
                   response.results.allSatisfy({
@@ -157,7 +159,7 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
         }
 
         do {
-            let fresh = try await client.readMercuryMirrors()
+            let fresh = try await client.readPage0Mirrors()
             guard fresh.block5 == targetRaw, fresh.block6 == targetRaw else {
                 throw AcceptanceError.invalidMutationResponse
             }
@@ -176,7 +178,7 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
                 desired5: initial.block5,
                 desired6: initial.block6
             )
-            let response = try await client.mutateMercury(request)
+            let response = try await client.mutatePage0(request)
             try requireSuccessfulMutation(
                 response,
                 matching: request,
@@ -191,7 +193,7 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
         }
 
         do {
-            let final = try await client.readMercuryMirrors()
+            let final = try await client.readPage0Mirrors()
             guard final.block5 == initial.block5, final.block6 == initial.block6 else {
                 throw AcceptanceError.invalidMutationResponse
             }
@@ -226,16 +228,16 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
         expected6: String,
         desired5: String,
         desired6: String
-    ) throws -> BridgeMercuryMutationRequest {
-        try BridgeMercuryMutationRequest(mutations: [
-            try BridgeMercuryMutation(block: 5, expected: expected5, desired: desired5),
-            try BridgeMercuryMutation(block: 6, expected: expected6, desired: desired6)
+    ) throws -> BridgePage0MutationRequest {
+        try BridgePage0MutationRequest(mutations: [
+            try BridgePage0Mutation(block: 5, expected: expected5, desired: desired5),
+            try BridgePage0Mutation(block: 6, expected: expected6, desired: desired6)
         ])
     }
 
     private func requireSuccessfulMutation(
-        _ response: BridgeMercuryMutationResponse,
-        matching request: BridgeMercuryMutationRequest,
+        _ response: BridgePage0MutationResponse,
+        matching request: BridgePage0MutationRequest,
         topStatus: String?,
         actual5: String,
         actual6: String,
@@ -256,32 +258,32 @@ public final class BridgePhysicalAcceptanceCoordinator: @unchecked Sendable {
         }
     }
 
-    private func resolve(_ mirrors: BridgeMercuryMirrorResponse) throws -> MercuryRideRead {
+    private func resolve(_ mirrors: BridgePage0MirrorResponse) throws -> RideRead {
         guard let raw5 = UInt32(mirrors.block5, radix: 16),
               let raw6 = UInt32(mirrors.block6, radix: 16) else {
             throw AcceptanceError.invalidMutationResponse
         }
-        return MercuryMirrorResolver.resolve(block5: raw5, block6: raw6)
+        return RideBlockResolver.resolve(block5: raw5, block6: raw6)
     }
 
-    private func encodedHex(_ rides: UInt) -> String? {
-        guard let encoded = MercuryRideCodec.encode(rides) else { return nil }
+    private func encodedHex(_ rides: UInt, sequence: RideSequence) -> String? {
+        guard let encoded = sequence.encode(rides) else { return nil }
         return String(format: "%08X", encoded)
     }
 
     private func adjacentValidRides(to current: UInt) -> UInt? {
-        current < MercuryRideCodec.maximumRides ? current + 1 : current - 1
+        current < RideBlockResolver.maximumRides ? current + 1 : current - 1
     }
 
     private func secondValidRides(current: UInt, first: UInt) -> UInt? {
-        let candidate = current < MercuryRideCodec.maximumRides - 1 ? current + 2 : current - 2
-        guard candidate <= MercuryRideCodec.maximumRides,
+        let candidate = current < RideBlockResolver.maximumRides - 1 ? current + 2 : current - 2
+        guard candidate <= RideBlockResolver.maximumRides,
               candidate != current,
               candidate != first else { return nil }
         return candidate
     }
 
-    private func matchingResults(_ response: BridgeMercuryMutationResponse, request: BridgeMercuryMutationRequest) -> Bool {
+    private func matchingResults(_ response: BridgePage0MutationResponse, request: BridgePage0MutationRequest) -> Bool {
         response.results.count == request.mutations.count &&
         Set(response.results.map(\.block)) == Set(request.mutations.map(\.block)) &&
         response.results.allSatisfy { result in

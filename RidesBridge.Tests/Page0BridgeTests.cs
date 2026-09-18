@@ -13,31 +13,31 @@ using Tokens;
 namespace RidesBridge.Tests;
 
 [TestFixture]
-public sealed class MercuryBridgeTests
+public sealed class Page0BridgeTests
 {
     [Test]
     public async Task AuthenticatedMirrorReadReturnsUppercaseRawBlocksAndOnlyReadsFiveAndSix()
     {
-        await using var host = await MercuryTestHost.CreateAsync(new RecordingMercuryDevice
+        await using var host = await Page0TestHost.CreateAsync(new RecordingPage0Device
         {
             Blocks = { [5] = "deadbeef", [6] = "a1b2c3d4" },
         });
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
-        var response = await host.Client.GetAsync("/api/v1/hardware/mercury/mirrors");
-        var body = await response.Content.ReadFromJsonAsync<MercuryMirrorReadResponse>();
+        var response = await host.Client.GetAsync("/api/v1/hardware/page0/mirrors");
+        var body = await response.Content.ReadFromJsonAsync<Page0MirrorReadResponse>();
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Is.EqualTo(new MercuryMirrorReadResponse("v1", "DEADBEEF", "A1B2C3D4")));
+        Assert.That(body, Is.EqualTo(new Page0MirrorReadResponse("v1", "DEADBEEF", "A1B2C3D4")));
         Assert.That(host.Device.Calls, Is.EqualTo(new[] { "read5", "read6" }));
     }
 
     [Test]
     public async Task MirrorReadRequiresAuthentication()
     {
-        await using var host = await MercuryTestHost.CreateAsync(new RecordingMercuryDevice());
+        await using var host = await Page0TestHost.CreateAsync(new RecordingPage0Device());
 
-        var response = await host.Client.GetAsync("/api/v1/hardware/mercury/mirrors");
+        var response = await host.Client.GetAsync("/api/v1/hardware/page0/mirrors");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         Assert.That(host.Device.Calls, Is.Empty);
@@ -46,12 +46,12 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task MutationRequiresAuthenticationAndDoesNotTouchHardware()
     {
-        var device = new RecordingMercuryDevice();
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        var device = new RecordingPage0Device();
+        await using var host = await Page0TestHost.CreateAsync(device);
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB")));
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB")));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         Assert.That(device.Calls, Is.Empty);
@@ -60,18 +60,14 @@ public sealed class MercuryBridgeTests
     [TestCase(0, "invalid_mutation_block")]
     [TestCase(7, "invalid_mutation_block")]
     [TestCase(8, "invalid_mutation_block")]
-    [TestCase(1, "mercury_block_not_allowed")]
-    [TestCase(2, "mercury_block_not_allowed")]
-    [TestCase(3, "mercury_block_not_allowed")]
-    [TestCase(4, "mercury_block_not_allowed")]
     public async Task InvalidTargetIsRejectedBeforeHardware(int block, string code)
     {
-        await using var host = await MercuryTestHost.CreateAsync(new RecordingMercuryDevice());
+        await using var host = await Page0TestHost.CreateAsync(new RecordingPage0Device());
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(block, "00000000", "00000001")));
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(block, "00000000", "00000001")));
         var error = await response.Content.ReadFromJsonAsync<BridgeErrorResponse>();
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -82,15 +78,15 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task DuplicateAndMalformedMutationsAreRejectedBeforeHardware()
     {
-        await using var host = await MercuryTestHost.CreateAsync(new RecordingMercuryDevice());
+        await using var host = await Page0TestHost.CreateAsync(new RecordingPage0Device());
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var duplicate = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "00000000", "00000001"), new MercuryMutation(5, "00000000", "00000002")));
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "00000000", "00000001"), new Page0Mutation(5, "00000000", "00000002")));
         var malformed = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(6, "123", "00000001")));
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(6, "123", "00000001")));
 
         Assert.That(duplicate.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That((await duplicate.Content.ReadFromJsonAsync<BridgeErrorResponse>())!.Code,
@@ -104,17 +100,17 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task PreflightReadsEveryTargetBeforeAnyWriteAndReturnsAllActualValuesOnConflict()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "11111111", [6] = "22222222" },
         };
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        await using var host = await Page0TestHost.CreateAsync(device);
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB"), new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD")));
-        var body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB"), new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(body!.Status, Is.EqualTo("conflict"));
@@ -129,17 +125,17 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task AllDesiredReturnsAlreadyAppliedWithoutWrites()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "BBBBBBBB", [6] = "DDDDDDDD" },
         };
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        await using var host = await Page0TestHost.CreateAsync(device);
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD"), new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB")));
-        var body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD"), new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(body!.Status, Is.EqualTo("alreadyApplied"));
         Assert.That(body.Results.Select(r => r.Status), Is.All.EqualTo("alreadyApplied"));
@@ -149,17 +145,17 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task WritesExpectedTargetsInBlockOrderWithImmediateReadBackAndSupportsPartialRetry()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "AAAAAAAA", [6] = "CCCCCCCC" },
         };
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        await using var host = await Page0TestHost.CreateAsync(device);
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD"), new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB")));
-        var body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD"), new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(body!.Status, Is.EqualTo("written"));
         Assert.That(device.Calls, Is.EqualTo(new[]
@@ -170,9 +166,9 @@ public sealed class MercuryBridgeTests
         device.Blocks[6] = "CCCCCCCC";
         device.Calls.Clear();
         response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB"), new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD")));
-        body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB"), new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD")));
+        body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(body!.Status, Is.EqualTo("written"));
         Assert.That(body.Results.Select(r => r.Status), Is.EqualTo(new[] { "alreadyApplied", "written" }));
@@ -182,18 +178,18 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task VerificationFailureStopsLaterWritesAndRollsBackOnlyChangedBlocks()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "AAAAAAAA", [6] = "CCCCCCCC" },
         };
         device.ReadResponses[6] = new Queue<string>(["BAD00000"]);
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        await using var host = await Page0TestHost.CreateAsync(device);
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB"), new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD")));
-        var body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB"), new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(body!.Status, Is.EqualTo("verifyFailed"));
         Assert.That(body.RollbackStatus, Is.EqualTo("rollbackSucceeded"));
@@ -214,19 +210,19 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task IncompleteRollbackIsReportedAndContinuesThroughEveryChangedBlock()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "AAAAAAAA", [6] = "CCCCCCCC" },
             FailExpectedWrites = true,
         };
         device.ReadResponses[6] = new Queue<string>(["BAD00000"]);
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        await using var host = await Page0TestHost.CreateAsync(device);
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB"), new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD")));
-        var body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB"), new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(body!.Status, Is.EqualTo("verifyFailed"));
         Assert.That(body.RollbackStatus, Is.EqualTo("rollbackIncomplete"));
@@ -239,17 +235,17 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task CancellationAfterMutationStartsStillCompletesRollback()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "AAAAAAAA" },
             CancelOnFirstWrite = true,
         };
         using var cancellation = new CancellationTokenSource();
         device.Cancellation = cancellation;
-        var writer = new MercuryConditionalWriter(device);
+        var writer = new Page0ConditionalWriter(device);
 
         var result = await writer.ExecuteAsync(
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB")), cancellation.Token);
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB")), cancellation.Token);
 
         Assert.That(result.Status, Is.EqualTo("verifyFailed"));
         Assert.That(result.RollbackStatus, Is.EqualTo("rollbackSucceeded"));
@@ -260,19 +256,19 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task WriteThatAppliesThenThrowsIsIncludedInReverseRollback()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "AAAAAAAA", [6] = "CCCCCCCC" },
             ApplyThenThrowBlock = 6,
             ApplyThenThrowValue = "DDDDDDDD",
         };
-        await using var host = await MercuryTestHost.CreateAsync(device);
+        await using var host = await Page0TestHost.CreateAsync(device);
         host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
 
         var response = await host.Client.PostAsJsonAsync(
-            "/api/v1/hardware/mercury/mutations",
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB"), new MercuryMutation(6, "CCCCCCCC", "DDDDDDDD")));
-        var body = await response.Content.ReadFromJsonAsync<MercuryMutationResponse>();
+            "/api/v1/hardware/page0/mutations",
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB"), new Page0Mutation(6, "CCCCCCCC", "DDDDDDDD")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
 
         Assert.That(body!.Status, Is.EqualTo("verifyFailed"));
         Assert.That(body.RollbackStatus, Is.EqualTo("rollbackSucceeded"));
@@ -291,17 +287,17 @@ public sealed class MercuryBridgeTests
     [Test]
     public async Task RollbackHasIndependentFiniteRecoveryBudget()
     {
-        var device = new RecordingMercuryDevice
+        var device = new RecordingPage0Device
         {
             Blocks = { [5] = "AAAAAAAA" },
             DelayExpectedWriteUntilCancellation = true,
         };
         device.ReadResponses[5] = new Queue<string>(["BAD00000"]);
-        var writer = new MercuryConditionalWriter(device, TimeSpan.FromMilliseconds(40));
+        var writer = new Page0ConditionalWriter(device, TimeSpan.FromMilliseconds(40));
         var stopwatch = Stopwatch.StartNew();
 
         var result = await writer.ExecuteAsync(
-            Request(new MercuryMutation(5, "AAAAAAAA", "BBBBBBBB")), CancellationToken.None);
+            Request(new Page0Mutation(5, "AAAAAAAA", "BBBBBBBB")), CancellationToken.None);
 
         stopwatch.Stop();
         Assert.That(result.Status, Is.EqualTo("verifyFailed"));
@@ -344,18 +340,18 @@ public sealed class MercuryBridgeTests
             PairedClientsPath = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"), "paired.json"),
             HardwareExecutionTimeout = TimeSpan.FromMilliseconds(73),
         };
-        var device = new RecordingMercuryDevice();
+        var device = new RecordingPage0Device();
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
         services.AddRidesBridge(options, device);
         using var provider = services.BuildServiceProvider();
 
-        var writer = provider.GetRequiredService<MercuryConditionalWriter>();
+        var writer = provider.GetRequiredService<Page0ConditionalWriter>();
 
         Assert.That(writer.RecoveryTimeoutForTesting, Is.EqualTo(options.HardwareRecoveryTimeout));
     }
 
     [Test]
-    public async Task AdapterMirrorAndWritesUseOnlyMercuryBlocks()
+    public async Task AdapterMirrorAndWritesUseOnlyPage0Blocks()
     {
         var calls = new List<string>();
         var session = new FakeBridgePm3Session(calls);
@@ -363,7 +359,7 @@ public sealed class MercuryBridgeTests
             new BridgeOptions { BindUrl = "http://127.0.0.1:5080", DataDirectory = Path.GetTempPath() },
             _ => session);
 
-        Assert.That(await adapter.ReadMercuryMirrorAsync(), Is.EqualTo(("A1B2C3D4", "A1B2C3D4")));
+        Assert.That(await adapter.ReadPage0MirrorAsync(), Is.EqualTo(("A1B2C3D4", "A1B2C3D4")));
         await adapter.WritePage0Block5Async("11223344");
         await adapter.WritePage0Block6Async("55667788");
         await adapter.DisposeAsync();
@@ -376,23 +372,148 @@ public sealed class MercuryBridgeTests
         }));
     }
 
-    private static MercuryMutationRequest Request(params MercuryMutation[] mutations) =>
+    [Test]
+    public async Task Blocks1To6ReadRequiresAuthenticationAndReturnsFixedAllowlist()
+    {
+        var device = new RecordingPage0Device();
+        await using var host = await Page0TestHost.CreateAsync(device);
+
+        var unauthorized = await host.Client.GetAsync("/api/v1/hardware/page0/blocks1to6");
+        Assert.That(unauthorized.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(device.Calls, Is.Empty);
+
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+        var response = await host.Client.GetAsync("/api/v1/hardware/page0/blocks1to6");
+        var body = await response.Content.ReadFromJsonAsync<Page0Blocks1To6Response>();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body!.Blocks.Select(b => b.Block), Is.EqualTo(Page0Blocks1To6.Allowlist));
+        Assert.That(body.Blocks.Select(b => (b.Block, b.Value)), Is.EqualTo(new[]
+        {
+            (1, "11111111"), (2, "22222222"), (3, "33333333"),
+            (4, "44444444"), (5, "AAAAAAAA"), (6, "CCCCCCCC"),
+        }));
+        Assert.That(device.Calls, Is.EqualTo(new[] { "read1", "read2", "read3", "read4", "read5", "read6" }));
+    }
+
+    [Test]
+    public async Task IdentityBlocksCanBeWrittenInBlockOrderWithVerification()
+    {
+        var device = new RecordingPage0Device
+        {
+            Blocks =
+            {
+                [1] = "11111111",
+                [2] = "22222222",
+                [3] = "33333333",
+                [4] = "44444444",
+                [5] = "AAAAAAAA",
+                [6] = "CCCCCCCC",
+            },
+        };
+        await using var host = await Page0TestHost.CreateAsync(device);
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var response = await host.Client.PostAsJsonAsync(
+            "/api/v1/hardware/page0/mutations",
+            Request(
+                new Page0Mutation(1, "11111111", "BBBBBBBB"),
+                new Page0Mutation(3, "33333333", "DDDDDDDD"),
+                new Page0Mutation(4, "44444444", "EEEEEEEE")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
+
+        Assert.That(body!.Status, Is.EqualTo("written"));
+        Assert.That(device.Calls, Is.EqualTo(new[]
+        {
+            "read1", "read3", "read4", "write1=BBBBBBBB", "read1",
+            "write3=DDDDDDDD", "read3", "write4=EEEEEEEE", "read4",
+        }));
+        Assert.That(device.Blocks[1], Is.EqualTo("BBBBBBBB"));
+        Assert.That(device.Blocks[3], Is.EqualTo("DDDDDDDD"));
+        Assert.That(device.Blocks[4], Is.EqualTo("EEEEEEEE"));
+    }
+
+    [Test]
+    public async Task MoreThanSixMutationsAreRejectedBeforeHardware()
+    {
+        await using var host = await Page0TestHost.CreateAsync(new RecordingPage0Device());
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var response = await host.Client.PostAsJsonAsync(
+            "/api/v1/hardware/page0/mutations",
+            new Page0MutationRequest("v1",
+            [
+                new Page0Mutation(1, "11111111", "00000001"),
+                new Page0Mutation(2, "22222222", "00000002"),
+                new Page0Mutation(3, "33333333", "00000003"),
+                new Page0Mutation(4, "44444444", "00000004"),
+                new Page0Mutation(5, "AAAAAAAA", "00000005"),
+                new Page0Mutation(6, "CCCCCCCC", "00000006"),
+                new Page0Mutation(5, "AAAAAAAA", "00000007"),
+            ]));
+        var error = await response.Content.ReadFromJsonAsync<BridgeErrorResponse>();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(error!.Code, Is.EqualTo("invalid_mutation_request"));
+        Assert.That(host.Device.Calls, Is.Empty);
+    }
+
+    [Test]
+    public async Task FullResetAcrossBlocksOneThroughSixRollsBackInReverseOrder()
+    {
+        var device = new RecordingPage0Device
+        {
+            Blocks =
+            {
+                [1] = "11111111",
+                [2] = "22222222",
+                [3] = "33333333",
+                [4] = "44444444",
+                [5] = "AAAAAAAA",
+                [6] = "CCCCCCCC",
+            },
+        };
+        device.ReadResponses[4] = new Queue<string>(["BAD00004"]);
+        await using var host = await Page0TestHost.CreateAsync(device);
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var response = await host.Client.PostAsJsonAsync(
+            "/api/v1/hardware/page0/mutations",
+            Request(
+                new Page0Mutation(1, "11111111", "BBBBBBBB"),
+                new Page0Mutation(2, "22222222", "DDDDDDDD"),
+                new Page0Mutation(3, "33333333", "EEEEEEEE"),
+                new Page0Mutation(4, "44444444", "FFFFFFFF"),
+                new Page0Mutation(5, "AAAAAAAA", "11111112"),
+                new Page0Mutation(6, "CCCCCCCC", "22222223")));
+        var body = await response.Content.ReadFromJsonAsync<Page0MutationResponse>();
+
+        Assert.That(body!.Status, Is.EqualTo("verifyFailed"));
+        Assert.That(body.RollbackStatus, Is.EqualTo("rollbackSucceeded"));
+        Assert.That(body.Rollback.Select(r => r.Block), Is.EqualTo(new[] { 4, 3, 2, 1 }));
+        Assert.That(device.Blocks[1], Is.EqualTo("11111111"));
+        Assert.That(device.Blocks[4], Is.EqualTo("44444444"));
+        Assert.That(device.Calls, Does.Not.Contain("write0"));
+        Assert.That(device.Calls, Does.Not.Contain("write7"));
+    }
+
+    private static Page0MutationRequest Request(params Page0Mutation[] mutations) =>
         new("v1", mutations);
 
-    private sealed class MercuryTestHost : IAsyncDisposable
+    private sealed class Page0TestHost : IAsyncDisposable
     {
         public WebApplication App { get; }
         public HttpClient Client { get; }
-        public RecordingMercuryDevice Device { get; }
+        public RecordingPage0Device Device { get; }
 
-        private MercuryTestHost(WebApplication app, HttpClient client, RecordingMercuryDevice device)
+        private Page0TestHost(WebApplication app, HttpClient client, RecordingPage0Device device)
         {
             App = app;
             Client = client;
             Device = device;
         }
 
-        public static async Task<MercuryTestHost> CreateAsync(RecordingMercuryDevice device)
+        public static async Task<Page0TestHost> CreateAsync(RecordingPage0Device device)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -408,7 +529,7 @@ public sealed class MercuryBridgeTests
             var app = builder.Build();
             app.MapRidesBridge();
             await app.StartAsync();
-            return new MercuryTestHost(app, app.GetTestClient(), device);
+            return new Page0TestHost(app, app.GetTestClient(), device);
         }
 
         public async Task<string> PairAsync()
@@ -426,9 +547,19 @@ public sealed class MercuryBridgeTests
         }
     }
 
-    private sealed class RecordingMercuryDevice : IBridgePm3Device
+    private sealed class RecordingPage0Device : IBridgePm3Device
     {
-        public Dictionary<int, string> Blocks { get; } = new() { [5] = "AAAAAAAA", [6] = "CCCCCCCC" };
+        public Dictionary<int, string> Blocks { get; } = new()
+        {
+            [0] = "00148040",
+            [1] = "11111111",
+            [2] = "22222222",
+            [3] = "33333333",
+            [4] = "44444444",
+            [5] = "AAAAAAAA",
+            [6] = "CCCCCCCC",
+            [7] = "77777777",
+        };
         public Dictionary<int, Queue<string>> ReadResponses { get; } = new();
         public List<string> Calls { get; } = [];
         public bool FailExpectedWrites { get; init; }
@@ -444,11 +575,36 @@ public sealed class MercuryBridgeTests
         public Task<string> ReadPage0Block5Async(CancellationToken ct = default) => ReadAsync(5, ct);
         public Task<string> ReadPage0Block6Async(CancellationToken ct = default) => ReadAsync(6, ct);
 
-        public async Task<(string Block5Hex, string Block6Hex)> ReadMercuryMirrorAsync(CancellationToken ct = default)
+        public async Task<(string Block5Hex, string Block6Hex)> ReadPage0MirrorAsync(CancellationToken ct = default)
             => (await ReadAsync(5, ct), await ReadAsync(6, ct));
+
+        public async Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default)
+        {
+            var block4 = await ReadAsync(4, ct).ConfigureAwait(false);
+            var block5 = await ReadAsync(5, ct).ConfigureAwait(false);
+            var block6 = await ReadAsync(6, ct).ConfigureAwait(false);
+            return new Page0ScanReadResult(block4, block5, block6, FakePm3Device.SeedSignalMillivolts);
+        }
+
+        public async Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0MissingBlocksAsync(CancellationToken ct = default)
+        {
+            var results = new List<Page0BlockReadResult>(Page0MissingBlocks.Allowlist.Length);
+            foreach (var block in Page0MissingBlocks.Allowlist)
+                results.Add(new Page0BlockReadResult(block, await ReadAsync(block, ct).ConfigureAwait(false)));
+            return results;
+        }
 
         public Task WritePage0Block5Async(string value, CancellationToken ct = default) => WriteAsync(5, value, ct);
         public Task WritePage0Block6Async(string value, CancellationToken ct = default) => WriteAsync(6, value, ct);
+        public Task<string> ReadPage0Block1To6Async(int block, CancellationToken ct = default) => ReadAsync(block, ct);
+        public Task WritePage0Block1To6Async(int block, string value, CancellationToken ct = default) => WriteAsync(block, value, ct);
+        public async Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0Blocks1To6Async(CancellationToken ct = default)
+        {
+            var results = new List<Page0BlockReadResult>(Page0Blocks1To6.Allowlist.Length);
+            foreach (var block in Page0Blocks1To6.Allowlist)
+                results.Add(new Page0BlockReadResult(block, await ReadAsync(block, ct).ConfigureAwait(false)));
+            return results;
+        }
 
         private Task<string> ReadAsync(int block, CancellationToken ct)
         {

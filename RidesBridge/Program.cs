@@ -16,9 +16,14 @@ if (launch.ShowHelp)
 {
     Console.WriteLine("RidesBridge launch options:");
     Console.WriteLine("  dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday");
-    Console.WriteLine("      Expose on wildcard IPv4, select the first bindable port from 5080..5179, and enable PM3 auto-discovery.");
+    Console.WriteLine("      Expose on wildcard IPv4, select the first bindable port from 5080..5179, and enable PM3 USB auto-discovery.");
+    Console.WriteLine("  dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3");
+    Console.WriteLine("      Same local-network bind as everyday, but inject a deterministic in-process fake PM3 (no USB).");
+    Console.WriteLine($"      Seeded scan: block4 {FakePm3Device.SeedBlock4Hex}, mirrors {FakePm3Device.SeedBlock5Hex}/{FakePm3Device.SeedBlock6Hex} ({FakePm3Device.SeedSequenceName}, {FakePm3Device.SeedRidesRemaining} rides), signal {FakePm3Device.SeedSignalMillivolts} mV.");
+    Console.WriteLine($"      Unknown-mirrors test seed: block5/block6 {FakePm3Device.UnknownSeedBlock5Hex}/{FakePm3Device.UnknownSeedBlock6Hex} via {nameof(FakePm3Device.CreateUnknownMirrorsSeeded)}().");
+    Console.WriteLine($"      Venus mirrors-only reset seed: default {nameof(FakePm3Device.CreateSeeded)}(); identity mismatch via {nameof(FakePm3Device.CreateVenusIdentityMismatchSeeded)}().");
     Console.WriteLine("  --help  Show this help.");
-    Console.WriteLine("Everyday mode exposes the HTTP bridge to private-network interfaces; use it only on a trusted local network.");
+    Console.WriteLine("Everyday and fake-pm3 modes expose the HTTP bridge to private-network interfaces; use them only on a trusted local network.");
     return 0;
 }
 
@@ -30,7 +35,11 @@ try
         ? EverydayLaunchMode.CreateOptions(
             builder.Configuration,
             EverydayPortSelector.Select(new TcpPortAvailabilityProbe())).Validate()
-        : BridgeOptions.FromConfiguration(builder.Configuration).Validate();
+        : launch.FakePm3
+            ? FakePm3LaunchMode.CreateOptions(
+                builder.Configuration,
+                EverydayPortSelector.Select(new TcpPortAvailabilityProbe())).Validate()
+            : BridgeOptions.FromConfiguration(builder.Configuration).Validate();
 }
 catch (BridgeConfigurationException ex)
 {
@@ -43,7 +52,7 @@ catch (PortSelectionException ex)
     return 2;
 }
 builder.WebHost.UseUrls(options.BindUrl);
-builder.Services.AddRidesBridge(options);
+builder.Services.AddRidesBridge(options, launch.FakePm3 ? FakePm3Device.CreateSeeded() : null);
 
 var app = builder.Build();
 app.MapRidesBridge();
