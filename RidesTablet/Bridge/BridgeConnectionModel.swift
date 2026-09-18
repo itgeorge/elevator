@@ -84,6 +84,8 @@ public final class BridgeConnectionModel: ObservableObject {
     @Published public private(set) var physicalAcceptanceFailure: BridgePhysicalAcceptanceFailure?
     @Published public private(set) var slice4PhysicalAcceptanceSummary: BridgeSlice4PhysicalAcceptanceSummary?
     @Published public private(set) var slice4PhysicalAcceptanceFailure: BridgeSlice4PhysicalAcceptanceFailure?
+    @Published public private(set) var slice5ConceptASmokeSummary: ConceptAPhysicalSmokeSummary?
+    @Published public private(set) var slice5ConceptASmokeFailure: ConceptAPhysicalSmokeFailure?
 #endif
 
     private let credentialStore: any BridgeCredentialStore
@@ -120,6 +122,7 @@ public final class BridgeConnectionModel: ObservableObject {
 #if DEBUG
     private var launchPhysicalAcceptanceAttempted = false
     private var launchSlice4PhysicalAcceptanceAttempted = false
+    private var launchSlice5ConceptASmokeAttempted = false
 #endif
 
     public init(
@@ -169,6 +172,8 @@ public final class BridgeConnectionModel: ObservableObject {
         self.physicalAcceptanceFailure = nil
         self.slice4PhysicalAcceptanceSummary = nil
         self.slice4PhysicalAcceptanceFailure = nil
+        self.slice5ConceptASmokeSummary = nil
+        self.slice5ConceptASmokeFailure = nil
 #endif
         restore()
     }
@@ -198,6 +203,26 @@ public final class BridgeConnectionModel: ObservableObject {
     }
     /// A saved credential remains usable for local reset even after a transient failure.
     public var isPaired: Bool { client?.hasCredential == true }
+
+    /// Concept A can start once an authenticated bridge client exists.
+    /// Searching/restored/connected all count; pairing and hard failures do not.
+    public var isReadyForOperatorWorkflow: Bool {
+        guard isPaired else { return false }
+        switch state {
+        case .connected, .restored, .searching:
+            return true
+        case .reading, .readingPage0, .scanningPage0, .settingPage0, .resettingPage0, .relocating:
+            return true
+        case .unconfigured, .pairing, .authenticationRequired, .failed:
+            return false
+        }
+    }
+
+    /// Shared authenticated client for the hardware-neutral Concept A adapter.
+    public func makeRideTokenDevice() -> NetworkRideTokenDevice? {
+        guard let client, client.hasCredential else { return nil }
+        return NetworkRideTokenDevice(client: client)
+    }
 
     /// Forget is available for either the live bearer or a credential that is still in storage,
     /// including while Bonjour is relocating the live client.
@@ -935,6 +960,39 @@ public final class BridgeConnectionModel: ObservableObject {
         case .failure(let failure):
             slice4PhysicalAcceptanceFailure = failure
             slice4PhysicalAcceptanceSummary = nil
+        }
+    }
+
+    /// Runs launch-triggered Concept A smoke through `NetworkRideTokenDevice` + `RidesViewModel`.
+    public func runLaunchSlice5ConceptAPhysicalSmokeIfRequested() async {
+        guard !launchSlice5ConceptASmokeAttempted else { return }
+        launchSlice5ConceptASmokeAttempted = true
+
+        var device: NetworkRideTokenDevice?
+        for _ in 0..<100 {
+            if Task.isCancelled { return }
+            if !isBusy, hasSavedCredential, let ready = makeRideTokenDevice() {
+                device = ready
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard let device else { return }
+
+        let result = await ConceptAPhysicalSmokeCoordinator(device: device).run()
+        switch result {
+        case .success(let summary):
+            slice5ConceptASmokeSummary = summary
+            slice5ConceptASmokeFailure = nil
+            message = summary.conciseDescription
+        case .failure(let failure):
+            slice5ConceptASmokeFailure = failure
+            slice5ConceptASmokeSummary = nil
+            if let detail = failure.detail, !detail.isEmpty {
+                message = "Slice 5 Concept A smoke failed at \(failure.stage): \(detail)"
+            } else {
+                message = "Slice 5 Concept A smoke failed at \(failure.stage)."
+            }
         }
     }
 #endif

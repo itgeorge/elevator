@@ -4,26 +4,31 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     public static let addressOverrideEnvironmentKey = "RIDES_BRIDGE_ADDRESS_OVERRIDE"
     public static let physicalAcceptanceEnvironmentKey = "RIDES_PHASE2_PHYSICAL_ACCEPTANCE"
     public static let slice4PhysicalAcceptanceEnvironmentKey = "RIDES_PHASE4_PHYSICAL_ACCEPTANCE"
+    public static let slice5ConceptASmokeEnvironmentKey = "RIDES_SLICE5_CONCEPTA_SMOKE"
 
     public let addressOverride: String?
     public let physicalAcceptanceEnabled: Bool
     public let slice4PhysicalAcceptanceEnabled: Bool
+    public let slice5ConceptASmokeEnabled: Bool
 
     public init(
         addressOverride: String? = nil,
         physicalAcceptanceEnabled: Bool = false,
-        slice4PhysicalAcceptanceEnabled: Bool = false
+        slice4PhysicalAcceptanceEnabled: Bool = false,
+        slice5ConceptASmokeEnabled: Bool = false
     ) {
         self.addressOverride = addressOverride
         self.physicalAcceptanceEnabled = physicalAcceptanceEnabled
         self.slice4PhysicalAcceptanceEnabled = slice4PhysicalAcceptanceEnabled
+        self.slice5ConceptASmokeEnabled = slice5ConceptASmokeEnabled
     }
 
     public init(environment: [String: String]) {
         self.init(
             addressOverride: environment[Self.addressOverrideEnvironmentKey],
             physicalAcceptanceEnabled: environment[Self.physicalAcceptanceEnvironmentKey] == "1",
-            slice4PhysicalAcceptanceEnabled: environment[Self.slice4PhysicalAcceptanceEnvironmentKey] == "1"
+            slice4PhysicalAcceptanceEnabled: environment[Self.slice4PhysicalAcceptanceEnvironmentKey] == "1",
+            slice5ConceptASmokeEnabled: environment[Self.slice5ConceptASmokeEnvironmentKey] == "1"
         )
     }
 
@@ -31,7 +36,8 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
         self.init(
             addressOverride: environmentLookup(Self.addressOverrideEnvironmentKey),
             physicalAcceptanceEnabled: environmentLookup(Self.physicalAcceptanceEnvironmentKey) == "1",
-            slice4PhysicalAcceptanceEnabled: environmentLookup(Self.slice4PhysicalAcceptanceEnvironmentKey) == "1"
+            slice4PhysicalAcceptanceEnabled: environmentLookup(Self.slice4PhysicalAcceptanceEnvironmentKey) == "1",
+            slice5ConceptASmokeEnabled: environmentLookup(Self.slice5ConceptASmokeEnvironmentKey) == "1"
         )
     }
 
@@ -40,11 +46,13 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     }
 }
 
-/// Temporary Slice 3 page0 diagnostic screen. Concept A remains in ContentView for later integration.
+/// Connection / pairing screen retained as an onboarding and diagnostics affordance.
+/// Concept A (`ContentView`) is the normal operator root once connected.
 public struct BridgeConnectionView: View {
     public static let addressOverrideEnvironmentKey = BridgeConnectionLaunchConfiguration.addressOverrideEnvironmentKey
     public static let physicalAcceptanceEnvironmentKey = BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey
     public static let slice4PhysicalAcceptanceEnvironmentKey = BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey
+    public static let slice5ConceptASmokeEnvironmentKey = BridgeConnectionLaunchConfiguration.slice5ConceptASmokeEnvironmentKey
 
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
@@ -68,7 +76,8 @@ public struct BridgeConnectionView: View {
         launchConfiguration = BridgeConnectionLaunchConfiguration(
             addressOverride: environmentLookup(),
             physicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey] == "1",
-            slice4PhysicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey] == "1"
+            slice4PhysicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey] == "1",
+            slice5ConceptASmokeEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice5ConceptASmokeEnvironmentKey] == "1"
         )
     }
 
@@ -214,7 +223,11 @@ public struct BridgeConnectionView: View {
                     }
                 }
 
-                Section("Diagnostic read") {
+                Section("Developer connectivity") {
+                    Text("Detect, Charge, and Reset live in the main Rides screen. This probe only checks authenticated bridge reachability.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                     Button {
                         Task { await model.readBlock5() }
                     } label: {
@@ -227,109 +240,8 @@ public struct BridgeConnectionView: View {
                             .fontDesign(.monospaced)
                     }
                 }
-
-                Section("Page0 scan") {
-                    Button {
-                        Task { await model.scanPage0Token() }
-                    } label: {
-                        Label("Scan page0 token", systemImage: "dot.radiowaves.left.and.right")
-                    }
-                    .disabled(model.isBusy || !model.isPaired)
-
-                    if let value = model.lastScanBlock4Value {
-                        LabeledContent("Block 4 (Apt #)", value: value)
-                            .fontDesign(.monospaced)
-                    }
-                    if let signal = model.lastSignalMillivolts {
-                        LabeledContent("Signal", value: "\(signal) mV")
-                    }
-                    if let url = model.lastUnknownDumpURL {
-                        LabeledContent("Unknown dump", value: url.lastPathComponent)
-                            .fontDesign(.monospaced)
-                    }
-                }
-
-                Section("Page0 rides") {
-                    Button {
-                        Task { await model.readPage0Rides() }
-                    } label: {
-                        Label("Read page0 rides", systemImage: "arrow.down.circle")
-                    }
-                    .disabled(model.isBusy || !model.isPaired)
-
-                    if let value = model.lastPage0Block5Value {
-                        LabeledContent("Raw block 5", value: value)
-                            .fontDesign(.monospaced)
-                    }
-                    if let value = model.lastPage0Block6Value {
-                        LabeledContent("Raw block 6", value: value)
-                            .fontDesign(.monospaced)
-                    }
-                    if let rides = model.resolvedPage0Rides {
-                        LabeledContent("Resolved rides", value: String(rides))
-                    } else if model.lastPage0Read != nil {
-                        Text("Resolved rides: unknown encoding")
-                            .foregroundStyle(.secondary)
-                    }
-                    if model.lastPage0Read != nil {
-                        LabeledContent(
-                            "Source",
-                            value: model.page0SourceBlockNumber.map { "block \($0)" } ?? "unknown"
-                        )
-                        LabeledContent(
-                            "Mirrors",
-                            value: model.page0BlocksMatch == true ? "matched" : "mismatched"
-                        )
-                        LabeledContent("Warning", value: model.page0WarningDisplay ?? "None")
-                            .foregroundStyle(.orange)
-                    }
-
-                    TextField("Target rides (0–500)", text: $model.targetPage0RidesText)
-                        .keyboardType(.numberPad)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    Button {
-                        Task { await model.setPage0Rides() }
-                    } label: {
-                        Label("Set page0 rides", systemImage: "arrow.up.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!model.canSetPage0Rides)
-                }
-
-                Section("Page0 reset") {
-                    Text("Choose a reset profile explicitly. Nothing is selected by default.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Picker("Reset profile", selection: $model.selectedResetSequence) {
-                        Text("None").tag(Optional<RideSequence>.none)
-                        ForEach(ResetSequence.all) { profile in
-                            Text(profile.sequence.rawValue.capitalized).tag(Optional(profile.sequence))
-                        }
-                    }
-                    .disabled(model.isBusy || !model.isPaired)
-
-                    Button {
-                        Task { await model.confirmResetProfile() }
-                    } label: {
-                        Label("Confirm reset", systemImage: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!model.canConfirmReset)
-
-                    if !model.lastResetBlockValues.isEmpty {
-                        ForEach(model.lastResetBlockValues.keys.sorted(), id: \.self) { block in
-                            if let value = model.lastResetBlockValues[block] {
-                                LabeledContent("Verified block \(block)", value: value)
-                                    .fontDesign(.monospaced)
-                            }
-                        }
-                    }
-                }
             }
-            .navigationTitle("Bridge Diagnostic")
+            .navigationTitle("Bridge connection")
         }
         .sheet(isPresented: $isScannerPresented) {
             BridgePairingScannerView(coordinator: scannerCoordinator) { payload in

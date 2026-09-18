@@ -934,11 +934,11 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 
 ## TDD todos
 
-- [ ] Add characterization tests for current Concept A behavior before changing the device boundary.
-- [ ] Refactor/rename `ProxmarkDevice` to a hardware-neutral boundary without coupling views to URLSession, HTTP status, bearer tokens, or PM3 command names.
-- [ ] Adapt `FakeProxmark` (renaming only if valuable) and keep all fake scenarios deterministic.
-- [ ] Implement `NetworkRideTokenDevice` as a translation layer from bridge raw results into domain outcomes.
-- [ ] Keep connection/pairing state separate from token state:
+- [x] Add characterization tests for current Concept A behavior before changing the device boundary.
+- [x] Refactor/rename `ProxmarkDevice` to a hardware-neutral boundary without coupling views to URLSession, HTTP status, bearer tokens, or PM3 command names.
+- [x] Adapt `FakeProxmark` (renaming only if valuable) and keep all fake scenarios deterministic.
+- [x] Implement `NetworkRideTokenDevice` as a translation layer from bridge raw results into domain outcomes.
+- [x] Keep connection/pairing state separate from token state:
   - bridge unconfigured;
   - discovering/connecting;
   - pairing required;
@@ -947,33 +947,33 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - connection lost while idle;
   - connection lost during read;
   - ambiguous/disconnected write requiring refresh.
-- [ ] Integrate connection setup into Concept A with large/simple operator behavior; diagnostics may remain behind a small developer/settings affordance.
-- [ ] Route Detect through the targeted scan path and preserve signal display, block 4 Apt #, current/pending rides, EUR, and unknown logging.
-- [ ] Route Charge through conditional mirror mutations and only update current rides from verified server results.
-- [ ] Route Reset through explicit-profile conditional mutations; confirmation remains disabled until selection.
-- [ ] Preserve exact user-facing requirements already tested in `RidesViewModel`.
-- [ ] Remove the temporary root/diagnostic-only workflow once Concept A covers the proven operations; retain useful connection diagnostics without duplicate business logic.
+- [x] Integrate connection setup into Concept A with large/simple operator behavior; diagnostics may remain behind a small developer/settings affordance.
+- [x] Route Detect through the targeted scan path and preserve signal display, block 4 Apt #, current/pending rides, EUR, and unknown logging.
+- [x] Route Charge through conditional mirror mutations and only update current rides from verified server results.
+- [x] Route Reset through explicit-profile conditional mutations; confirmation remains disabled until selection.
+- [x] Preserve exact user-facing requirements already tested in `RidesViewModel`.
+- [x] Remove the temporary root/diagnostic-only workflow once Concept A covers the proven operations; retain useful connection diagnostics without duplicate business logic.
 - [ ] Update `RidesTablet/README.md` and screenshots only after physical Concept A review.
 
 ## Validation
 
-- [ ] Run full Swift XCTest suite in simulator with fakes and network stubs.
-- [ ] Run full non-integration .NET suite including `RidesBridge.Tests`.
-- [ ] Run physical iPad smoke matrix over the iPhone hotspot:
-  - first pairing/manual or QR;
-  - reconnect;
-  - known read;
-  - ride adjustment/write and verified reread;
-  - stale expected conflict;
-  - no chip;
-  - unknown dump;
-  - explicit reset/cancel;
-  - bridge/PM3 unavailable;
-  - network loss before a write;
-  - network loss after server accepted a write, followed by required refresh.
-- [ ] Confirm known read/write paths did not issue a full dump.
-- [ ] Confirm the black card's final state and record it.
-- [ ] Capture final Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator.
+- [x] Run full Swift XCTest suite in simulator with fakes and network stubs.
+- [x] Run full non-integration .NET suite including `RidesBridge.Tests`.
+- [x] Run physical iPad smoke matrix over Wi-Fi against `--fake-pm3` (real Proxmark3/black-card steps deferred to plan end):
+  - [ ] first pairing/manual or QR (existing Keychain credential reused; no fresh PIN/QR this run);
+  - [x] reconnect;
+  - [x] known read;
+  - [x] ride adjustment/write and verified reread;
+  - [x] stale expected conflict;
+  - [ ] no chip;
+  - [ ] unknown dump;
+  - [x] explicit reset/cancel;
+  - [ ] bridge/PM3 unavailable;
+  - [ ] network loss before a write;
+  - [ ] network loss after server accepted a write, followed by required refresh.
+- [x] Confirm known read/write paths did not issue a full dump.
+- [ ] Deferred: confirm the black card's final state on real Proxmark3 hardware.
+- [ ] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke.
 
 ## Acceptance
 
@@ -981,11 +981,93 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 - Fake mode remains available for deterministic UI work.
 - Transport can later be replaced without rewriting operator/domain logic.
 - No Concept B code or documentation is restored.
+- Real Proxmark3 black-card acceptance remains deferred to plan-end hardware validation.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes (2026-09-18 handoff into Slice 5):
+  - Slices 3–4 committed on `ipad-rides` as `8bfa432`.
+  - Continue Concept A integration with `--fake-pm3` / network stubs; keep real PM3 deferred.
+- Assumptions: Diagnostic `BridgeConnectionView` can become a connection/settings affordance while Concept A becomes the root once `NetworkRideTokenDevice` covers scan/charge/reset/unknown.
+- Notes (2026-09-18, Slice 5 — Concept A + hardware-neutral boundary; left uncommitted for orchestrator review):
+  - Architecture:
+    - Domain boundary `RideTokenDevice` (`scan` / `writeRideMirrors` / `reset`) with domain outcomes only.
+    - `FakeProxmark` still deterministic for simulator/UI and still implements low-level `ProxmarkDevice` for legacy domain tests.
+    - `NetworkRideTokenDevice` translates bridge `page0/scan` (+ `missing` only when unknown), conditional mutations 5/6 for charge, and `blocks1to6` + planned mutations 1…6 for reset. Conflicts/timeouts return `requiresRefresh` (no blind retry).
+    - Connection stays in `BridgeConnectionModel`; Concept A token state stays in `RidesViewModel`.
+    - App root is `RidesRootView`: connection gate → Concept A once ready; diagnostics sheet retains pairing/Bonjour + block-5 connectivity probe only (scan/charge/reset UI removed to avoid duplicating business logic). DEBUG “Use simulator fake reader” remains for UI work without a Mac.
+  - Characterization first: `ConceptACharacterizationTests` (8) locked Detect/unknown-log/charge/reset semantics against FakeProxmark before the boundary change.
+  - Focused tests:
+
+    ```bash
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4' \
+      -only-testing:RidesTabletTests/ConceptACharacterizationTests \
+      -only-testing:RidesTabletTests/NetworkRideTokenDeviceTests \
+      -only-testing:RidesTabletTests/DomainStateTests \
+      -only-testing:RidesTabletTests/FakeProxmarkTests
+    ```
+
+    Result: `31/31` passed.
+  - Full suites:
+
+    ```bash
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'
+    dotnet test ElevatorTokens.sln --filter 'Category!=Integration&Category!=IntegrationParity'
+    ```
+
+    Results: Swift `196/196` passed; .NET non-integration green including `RidesBridge.Tests` `171/171` (and Tokens/RidesCli/Pm3UsbApi/RideCapture/LfElevatorCapture suites).
+  - Follow-up checklist (this turn deferred smoke as too heavy):
+    - Physical iPad Wi-Fi smoke against `dotnet run --project RidesBridge -- --fake-pm3` for the full Concept A matrix above.
+    - Confirm known paths still never full-dump over the air.
+    - README/screenshots after that smoke.
+    - Real Proxmark3/black-card acceptance remains deferred to plan-end hardware validation.
+    - Optional: identity-mismatch reset seed smoke carried from Slice 4.
+- Notes (2026-09-18, Slice 5 physical iPad Wi-Fi smoke against `--fake-pm3` — Concept A via `NetworkRideTokenDevice`):
+  - Preconditions: `xcrun devicectl list devices` showed `itgeorge iPad Air 4th Gen` `available (paired)` (`494BBD09-0DEB-5B41-B915-3B4258F1DBA2` / UDID `00008101-001A68EE21F0001E`). Port `5080` was free before bridge start. App launch path: `RidesTabletApp` → `RidesRootView` (connection gate → Concept A once `BridgeConnectionModel.isReadyForOperatorWorkflow`).
+  - Added DEBUG-only `ConceptAPhysicalSmokeCoordinator` + launch flag `RIDES_SLICE5_CONCEPTA_SMOKE=1` to exercise Concept A through `RidesViewModel` + `NetworkRideTokenDevice` on physical iPad without UI automation. Production operator flow unchanged; flag is DEBUG-only like Slice 2/4 acceptance coordinators.
+  - Bridge:
+
+    ```bash
+    dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
+    ```
+
+    Bound `http://0.0.0.0:5080`; reachable `http://192.168.0.163:5080/` (also `http://10.2.0.2:5080/` on a secondary interface). No USB/PM3 serial opened.
+  - iPad build/install (signing overrides required because repo `pbxproj` ships blank team / example bundle id):
+
+    ```bash
+    xcodebuild -project RidesTablet/RidesTablet.xcodeproj -scheme RidesTablet \
+      -configuration Debug \
+      -destination 'platform=iOS,id=00008101-001A68EE21F0001E' \
+      -derivedDataPath /tmp/RidesTabletSlice5Derived \
+      DEVELOPMENT_TEAM=TJY5296P7S PRODUCT_BUNDLE_IDENTIFIER=com.itgeorge.RidesTablet build
+    xcrun devicectl device install app --device 494BBD09-0DEB-5B41-B915-3B4258F1DBA2 \
+      /tmp/RidesTabletSlice5Derived/Build/Products/Debug-iphoneos/RidesTablet.app
+    ```
+
+    Profile `a4165047-bd83-4552-8612-6756111ff847`, team `TJY5296P7S`.
+  - Concept A smoke launch:
+
+    ```bash
+    xcrun devicectl device process launch \
+      --device 494BBD09-0DEB-5B41-B915-3B4258F1DBA2 \
+      --terminate-existing \
+      -e '{"RIDES_BRIDGE_ADDRESS_OVERRIDE":"192.168.0.163:5080","RIDES_SLICE5_CONCEPTA_SMOKE":"1"}' \
+      com.itgeorge.RidesTablet
+    ```
+
+    Existing Keychain credential revalidated via authenticated `GET /api/v1/pair/status` (HTTP 200); no new PIN required.
+  - Normal Concept A launch (no smoke flag) also verified reconnect-only path into `RidesRootView` → Concept A (`GET /api/v1/pair/status` HTTP 200).
+  - Observed authenticated HTTP sequence during smoke (all HTTP 200): `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` (Detect known Venus seed: block4 `D6D1C733`, mirrors `BBC7FD03`/`BBC7FD03`, 180 rides, signal `420` mV) → `POST /api/v1/hardware/page0/mutations` (charge 180→170) → `POST /api/v1/hardware/page0/mutations` (`alreadyApplied` at 170) → `POST /api/v1/hardware/page0/mutations` (stale-expected conflict) → `GET /api/v1/hardware/page0/scan` (refresh) → `GET /api/v1/hardware/page0/blocks1to6` → `POST /api/v1/hardware/page0/mutations` (Venus mirrors-only reset to 0 rides) → `POST /api/v1/hardware/page0/mutations` (restore to 180 rides). Reset-cancel semantics verified in coordinator before confirm.
+  - Known-path negative checks: **no** `/api/v1/hardware/page0/missing`, **no** legacy `/mirrors` or `/block5` reads, **no** full page-0 dump. Only targeted `scan`, `blocks1to6` (reset plan), and conditional `mutations` on blocks 5/6 for charge/reset/restore.
+  - Deferred on `--fake-pm3` without seed switching: no-chip, unknown-dump, bridge-unavailable messaging, network-loss mid-write / post-write refresh, identity-mismatch reset seed, fresh QR/manual pairing, screenshots, README refresh.
+  - Post-smoke focused simulator re-check (`ConceptACharacterizationTests` + `NetworkRideTokenDeviceTests` + launch-config test): green.
+  - Left uncommitted for orchestrator: Slice 5 integration plus DEBUG smoke coordinator; prefer single clean Slice 5 commit after orchestrator review.
 
 ---
 
