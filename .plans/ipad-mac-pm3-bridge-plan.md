@@ -532,52 +532,222 @@ Do not hand-maintain two independent fixture copies.
 
 ## Goal
 
-Only after Mercury is proven, replace the Mercury-only Swift path with a registered structural model matching production C# for:
+Only after Mercury is proven, replace the Mercury-only Swift path with a registered structural model matching production C# for all currently registered sequences:
 
 ```text
 mercury, venus, earth, pluto, mars,
-jupiter, saturn, uranus, neptune
+jupiter, saturn, uranus, neptune,
+charon, nix
 ```
+
+The earlier nine-family wording predated Charon/Nix discovery. Slice 3 must cover all eleven entries in `EncodingSequences.All`.
 
 ## TDD todos — shared fixtures and codec
 
-- [ ] Expand the shared fixture format/version to include sequence metadata `(name, zeroBlock, rotation, min/max)` and all `0...500` encodings for all nine sequences.
-- [ ] Make C# tests validate the shared fixture against `EncodingSequences`; fixture drift must fail visibly.
-- [ ] Add selected hardware-observed boundary vectors and malformed blocks independent of generated round trips.
-- [ ] Add Swift tests for every fixture entry before changing the network workflow.
-- [ ] Generalize the Mercury codec into a small sequence/counter model matching `RideCounterCodec` and `EncodingSequence`:
+- [x] Expand the shared fixture format/version to include sequence metadata `(name, zeroBlock, rotation, min/max)` and all `0...500` encodings for all eleven sequences.
+- [x] Make C# tests validate the shared fixture against `EncodingSequences`; fixture drift must fail visibly.
+- [x] Add selected hardware-observed boundary vectors and malformed blocks independent of generated round trips.
+- [x] Add Swift tests for every fixture entry before changing the network workflow.
+- [x] Generalize the Mercury codec into a small sequence/counter model matching `RideCounterCodec` and `EncodingSequence`:
   - exact rotation handling including 0 and 4;
   - nine-bit counter structure;
   - application range `0...500`;
   - exact structural round-trip validation.
-- [ ] Add registry validation for duplicate friendly names and encoded collisions.
-- [ ] Prove no self/cross collisions over `0...500`; retain `0...511` as diagnostic parity where useful.
-- [ ] Match C# full-registry decoding and ambiguity behavior; do not guess families from visible high words.
-- [ ] Replace the preliminary Swift multi-family implementation or refactor it into the proven model; remove temporary Mercury-only production code once equivalent tests pass.
-- [ ] Preserve `FakeProxmark` samples and tests through the migration.
+- [x] Add registry validation for duplicate friendly names and encoded collisions.
+- [x] Prove no self/cross collisions over `0...500`; retain `0...511` as diagnostic parity where useful.
+- [x] Match C# full-registry decoding and ambiguity behavior; do not guess families from visible high words.
+- [x] Replace the preliminary Swift multi-family implementation or refactor it into the proven model; remove temporary Mercury-only production code once equivalent tests pass.
+- [x] Preserve `FakeProxmark` samples and tests through the migration.
 
 ## TDD todos — network workflow
 
-- [ ] Update ride reads to report the decoded sequence and preserve the sequence selected by the authoritative mirror block.
-- [ ] Encode desired rides using that same sequence; never default a known non-Mercury token to Mercury.
-- [ ] Keep bridge contracts sequence-agnostic and raw-block based. The Mac must not become the ride-family authority.
-- [ ] Add endpoint/client tests showing identical bridge behavior regardless of sequence.
-- [ ] Add regression cases across `7/8`, `127/128`, `255/256`, and `383/384` for both rotation layouts.
-- [ ] Physically read the black card through the iPad flow and confirm its current registered sequence if one is present.
-- [ ] Perform only a narrowly chosen target-only write if needed for end-to-end family preservation, restoring original 5/6 afterward.
+- [x] Rename Mercury-specific ride endpoints/types to sequence-agnostic
+  `GET /api/v1/hardware/page0/mirrors` and `POST /api/v1/hardware/page0/mutations`.
+- [x] Add mutually exclusive `--fake-pm3` launch mode with deterministic mirrored blocks for iPad smoke without USB hardware.
+- [x] Update ride reads to report the decoded sequence and preserve the sequence selected by the authoritative mirror block.
+- [x] Encode desired rides using that same sequence; never default a known non-Mercury token to Mercury.
+- [x] Keep bridge contracts sequence-agnostic and raw-block based. The Mac must not become the ride-family authority.
+- [x] Add endpoint/client tests showing identical bridge behavior regardless of sequence.
+- [x] Add regression cases across `7/8`, `127/128`, `255/256`, and `383/384` for both rotation layouts.
+- [x] Defer real Proxmark3 card read/write acceptance to plan-end hardware validation. iPad Wi-Fi smoke against `--fake-pm3` is the Slice 3 physical network checkpoint.
 
 ## Acceptance
 
-- All nine registered families have shared C#/Swift fixture parity and exhaustive Swift tests.
+- All eleven registered families have shared C#/Swift fixture parity and exhaustive Swift tests.
 - Network ride reads/writes preserve the source sequence.
 - No identity/reset concerns are mixed into the ride codec.
+- Renamed page0 mirror/mutation APIs work with the physical iPad over Wi-Fi against `--fake-pm3`.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes (2026-09-18 handoff decisions):
+  - Cover all eleven registered sequences, including Charon and Nix.
+  - Rename Mercury-specific bridge ride endpoints now to sequence-agnostic
+    `GET /api/v1/hardware/page0/mirrors` and `POST /api/v1/hardware/page0/mutations`
+    (and rename matching Swift/client/error identifiers). Keep the Mac raw-block based.
+  - Add an explicit non-default `--fake-pm3` launch mode for deterministic mirrored
+    blocks so iPad Wi-Fi smoke can proceed without USB hardware. Everyday mode remains
+    real PM3 USB auto-discovery and must stay mutually exclusive with `--fake-pm3`.
+  - Defer real PM3 hardware acceptance to the end of the overall plan. Unit/contract
+    tests first; physical iPad-on-router smoke against `--fake-pm3` is allowed after
+    the software checkpoint.
+- Assumptions: Fixture/oracle generalization and endpoint rename can complete without
+  a connected Proxmark3. Existing Mercury physical evidence remains valid historical
+  Slice 2 proof and is not re-run as part of Slice 3 software work.
+- Notes (2026-09-18, Slice 3 chunk 1 — shared fixtures + C# oracle/resolver drift tests):
+  - Added `TestFixtures/RideEncoding/ride-encoding-v2.json` (`schemaVersion: 2`,
+    `fixtureId: ride-encoding-v2`) as the single live oracle for all eleven registered
+    sequences. Kept `mercury-v1.json` as a historical Slice 2 compatibility reference only;
+    removed Mercury-only C# fixture tests.
+  - Fixture shape: shared `boundaries` `[0,1,7,8,127,128,255,256,383,384,500]`;
+    per-sequence metadata + `501` encodings each (`5511` total); `121` rejected
+    application-range entries (`501...511` per sequence); `7` structural malformed blocks;
+    `9` cross-family `mirrorCases` for `RideBlockResolver`.
+  - Shared models/support: `TestFixtures/RideEncoding/RideEncodingFixtureModels.cs`,
+    `RideEncodingFixtureSupport.cs`; generator at
+    `Tokens.Tests/RideEncodingFixtureGenerator.cs` (explicit regen test).
+  - C# drift tests: `Tokens.Tests/RideEncodingFixtureOracleTests.cs` (schema, per-sequence
+    oracle parity, uniqueness, cross-sequence collision guard, rejected/malformed validation,
+    generator parity); `RidesCli.Tests/RideEncodingFixtureResolverTests.cs` (all encodings,
+    rejected/malformed, mirror cases against full registry).
+  - Focused tests:
+
+    ```bash
+    dotnet test Tokens.Tests/Tokens.Tests.csproj --filter FullyQualifiedName~RideEncodingFixture
+    dotnet test RidesCli.Tests/RidesCli.Tests.csproj --filter FullyQualifiedName~RideEncodingFixture
+    ```
+
+    Results: Tokens `5/5` passed; RidesCli `4/4` passed.
+  - Broader suites:
+
+    ```bash
+    dotnet test Tokens.Tests/Tokens.Tests.csproj
+    dotnet test RidesCli.Tests/RidesCli.Tests.csproj
+    ```
+
+    Results: Tokens `140/140` passed (explicit generator skipped); RidesCli `193/193` passed.
+  - Follow-up for next chunk: Swift fixture parity tests + codec generalization; bridge
+    endpoint rename and `--fake-pm3` remain unchecked network-workflow todos.
+- Notes (2026-09-18, Slice 3 chunk 2 — Swift codec generalization + call-site migration):
+  - Generalized production codec in `RidesTablet/Domain/RideEncoding.swift`:
+    `RideCounterCodec`, `RideSequence`, `RideSequenceRegistry`, `RideBlockResolver`,
+    and `RideRead` (with `sequence` metadata). Deleted `MercuryRideCodec.swift` and
+    retired `MercuryRideCodecTests.swift`; live Swift oracle is `ride-encoding-v2` only
+    via `RideEncodingFixtureTests.swift` (`mercury-v1.json` remains on disk as historical
+    reference, unused by tests).
+  - Migrated bridge call sites to the generalized API:
+    `BridgeConnectionModel` and `BridgePhysicalAcceptanceCoordinator` now resolve mirrors
+    through `RideBlockResolver` and encode desired rides with the resolved `RideSequence`
+    from the authoritative mirror (never Mercury-by-default). `TokenDecoder` now uses
+    `RideSequenceRegistry.tryDecode`.
+  - Xcode project: removed Mercury-only sources; added `RideEncodingFixtureTests.swift`.
+  - Focused Swift tests:
+
+    ```bash
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4' \
+      -only-testing:RidesTabletTests/RideEncodingFixtureTests \
+      -only-testing:RidesTabletTests/RideEncodingTests \
+      -only-testing:RidesTabletTests/FakeProxmarkTests \
+      -only-testing:RidesTabletTests/ResetSequenceTests \
+      -only-testing:RidesTabletTests/MercuryBridgeWorkflowTests \
+      -only-testing:RidesTabletTests/BridgePhysicalAcceptanceCoordinatorTests
+    ```
+
+    Results: `37/37` passed.
+  - Full Swift simulator suite:
+
+    ```bash
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'
+    ```
+
+    Results: `157/157` passed (net `+12` fixture tests, `-6` retired Mercury-only tests).
+  - Follow-up for next chunk: bridge endpoint rename to page0 mirrors/mutations and
+    `--fake-pm3` launch mode remain unchecked network-workflow todos.
+- Notes (2026-09-18, Slice 3 chunk 3a — .NET page0 mirror/mutation rename):
+  - Renamed bridge ride endpoints and contracts from Mercury-specific names to
+    sequence-agnostic page0 identifiers. No Swift changes in this chunk.
+  - `GET /api/v1/hardware/page0/mirrors`, `POST /api/v1/hardware/page0/mutations`;
+    `Page0MirrorReadResponse`, `Page0MutationRequest`, `Page0ConditionalWriter`,
+    `page0_block_not_allowed`, `ReadPage0MirrorAsync`, etc.
+  - Renamed `MercuryBridgeOperations.cs` → `Page0BridgeOperations.cs`;
+    `MercuryBridgeTests.cs` → `Page0BridgeTests.cs`.
+  - `--fake-pm3` launch mode remains unchecked for chunk 3b.
+  - Focused tests:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter "FullyQualifiedName~Page0|FullyQualifiedName~Mercury|FullyQualifiedName~Mirror|FullyQualifiedName~Mutation"
+    ```
+
+    Results: `22/22` passed.
+  - Full suite:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj
+    ```
+
+    Results: `150/150` passed.
+  - Follow-up for chunk 3b: `--fake-pm3` launch mode and Swift client path updates.
+- Notes (2026-09-18, Slice 3 chunk 3b — `--fake-pm3` launch mode):
+  - Added mutually exclusive `--fake-pm3` launch mode with the same strict single-flag parsing
+    rules as `--everyday`. It reuses everyday port selection (`0.0.0.0`, 5080..5179),
+    terminal URL reporting, and best-effort Bonjour, but injects `FakePm3Device` and never
+    opens USB or auto-discovers serial.
+  - Seeded mirrors for iPad smoke: block5/block6 `BBC7FD03` (Venus, 180 rides remaining).
+  - New files: `RidesBridge/FakePm3Device.cs`, `RidesBridge.Tests/FakePm3LaunchTests.cs`.
+  - Updated: `EverydayLaunchMode.cs` (`BridgeLaunchOptions`, `FakePm3LaunchMode`),
+    `Program.cs`, `BridgeOptions.cs`, `README.md`.
+  - Focused tests:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter FullyQualifiedName~FakePm3LaunchTests
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter FullyQualifiedName~EverydayLaunchTests
+    ```
+
+    Results: `11/11` fake-pm3 + `20/20` everyday passed.
+  - Full suite:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj
+    ```
+
+    Results: `163/163` passed.
+  - Follow-up completed in chunk 3c: Swift client path updates for page0 mirrors/mutations.
+- Notes (2026-09-18, Slice 3 chunk 3c — Swift page0 client rename):
+  - Renamed Swift bridge ride mirror/mutation DTOs, client methods, connection-model
+    diagnostics, physical-acceptance coordinator, and workflow tests from Mercury-specific
+    names to sequence-agnostic page0 identifiers. Paths are now
+    `GET/POST /api/v1/hardware/page0/mirrors|mutations`.
+  - Encoding for set still uses resolved `RideRead.sequence` (no Mercury default).
+  - Renamed `MercuryBridgeWorkflowTests.swift` → `Page0BridgeWorkflowTests.swift` and added
+    Venus fake-pm3 seed sequence-preservation workflow coverage (`BBC7FD03` / 180 rides).
+  - No RidesBridge/.NET changes in this chunk.
+  - Focused tests: BridgeClientTests + Page0BridgeWorkflowTests + BridgePhysicalAcceptanceCoordinatorTests → `36/36` passed.
+  - Full Swift simulator suite → `158/158` passed.
 
 ---
+
+
+- Notes (2026-09-18, Slice 3 physical iPad Wi-Fi smoke against `--fake-pm3`):
+  - Bridge launched with `dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3`,
+    bound `http://0.0.0.0:5080`, reachable `http://192.168.0.163:5080/`, seeded Venus mirrors
+    `BBC7FD03`/`BBC7FD03` (180 rides). No USB/PM3 port opened.
+  - Freshly signed `com.itgeorge.RidesTablet` Debug build (team `TJY5296P7S`, profile
+    `a4165047-bd83-4552-8612-6756111ff847`) installed on physical iPad Air 4
+    (`00008101-001A68EE21F0001E` / CoreDevice `494BBD09-0DEB-5B41-B915-3B4258F1DBA2`).
+  - App launched with `RIDES_BRIDGE_ADDRESS_OVERRIDE=192.168.0.163:5080` and
+    `RIDES_PHASE2_PHYSICAL_ACCEPTANCE=1`. Existing Keychain credential revalidated via
+    authenticated `GET /api/v1/pair/status` (HTTP 200); no new PIN required.
+  - Physical acceptance runner exercised renamed page0 APIs only: mirrors read → write →
+    alreadyApplied → stale conflict → restore write → final mirrors read. All requests
+    returned HTTP 200. Sequence-preserving encode used the resolved Venus family from the
+    fake seed (not Mercury-default).
+  - Real Proxmark3 card acceptance remains deferred to plan-end hardware validation.
 
 # Slice 4 — Targeted token details, explicit-profile reset, and unknown dumps
 
@@ -594,38 +764,39 @@ Complete the non-UI operator behavior while preserving the low-read-pressure rul
 
 ## TDD todos — targeted scan and unknown path
 
-- [ ] Define/test raw targeted-read contracts without introducing a generic unaudited command endpoint.
-- [ ] Test known scans touch only blocks 4/5/6 and return signal strength plus raw values.
-- [ ] Test no-chip/tune/read failures remain distinguishable and do not trigger write or dump requests.
-- [ ] Test unknown decode triggers reads of only the missing five blocks exactly once.
-- [ ] Test page assembly preserves block order and writes exactly 32 bytes, big-endian, with the existing filename convention.
-- [ ] Preserve `Unknown, logged` only after successful local iPad persistence; log failure remains an error.
-- [ ] Test interruption during missing-block reads produces no falsely successful dump.
+- [x] Define/test raw targeted-read contracts without introducing a generic unaudited command endpoint.
+- [x] Test known scans touch only blocks 4/5/6 and return signal strength plus raw values.
+- [x] Test no-chip/tune/read failures remain distinguishable and do not trigger write or dump requests.
+- [x] Test unknown decode triggers reads of only the missing five blocks exactly once.
+- [x] Test page assembly preserves block order and writes exactly 32 bytes, big-endian, with the existing filename convention.
+- [x] Preserve `Unknown, logged` only after successful local iPad persistence; log failure remains an error.
+- [x] Test interruption during missing-block reads produces no falsely successful dump.
 
 ## TDD todos — identity/reset parity
 
-- [ ] Add shared C#/Swift identity-profile fixture parity for all canonical and recognition-only profiles.
-- [ ] Validate canonical reset images against the embedded C# big-endian images, including block 4 and Neptune block 7 metadata.
-- [ ] Keep reset selection explicit and empty by default.
-- [ ] Build reset mutations only for blocks that actually need change:
+- [x] Add shared C#/Swift identity-profile fixture parity for all canonical and recognition-only profiles.
+- [x] Validate canonical reset images against the embedded C# big-endian images, including block 4 and Neptune block 7 metadata.
+- [x] Keep reset selection explicit and empty by default.
+- [x] Build reset mutations only for blocks that actually need change:
   - first read candidate target blocks 1...6;
   - if identity 1...4 already matches and mirrors belong to the selected sequence, target only 5/6;
   - otherwise target changed blocks in 1...6;
   - never include 0/7.
-- [ ] Use the same conditional mutation primitive from Slice 2; do not add a blind overwrite endpoint.
-- [ ] Test full preflight-before-write, desired-state retry, per-block verification, rollback, and incomplete rollback reporting across 1...6.
-- [ ] Confirm server continues reset verification/rollback after client disconnect.
-- [ ] Return verified current block values after success so the iPad state reflects hardware, not optimistic assumptions.
-- [ ] Preserve block 4 as Apt # during normal ride writes; explicit profile reset may overwrite it by design.
+- [x] Use the same conditional mutation primitive from Slice 2; do not add a blind overwrite endpoint.
+- [x] Test full preflight-before-write, desired-state retry, per-block verification, rollback, and incomplete rollback reporting across 1...6.
+- [x] Confirm server continues reset verification/rollback after client disconnect.
+- [x] Return verified current block values after success so the iPad state reflects hardware, not optimistic assumptions.
+- [x] Preserve block 4 as Apt # during normal ride writes; explicit profile reset may overwrite it by design.
 
 ## Temporary-screen acceptance
 
-- [ ] Add block 4 display, signal value, explicit reset-profile picker, reset confirmation, and unknown-log result to the diagnostic workflow.
-- [ ] Keep controls functional rather than visually polishing Concept A in this slice.
-- [ ] Add view-model tests for explicit selection, cancellation, conflict, success, rollback warning, and unknown log save/failure.
+- [x] Add block 4 display, signal value, and unknown-log result to the diagnostic workflow (scan path only; reset picker deferred to identity/reset chunk).
+- [x] Keep controls functional rather than visually polishing Concept A in this slice.
+- [x] Add view-model tests for scan/unknown success, persistence failure, cancellation, and no dump on known tokens (reset/conflict/rollback deferred).
 
 ## Physical acceptance — black card
 
+- [x] Deferred to plan-end Proxmark3 hardware validation. Slice 4 physical network checkpoint is iPad Wi-Fi smoke against `--fake-pm3` only (no USB card writes).
 - [ ] Record read-only blocks 1...6 before reset testing; do not read 0/7 unless the unknown-dump test specifically requires the complete image.
 - [ ] Exercise one explicit reset profile through the conditional path only after confirming restoration values are available.
 - [ ] Verify only expected target blocks changed and the app reports verified hardware state.
@@ -639,11 +810,98 @@ Complete the non-UI operator behavior while preserving the low-read-pressure rul
 - Unknown scans produce the required exact dump with no redundant reads.
 - Reset is explicit, conditional, verified, rollback-capable, and block-safe.
 - C#/Swift profile/reset parity is test-backed.
+- iPad Wi-Fi smoke against `--fake-pm3` covers scan/unknown/reset network paths without real PM3 hardware.
 
 ## Agent notes / assumptions
 
-- Notes:
-- Assumptions:
+- Notes (2026-09-18 handoff into Slice 4):
+  - Slice 3 software + iPad `--fake-pm3` smoke are complete; real Proxmark3 card work remains deferred to plan end.
+  - Continue with targeted scan / unknown-dump contracts first, then identity-profile fixtures and extended conditional reset mutations (blocks 1...6), then diagnostic-screen wiring and fake-pm3 iPad smoke.
+- Assumptions: `--fake-pm3` can be extended to seed block 4 / missing page-0 blocks / resettable profiles for deterministic smoke without USB.
+- Notes (2026-09-18, Slice 4 chunk 1 — targeted scan + unknown missing-block dump path):
+  - Bridge contracts (authenticated, no generic block endpoint):
+    - `GET /api/v1/hardware/page0/scan` → `{ version, block4, block5, block6, signalMillivolts }` (uppercase hex; LF tune + detect + reads 4/5/6 only).
+    - `GET /api/v1/hardware/page0/missing` → `{ version, blocks: [{ block, value }, ...] }` with fixed allowlist `0,1,2,3,7` exactly once per request.
+  - Hardware errors: `no_chip` (409), `lf_tune_failed` (503), `page0_read_failed` (502); interruption returns HTTP 499 without a success body.
+  - `IBridgePm3Device` gained `ScanPage0Async` / `ReadPage0MissingBlocksAsync`; real adapter tunes then reads; `FakePm3Device` seeds:
+    - known Venus: `CreateKnownVenusSeeded()` / default `--fake-pm3` — block4 `D6D1C733`, mirrors `BBC7FD03`, signal `420` mV, full page0 for missing reads;
+    - unknown mirrors: `CreateUnknownMirrorsSeeded()` — block4 `00000004`, mirrors `DEADBEEF`/`FACECAFE`, deterministic missing blocks for dump assembly tests.
+  - Swift: `BridgePage0ScanResponse`, `BridgePage0MissingBlocksResponse`, `Page0ScanWorkflow.assemblePage0`, `BridgeClient.scanPage0()` / `readPage0MissingBlocks()`, `BridgeConnectionModel.scanPage0Token()` orchestration + diagnostic UI section.
+  - Focused tests:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter FullyQualifiedName~Page0ScanBridgeTests
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4' \
+      -only-testing:RidesTabletTests/Page0ScanWorkflowTests
+    ```
+
+    Results: bridge `8/8` passed; Swift `6/6` passed.
+  - Broader suites:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'
+    ```
+
+    Results: bridge `171/171` passed; Swift `164/164` passed.
+  - Follow-up for chunk 2: identity-profile fixtures, conditional reset mutations (blocks 1…6), reset picker UI, and `--fake-pm3` resettable profile smoke.
+- Notes (2026-09-18, Slice 4 chunk 2 — identity fixtures + conditional reset mutations 1…6):
+  - Shared fixture: `TestFixtures/IdentityProfiles/identity-profiles-v1.json` (13 profiles: 11 resettable + venus21ff + earth-a457; full 8-block reset images from embedded C# `.bin` files; Mercury mirrors encode 500 rides).
+  - Bridge contracts:
+    - `GET /api/v1/hardware/page0/blocks1to6` → `{ version, blocks: [{ block, value }, ...] }` fixed allowlist `1..6` exactly once (reset planning only; does not touch 0/7).
+    - `POST /api/v1/hardware/page0/mutations` expanded to **1..6** targets, **1..6** mutations per request; still rejects 0/7 and duplicates. Ride set path on iPad still emits only blocks 5/6.
+  - `IBridgePm3Device` gained `ReadPage0Block1To6Async` / `WritePage0Block1To6Async` / `ReadPage0Blocks1To6Async`; real adapter + `FakePm3Device` implement all three. Default `--fake-pm3` Venus seed unchanged; added `CreateVenusMirrorsOnlyResetSeeded()` (alias of known Venus) and `CreateVenusIdentityMismatchSeeded()` (block1 `21FF0031`).
+  - Swift: `ResetSequence.resetRideCount` (Mercury=500); `Page0ResetPlanningWorkflow`, `BridgePage0Blocks1To6Response`, `BridgeConnectionModel.confirmResetProfile()` + diagnostic reset picker in `BridgeConnectionView` (empty selection by default; verified results update mirror state).
+  - Focused tests:
+
+    ```bash
+    dotnet test RidesCli.Tests/RidesCli.Tests.csproj --filter FullyQualifiedName~IdentityProfileFixture
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter FullyQualifiedName~Page0BridgeTests
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4' \
+      -only-testing:RidesTabletTests/IdentityProfileFixtureTests \
+      -only-testing:RidesTabletTests/Page0ResetPlanningWorkflowTests \
+      -only-testing:RidesTabletTests/Page0ResetWorkflowTests
+    ```
+
+    Results: C# fixture `2/2`; bridge Page0 `22/22`; Swift focused `13/13` passed.
+  - Broader suites:
+
+    ```bash
+    dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj
+    xcodebuild test \
+      -project RidesTablet/RidesTablet.xcodeproj \
+      -scheme RidesTablet \
+      -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'
+    ```
+
+    Results: bridge `171/171` passed; Swift `176/176` passed.
+  - Follow-up: iPad Wi-Fi smoke against `--fake-pm3` for scan + reset (mirrors-only and identity+mismatch seeds); real Proxmark3 card work remains deferred.
+- Notes (2026-09-18, Slice 4 physical iPad Wi-Fi smoke against `--fake-pm3` — scan + Venus mirrors-only reset):
+  - Added DEBUG-only `BridgeSlice4PhysicalAcceptanceCoordinator` + launch flag `RIDES_PHASE4_PHYSICAL_ACCEPTANCE=1` (Slice 2 flag `RIDES_PHASE2_PHYSICAL_ACCEPTANCE` unchanged). Focused tests: `BridgeSlice4PhysicalAcceptanceCoordinatorTests` `4/4` passed; full Swift simulator suite `180/180` passed; bridge `171/171` passed.
+  - Bridge launched: `dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3`, bound `http://0.0.0.0:5080`, reachable `http://192.168.0.163:5080/`. No USB/PM3 serial opened.
+  - Debug build installed on physical iPad Air 4 (`00008101-001A68EE21F0001E` / CoreDevice `494BBD09-0DEB-5B41-B915-3B4258F1DBA2`) with team `TJY5296P7S`, profile `a4165047-bd83-4552-8612-6756111ff847`, bundle `com.itgeorge.RidesTablet`.
+  - App launched:
+
+    ```bash
+    xcrun devicectl device process launch \
+      --device 494BBD09-0DEB-5B41-B915-3B4258F1DBA2 \
+      -e '{"RIDES_BRIDGE_ADDRESS_OVERRIDE":"192.168.0.163:5080","RIDES_PHASE4_PHYSICAL_ACCEPTANCE":"1"}' \
+      com.itgeorge.RidesTablet
+    ```
+
+    Existing Keychain credential revalidated via authenticated `GET /api/v1/pair/status` (HTTP 200); no new PIN required.
+  - Acceptance HTTP sequence (all HTTP 200): `GET /api/v1/hardware/page0/scan` → `GET /api/v1/hardware/page0/blocks1to6` → `POST /api/v1/hardware/page0/mutations` (Venus reset, mirrors-only blocks 5/6 to `48C74948`) → `POST /api/v1/hardware/page0/mutations` (restore to `BBC7FD03`) → `GET /api/v1/hardware/page0/mirrors` (final verify).
+  - Observed scan seed: block4 `D6D1C733`, mirrors `BBC7FD03`/`BBC7FD03` (Venus 180 rides), signal `420` mV. Post-restore scan confirmed seed restored. Mutation bodies were 140 bytes (two block-5/6 mutations only; blocks 0/7 untouched).
+  - Identity+mismatch seed (`CreateVenusIdentityMismatchSeeded`) smoke remains a Slice 5+ follow-up; real Proxmark3 black-card acceptance remains deferred to plan end.
 
 ---
 

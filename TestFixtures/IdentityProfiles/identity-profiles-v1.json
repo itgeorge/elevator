@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "identity-profiles-v1",
+  "profiles": [
+    {
+      "friendlyName": "mercury",
+      "rideSequence": "mercury",
+      "tokenId": "9BFE0062-5BA4A3DE-D5D1D713-D5D1D713",
+      "block1": "9BFE0062",
+      "block2": "5BA4A3DE",
+      "block3": "D5D1D713",
+      "block4": "D5D1D713",
+      "canReset": true,
+      "resetImageFileName": "default-500-rides.bin",
+      "resetImage": [
+        "00148040",
+        "9BFE0062",
+        "5BA4A3DE",
+        "D5D1D713",
+        "D5D1D713",
+        "3FC6BD93",
+        "3FC6BD93",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "venus",
+      "rideSequence": "venus",
+      "tokenId": "43FE0062-5BA494A3-D6D1C733-D6D1C733",
+      "block1": "43FE0062",
+      "block2": "5BA494A3",
+      "block3": "D6D1C733",
+      "block4": "D6D1C733",
+      "canReset": true,
+      "resetImageFileName": "venus-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "43FE0062",
+        "5BA494A3",
+        "D6D1C733",
+        "D6D1C733",
+        "48C74948",
+        "48C74948",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "earth",
+      "rideSequence": "earth",
+      "tokenId": "D3FE005D-522BC69D-650432F5-650432F5",
+      "block1": "D3FE005D",
+      "block2": "522BC69D",
+      "block3": "650432F5",
+      "block4": "650432F5",
+      "canReset": true,
+      "resetImageFileName": "earth-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "D3FE005D",
+        "522BC69D",
+        "650432F5",
+        "650432F5",
+        "18121218",
+        "18121218",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "pluto",
+      "rideSequence": "pluto",
+      "tokenId": "83FE002A-F100C064-A3045930-A3045930",
+      "block1": "83FE002A",
+      "block2": "F100C064",
+      "block3": "A3045930",
+      "block4": "A3045930",
+      "canReset": true,
+      "resetImageFileName": "pluto-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "83FE002A",
+        "F100C064",
+        "A3045930",
+        "A3045930",
+        "1F12121F",
+        "1F12121F",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "mars",
+      "rideSequence": "mars",
+      "tokenId": "C3FE0031-20C60722-B6D14924-B6D14924",
+      "block1": "C3FE0031",
+      "block2": "20C60722",
+      "block3": "B6D14924",
+      "block4": "B6D14924",
+      "canReset": true,
+      "resetImageFileName": "mars-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "C3FE0031",
+        "20C60722",
+        "B6D14924",
+        "B6D14924",
+        "4EC7494E",
+        "4EC7494E",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "jupiter",
+      "rideSequence": "jupiter",
+      "tokenId": "EBFE002A-F100CC5B-A5045936-A5045936",
+      "block1": "EBFE002A",
+      "block2": "F100CC5B",
+      "block3": "A5045936",
+      "block4": "A5045936",
+      "canReset": true,
+      "resetImageFileName": "jupiter-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "EBFE002A",
+        "F100CC5B",
+        "A5045936",
+        "A5045936",
+        "8C124980",
+        "8C124980",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "saturn",
+      "rideSequence": "saturn",
+      "tokenId": "23FE007B-D88CBD8A-5D04593D-5D04593D",
+      "block1": "23FE007B",
+      "block2": "D88CBD8A",
+      "block3": "5D04593D",
+      "block4": "5D04593D",
+      "canReset": true,
+      "resetImageFileName": "saturn-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "23FE007B",
+        "D88CBD8A",
+        "5D04593D",
+        "5D04593D",
+        "8B1249F0",
+        "8B1249F0",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "uranus",
+      "rideSequence": "uranus",
+      "tokenId": "FBFE002A-F1003C92-F5D1D766-F5D1D766",
+      "block1": "FBFE002A",
+      "block2": "F1003C92",
+      "block3": "F5D1D766",
+      "block4": "F5D1D766",
+      "canReset": true,
+      "resetImageFileName": "uranus-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "FBFE002A",
+        "F1003C92",
+        "F5D1D766",
+        "F5D1D766",
+        "891249D0",
+        "891249D0",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "neptune",
+      "rideSequence": "neptune",
+      "tokenId": "8BFE002A-F100C6A2-95D15917-95D15917",
+      "block1": "8BFE002A",
+      "block2": "F100C6A2",
+      "block3": "95D15917",
+      "block4": "95D15917",
+      "canReset": true,
+      "resetImageFileName": "neptune-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "8BFE002A",
+        "F100C6A2",
+        "95D15917",
+        "95D15917",
+        "8F1249B0",
+        "8F1249B0",
+        "57F674C3"
+      ]
+    },
+    {
+      "friendlyName": "charon",
+      "rideSequence": "charon",
+      "tokenId": "EBFE0077-7BECB142-610412F3-610412F3",
+      "block1": "EBFE0077",
+      "block2": "7BECB142",
+      "block3": "610412F3",
+      "block4": "610412F3",
+      "canReset": true,
+      "resetImageFileName": "charon-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "EBFE0077",
+        "7BECB142",
+        "610412F3",
+        "610412F3",
+        "C0121244",
+        "C0121244",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "nix",
+      "rideSequence": "nix",
+      "tokenId": "1BFE002A-F100C605-82045966-82045966",
+      "block1": "1BFE002A",
+      "block2": "F100C605",
+      "block3": "82045966",
+      "block4": "82045966",
+      "canReset": true,
+      "resetImageFileName": "nix-0-rides.bin",
+      "resetImage": [
+        "00148040",
+        "1BFE002A",
+        "F100C605",
+        "82045966",
+        "82045966",
+        "0DC7C70D",
+        "0DC7C70D",
+        "00000000"
+      ]
+    },
+    {
+      "friendlyName": "venus21ff",
+      "rideSequence": "venus",
+      "tokenId": "21FF0031-5BA494A3-D6D1C733-D6D1C733",
+      "block1": "21FF0031",
+      "block2": "5BA494A3",
+      "block3": "D6D1C733",
+      "block4": "D6D1C733",
+      "canReset": false,
+      "resetImageFileName": null
+    },
+    {
+      "friendlyName": "earth-a457",
+      "rideSequence": "earth",
+      "tokenId": "D3FE005D-A4578D3A-650432F5-650432F5",
+      "block1": "D3FE005D",
+      "block2": "A4578D3A",
+      "block3": "650432F5",
+      "block4": "650432F5",
+      "canReset": false,
+      "resetImageFileName": null
+    }
+  ]
+}

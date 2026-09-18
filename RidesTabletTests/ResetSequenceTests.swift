@@ -2,6 +2,12 @@ import XCTest
 @testable import RidesTablet
 
 final class ResetSequenceTests: XCTestCase {
+    func testMercuryResetUsesFiveHundredRidesInMirrors() {
+        let image = ResetSequence.for(.mercury).resetImage()
+        XCTAssertEqual(image[5], RideSequence.mercury.encode(500))
+        XCTAssertEqual(image[6], RideSequence.mercury.encode(500))
+    }
+
     func testNeptuneResetIncludesBlock4AndWritesRideMirrors() {
         let image = ResetSequence.for(.neptune).resetImage()
         XCTAssertEqual(image, [

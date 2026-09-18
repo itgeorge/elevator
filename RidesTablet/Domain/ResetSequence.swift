@@ -9,12 +9,23 @@ public struct ResetSequence: Codable, Equatable, Identifiable, Sendable {
     public let block4: UInt32
     public let block0: UInt32
     public let block7: UInt32
+    /// Ride count encoded into the reset mirror blocks. Mercury uses 500; all others use 0.
+    public let resetRideCount: UInt
 
     public var id: String { sequence.rawValue }
     public var writableBlocks: ClosedRange<Int> { 1...6 }
     public var identityBlocks: [UInt32] { [block1, block2, block3, block4] }
 
-    public init(sequence: RideSequence, block1: UInt32, block2: UInt32, block3: UInt32, block4: UInt32, block0: UInt32 = 0x00148040, block7: UInt32 = 0) {
+    public init(
+        sequence: RideSequence,
+        block1: UInt32,
+        block2: UInt32,
+        block3: UInt32,
+        block4: UInt32,
+        block0: UInt32 = 0x00148040,
+        block7: UInt32 = 0,
+        resetRideCount: UInt = 0
+    ) {
         self.sequence = sequence
         self.block1 = block1
         self.block2 = block2
@@ -22,16 +33,17 @@ public struct ResetSequence: Codable, Equatable, Identifiable, Sendable {
         self.block4 = block4
         self.block0 = block0
         self.block7 = block7
+        self.resetRideCount = resetRideCount
     }
 
     /// The CLI writes only blocks 1...6; block 4 is part of identity and is not omitted.
-    public func resetImage(rideCount: UInt = 0) -> [UInt32] {
-        let encoded = sequence.encode(rideCount) ?? sequence.zeroBlock
+    public func resetImage(rideCount: UInt? = nil) -> [UInt32] {
+        let encoded = sequence.encode(rideCount ?? resetRideCount) ?? sequence.zeroBlock
         return [block0, block1, block2, block3, block4, encoded, encoded, block7]
     }
 
     public static let all: [ResetSequence] = [
-        .init(sequence: .mercury, block1: 0x9BFE0062, block2: 0x5BA4A3DE, block3: 0xD5D1D713, block4: 0xD5D1D713),
+        .init(sequence: .mercury, block1: 0x9BFE0062, block2: 0x5BA4A3DE, block3: 0xD5D1D713, block4: 0xD5D1D713, resetRideCount: 500),
         .init(sequence: .venus, block1: 0x43FE0062, block2: 0x5BA494A3, block3: 0xD6D1C733, block4: 0xD6D1C733),
         .init(sequence: .earth, block1: 0xD3FE005D, block2: 0x522BC69D, block3: 0x650432F5, block4: 0x650432F5),
         .init(sequence: .pluto, block1: 0x83FE002A, block2: 0xF100C064, block3: 0xA3045930, block4: 0xA3045930),

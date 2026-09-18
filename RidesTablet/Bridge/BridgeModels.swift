@@ -194,8 +194,117 @@ public struct BridgeErrorResponse: Codable, Equatable, Sendable {
     }
 }
 
-/// Strict v1 response for GET /api/v1/hardware/mercury/mirrors.
-public struct BridgeMercuryMirrorResponse: Codable, Equatable, Sendable {
+/// Strict v1 response for GET /api/v1/hardware/page0/scan.
+public struct BridgePage0ScanResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let block4: String
+    public let block5: String
+    public let block6: String
+    public let signalMillivolts: Int
+
+    public init(version: String = "v1", block4: String, block5: String, block6: String, signalMillivolts: Int) throws {
+        guard version == "v1",
+              BridgeValueValidation.isUppercaseHex32(block4),
+              BridgeValueValidation.isUppercaseHex32(block5),
+              BridgeValueValidation.isUppercaseHex32(block6),
+              signalMillivolts >= 0 else {
+            throw BridgeContractError.invalidPage0Response
+        }
+        self.version = version
+        self.block4 = block4
+        self.block5 = block5
+        self.block6 = block6
+        self.signalMillivolts = signalMillivolts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "block4", "block5", "block6", "signalMillivolts"])
+        try self.init(
+            version: container.decode(String.self, forKey: .version),
+            block4: container.decode(String.self, forKey: .block4),
+            block5: container.decode(String.self, forKey: .block5),
+            block6: container.decode(String.self, forKey: .block6),
+            signalMillivolts: container.decode(Int.self, forKey: .signalMillivolts)
+        )
+    }
+}
+
+public struct BridgePage0BlockValue: Codable, Equatable, Sendable {
+    public let block: Int
+    public let value: String
+
+    fileprivate init(block: Int, value: String) throws {
+        guard (0...7).contains(block),
+              BridgeValueValidation.isUppercaseHex32(value) else {
+            throw BridgeContractError.invalidPage0Response
+        }
+        self.block = block
+        self.value = value
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["block", "value"])
+        try self.init(
+            block: container.decode(Int.self, forKey: .block),
+            value: container.decode(String.self, forKey: .value)
+        )
+    }
+}
+
+/// Strict v1 response for GET /api/v1/hardware/page0/missing.
+public struct BridgePage0MissingBlocksResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let blocks: [BridgePage0BlockValue]
+
+    public init(version: String = "v1", blocks: [BridgePage0BlockValue]) throws {
+        guard version == "v1",
+              blocks.count == Page0MissingBlocks.allowlist.count,
+              zip(Page0MissingBlocks.allowlist, blocks.map(\.block)).allSatisfy(==) else {
+            throw BridgeContractError.invalidPage0Response
+        }
+        self.version = version
+        self.blocks = blocks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "blocks"])
+        try self.init(
+            version: container.decode(String.self, forKey: .version),
+            blocks: container.decode([BridgePage0BlockValue].self, forKey: .blocks)
+        )
+    }
+}
+
+/// Strict v1 response for GET /api/v1/hardware/page0/blocks1to6.
+public struct BridgePage0Blocks1To6Response: Codable, Equatable, Sendable {
+    public let version: String
+    public let blocks: [BridgePage0BlockValue]
+
+    public init(version: String = "v1", blocks: [BridgePage0BlockValue]) throws {
+        guard version == "v1",
+              blocks.count == Page0Blocks1To6.allowlist.count,
+              zip(Page0Blocks1To6.allowlist, blocks.map(\.block)).allSatisfy(==) else {
+            throw BridgeContractError.invalidPage0Response
+        }
+        self.version = version
+        self.blocks = blocks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "blocks"])
+        try self.init(
+            version: container.decode(String.self, forKey: .version),
+            blocks: container.decode([BridgePage0BlockValue].self, forKey: .blocks)
+        )
+    }
+}
+
+/// Strict v1 response for GET /api/v1/hardware/page0/mirrors.
+public struct BridgePage0MirrorResponse: Codable, Equatable, Sendable {
     public let version: String
     public let block5: String
     public let block6: String
@@ -204,7 +313,7 @@ public struct BridgeMercuryMirrorResponse: Codable, Equatable, Sendable {
         guard version == "v1",
               BridgeValueValidation.isUppercaseHex32(block5),
               BridgeValueValidation.isUppercaseHex32(block6) else {
-            throw BridgeContractError.invalidMercuryResponse
+            throw BridgeContractError.invalidPage0Response
         }
         self.version = version
         self.block5 = block5
@@ -222,17 +331,17 @@ public struct BridgeMercuryMirrorResponse: Codable, Equatable, Sendable {
     }
 }
 
-/// One conditional raw-block mutation. Slice 2 permits only blocks 5 and 6.
-public struct BridgeMercuryMutation: Codable, Equatable, Sendable {
+/// One conditional raw-block mutation. Reset may target blocks 1...6; ride writes use 5/6 only.
+public struct BridgePage0Mutation: Codable, Equatable, Sendable {
     public let block: Int
     public let expected: String
     public let desired: String
 
     public init(block: Int, expected: String, desired: String) throws {
-        guard block == 5 || block == 6,
+        guard Page0Blocks1To6.allowlist.contains(block),
               BridgeValueValidation.isUppercaseHex32(expected),
               BridgeValueValidation.isUppercaseHex32(desired) else {
-            throw BridgeContractError.invalidMercuryMutation
+            throw BridgeContractError.invalidPage0Mutation
         }
         self.block = block
         self.expected = expected
@@ -250,15 +359,15 @@ public struct BridgeMercuryMutation: Codable, Equatable, Sendable {
     }
 }
 
-/// Strict v1 request for POST /api/v1/hardware/mercury/mutations.
-public struct BridgeMercuryMutationRequest: Codable, Equatable, Sendable {
+/// Strict v1 request for POST /api/v1/hardware/page0/mutations.
+public struct BridgePage0MutationRequest: Codable, Equatable, Sendable {
     public let version: String
-    public let mutations: [BridgeMercuryMutation]
+    public let mutations: [BridgePage0Mutation]
 
-    public init(version: String = "v1", mutations: [BridgeMercuryMutation]) throws {
-        guard version == "v1", (1...2).contains(mutations.count),
+    public init(version: String = "v1", mutations: [BridgePage0Mutation]) throws {
+        guard version == "v1", (1...6).contains(mutations.count),
               Set(mutations.map(\.block)).count == mutations.count else {
-            throw BridgeContractError.invalidMercuryMutation
+            throw BridgeContractError.invalidPage0Mutation
         }
         self.version = version
         self.mutations = mutations
@@ -269,12 +378,12 @@ public struct BridgeMercuryMutationRequest: Codable, Equatable, Sendable {
         try requireExactKeys(decoder, ["version", "mutations"])
         try self.init(
             version: container.decode(String.self, forKey: .version),
-            mutations: container.decode([BridgeMercuryMutation].self, forKey: .mutations)
+            mutations: container.decode([BridgePage0Mutation].self, forKey: .mutations)
         )
     }
 }
 
-public struct BridgeMercuryMutationBlockResult: Codable, Equatable, Sendable {
+public struct BridgePage0MutationBlockResult: Codable, Equatable, Sendable {
     public let block: Int
     public let status: String
     public let expected: String
@@ -282,11 +391,11 @@ public struct BridgeMercuryMutationBlockResult: Codable, Equatable, Sendable {
     public let actual: String?
 
     fileprivate init(block: Int, status: String, expected: String, desired: String, actual: String?) throws {
-        guard block == 5 || block == 6,
+        guard Page0Blocks1To6.allowlist.contains(block),
               BridgeValueValidation.isUppercaseHex32(expected),
               BridgeValueValidation.isUppercaseHex32(desired),
               actual == nil || BridgeValueValidation.isUppercaseHex32(actual!) else {
-            throw BridgeContractError.invalidMercuryResponse
+            throw BridgeContractError.invalidPage0Response
         }
         self.block = block
         self.status = status
@@ -308,17 +417,17 @@ public struct BridgeMercuryMutationBlockResult: Codable, Equatable, Sendable {
     }
 }
 
-public struct BridgeMercuryRollbackResult: Codable, Equatable, Sendable {
+public struct BridgePage0RollbackResult: Codable, Equatable, Sendable {
     public let block: Int
     public let expected: String
     public let actual: String?
     public let succeeded: Bool
 
     fileprivate init(block: Int, expected: String, actual: String?, succeeded: Bool) throws {
-        guard block == 5 || block == 6,
+        guard Page0Blocks1To6.allowlist.contains(block),
               BridgeValueValidation.isUppercaseHex32(expected),
               actual == nil || BridgeValueValidation.isUppercaseHex32(actual!) else {
-            throw BridgeContractError.invalidMercuryResponse
+            throw BridgeContractError.invalidPage0Response
         }
         self.block = block
         self.expected = expected
@@ -339,21 +448,21 @@ public struct BridgeMercuryRollbackResult: Codable, Equatable, Sendable {
 }
 
 /// Strict and semantically validated v1 response for the conditional mutation endpoint.
-public struct BridgeMercuryMutationResponse: Codable, Equatable, Sendable {
+public struct BridgePage0MutationResponse: Codable, Equatable, Sendable {
     public let version: String
     public let status: String
-    public let results: [BridgeMercuryMutationBlockResult]
+    public let results: [BridgePage0MutationBlockResult]
     public let rollbackStatus: String
-    public let rollback: [BridgeMercuryRollbackResult]
+    public let rollback: [BridgePage0RollbackResult]
 
     public init(
         version: String,
         status: String,
-        results: [BridgeMercuryMutationBlockResult],
+        results: [BridgePage0MutationBlockResult],
         rollbackStatus: String,
-        rollback: [BridgeMercuryRollbackResult]
+        rollback: [BridgePage0RollbackResult]
     ) throws {
-        guard version == "v1", !results.isEmpty, results.count <= 2,
+        guard version == "v1", !results.isEmpty, results.count <= 6,
               Set(results.map(\.block)).count == results.count,
               results.allSatisfy({ ["written", "alreadyApplied", "conflict", "verifyFailed", "notAttempted"].contains($0.status) }),
               ["written", "alreadyApplied", "conflict", "verifyFailed"].contains(status),
@@ -362,19 +471,19 @@ public struct BridgeMercuryMutationResponse: Codable, Equatable, Sendable {
                   results.contains(where: { $0.block == result.block && $0.expected == result.expected })
               }),
               Set(rollback.map(\.block)).count == rollback.count else {
-            throw BridgeContractError.invalidMercuryResponse
+            throw BridgeContractError.invalidPage0Response
         }
 
         switch status {
         case "written":
             guard rollbackStatus == "notNeeded", rollback.isEmpty,
                   results.allSatisfy({ ($0.status == "written" || $0.status == "alreadyApplied") && $0.actual == $0.desired }) else {
-                throw BridgeContractError.invalidMercuryResponse
+                throw BridgeContractError.invalidPage0Response
             }
         case "alreadyApplied":
             guard rollbackStatus == "notNeeded", rollback.isEmpty,
                   results.allSatisfy({ $0.status == "alreadyApplied" && $0.actual == $0.desired }) else {
-                throw BridgeContractError.invalidMercuryResponse
+                throw BridgeContractError.invalidPage0Response
             }
         case "conflict":
             // The bridge reports the complete preflight set as `conflict` when any
@@ -387,28 +496,28 @@ public struct BridgeMercuryMutationResponse: Codable, Equatable, Sendable {
                       guard let actual = result.actual else { return false }
                       return actual != result.expected && actual != result.desired
                   }) else {
-                throw BridgeContractError.invalidMercuryResponse
+                throw BridgeContractError.invalidPage0Response
             }
         case "verifyFailed":
             guard results.contains(where: { $0.status == "verifyFailed" }) else {
-                throw BridgeContractError.invalidMercuryResponse
+                throw BridgeContractError.invalidPage0Response
             }
             if rollbackStatus == "notNeeded" {
-                guard rollback.isEmpty else { throw BridgeContractError.invalidMercuryResponse }
+                guard rollback.isEmpty else { throw BridgeContractError.invalidPage0Response }
             } else {
-                guard !rollback.isEmpty else { throw BridgeContractError.invalidMercuryResponse }
+                guard !rollback.isEmpty else { throw BridgeContractError.invalidPage0Response }
                 if rollbackStatus == "rollbackSucceeded" && !rollback.allSatisfy(\.succeeded) {
-                    throw BridgeContractError.invalidMercuryResponse
+                    throw BridgeContractError.invalidPage0Response
                 }
                 if rollbackStatus == "rollbackIncomplete" && rollback.allSatisfy(\.succeeded) {
-                    throw BridgeContractError.invalidMercuryResponse
+                    throw BridgeContractError.invalidPage0Response
                 }
             }
             guard rollback.allSatisfy({ !$0.succeeded || $0.actual == $0.expected }) else {
-                throw BridgeContractError.invalidMercuryResponse
+                throw BridgeContractError.invalidPage0Response
             }
         default:
-            throw BridgeContractError.invalidMercuryResponse
+            throw BridgeContractError.invalidPage0Response
         }
 
         self.version = version
@@ -424,9 +533,9 @@ public struct BridgeMercuryMutationResponse: Codable, Equatable, Sendable {
         try self.init(
             version: container.decode(String.self, forKey: .version),
             status: container.decode(String.self, forKey: .status),
-            results: container.decode([BridgeMercuryMutationBlockResult].self, forKey: .results),
+            results: container.decode([BridgePage0MutationBlockResult].self, forKey: .results),
             rollbackStatus: container.decode(String.self, forKey: .rollbackStatus),
-            rollback: container.decode([BridgeMercuryRollbackResult].self, forKey: .rollback)
+            rollback: container.decode([BridgePage0RollbackResult].self, forKey: .rollback)
         )
     }
 }
@@ -434,13 +543,13 @@ public struct BridgeMercuryMutationResponse: Codable, Equatable, Sendable {
 public enum BridgeContractError: Error, Equatable, Sendable {
     case invalidPairStatus
     case invalidBlockValue
-    case invalidMercuryMutation
-    case invalidMercuryResponse
+    case invalidPage0Mutation
+    case invalidPage0Response
 }
 
 // Short aliases keep the DTO names easy to use at call sites while retaining their
 // transport-specific meaning in API documentation.
-public typealias MercuryMirrorReadResponse = BridgeMercuryMirrorResponse
-public typealias MercuryMutation = BridgeMercuryMutation
-public typealias MercuryMutationRequest = BridgeMercuryMutationRequest
-public typealias MercuryMutationResponse = BridgeMercuryMutationResponse
+public typealias Page0MirrorReadResponse = BridgePage0MirrorResponse
+public typealias Page0Mutation = BridgePage0Mutation
+public typealias Page0MutationRequest = BridgePage0MutationRequest
+public typealias Page0MutationResponse = BridgePage0MutationResponse

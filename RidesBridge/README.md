@@ -16,21 +16,43 @@ Wildcard binding exposes the authenticated HTTP bridge to private-network interf
 
 `--everyday` is intentionally strict: it must be the exact, single launch flag. Duplicates, attached values, unknown extra launch options, and malformed forms fail before ASP.NET argument parsing. Without the flag, the loopback default and existing ASP.NET/configuration behavior are unchanged. `--help` prints the launch summary.
 
+## Fake PM3 launch
+
+For iPad Wi-Fi smoke without USB hardware, run exactly:
+
+```sh
+dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
+```
+
+Fake-pm3 mode reuses the everyday local-network bind semantics: wildcard IPv4 (`0.0.0.0`), the same bounded port range **5080 through 5179**, reachable private URL printing, and best-effort Bonjour. It injects a deterministic in-process `FakePm3Device` instead of opening USB or auto-discovering a serial port. `--fake-pm3` is mutually exclusive with `--everyday` and uses the same strict single-flag parsing rules.
+
+The seeded mirror blocks are fixed for repeatable iPad decode smoke:
+
+| Field | Value |
+| --- | --- |
+| Block 5 | `BBC7FD03` |
+| Block 6 | `BBC7FD03` |
+| Sequence | `venus` |
+| Rides remaining | `180` |
+
+These values match `EncodingSequences.Venus.Encode(180)` and decode on the iPad through the registered Venus sequence.
+
 ## Durable state and precedence
 
-The default state directory remains the platform ApplicationData location under `ElevatorTokens/RidesBridge`. Everyday mode preserves it, so the bridge identity and paired-client credentials survive port changes. Explicit durable paths are honored:
+The default state directory remains the platform ApplicationData location under `ElevatorTokens/RidesBridge`. Everyday and fake-pm3 modes preserve it, so the bridge identity and paired-client credentials survive port changes. Explicit durable paths are honored:
 
 1. `Bridge:DataDirectory` / `BRIDGE_DATA_DIRECTORY` controls the default directory for derived files.
 2. `Bridge:PairedClientsPath` / `BRIDGE_PAIRED_CLIENTS_PATH` overrides the paired-client store path.
 3. `Bridge:IdentityPath` / `BRIDGE_IDENTITY_PATH` overrides the bridge identity path.
 4. Within each category, the `Bridge:*` setting wins over its environment alias.
 
-Everyday mode owns the bind and PM3 discovery settings even when conflicting bind, fixed-port, or auto-discovery configuration is present. A configured PM3 client executable path may still be used to locate the discovery script. Other settings retain their normal configuration behavior.
+Everyday mode owns the bind and PM3 discovery settings even when conflicting bind, fixed-port, or auto-discovery configuration is present. Fake-pm3 mode owns the bind and disables PM3 USB discovery while still honoring durable path overrides. A configured PM3 client executable path may still be used to locate the discovery script in everyday mode only. Other settings retain their normal configuration behavior.
 
 ## Tests
 
-Focused non-hardware tests cover process-level help/error behavior, strict launch parsing, port gaps/exhaustion/range boundaries, real IPv4 socket cleanup, configuration precedence, and propagation of the selected port into Bonjour. The everyday process smoke test starts no PM3 connection. Run them with:
+Focused non-hardware tests cover process-level help/error behavior, strict launch parsing, port gaps/exhaustion/range boundaries, real IPv4 socket cleanup, configuration precedence, and propagation of the selected port into Bonjour. The everyday and fake-pm3 process smoke tests start no PM3 connection. Run them with:
 
 ```sh
 dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter FullyQualifiedName~EverydayLaunchTests
+dotnet test RidesBridge.Tests/RidesBridge.Tests.csproj --filter FullyQualifiedName~FakePm3LaunchTests
 ```

@@ -8,8 +8,10 @@ public enum BridgeConnectionState: Equatable, Sendable {
     case searching
     case connected
     case reading
-    case readingMercury
-    case settingMercury
+    case readingPage0
+    case scanningPage0
+    case settingPage0
+    case resettingPage0
     case relocating
     case authenticationRequired
     case failed(String)
@@ -22,8 +24,10 @@ public enum BridgeConnectionState: Equatable, Sendable {
         case .searching: "Searching for saved bridge…"
         case .connected: "Connected"
         case .reading: "Reading block 5…"
-        case .readingMercury: "Reading Mercury rides…"
-        case .settingMercury: "Setting Mercury rides…"
+        case .readingPage0: "Reading page0 rides…"
+        case .scanningPage0: "Scanning page0 token…"
+        case .settingPage0: "Setting page0 rides…"
+        case .resettingPage0: "Resetting page0 token…"
         case .relocating: "Checking new bridge address…"
         case .authenticationRequired: "Pairing required"
         case .failed: "Action failed"
@@ -32,20 +36,20 @@ public enum BridgeConnectionState: Equatable, Sendable {
 
     public var isBusy: Bool {
         switch self {
-        case .pairing, .reading, .readingMercury, .settingMercury, .relocating: true
+        case .pairing, .reading, .readingPage0, .scanningPage0, .settingPage0, .resettingPage0, .relocating: true
         default: false
         }
     }
 
     public var isPaired: Bool {
         switch self {
-        case .restored, .searching, .connected, .reading, .readingMercury, .settingMercury, .relocating: true
+        case .restored, .searching, .connected, .reading, .readingPage0, .scanningPage0, .settingPage0, .resettingPage0, .relocating: true
         default: false
         }
     }
 }
 
-private struct MercuryWriteSnapshot: Equatable, Sendable {
+private struct Page0WriteSnapshot: Equatable, Sendable {
     let block5: String
     let block6: String
 }
@@ -62,17 +66,24 @@ public final class BridgeConnectionModel: ObservableObject {
     @Published public private(set) var state: BridgeConnectionState
     @Published public private(set) var message: String?
     @Published public private(set) var lastBlock5Value: String?
-    @Published public private(set) var lastMercuryBlock5Value: String?
-    @Published public private(set) var lastMercuryBlock6Value: String?
-    @Published public private(set) var lastMercuryRead: MercuryRideRead?
+    @Published public private(set) var lastPage0Block5Value: String?
+    @Published public private(set) var lastPage0Block6Value: String?
+    @Published public private(set) var lastScanBlock4Value: String?
+    @Published public private(set) var lastSignalMillivolts: Int?
+    @Published public private(set) var lastUnknownDumpURL: URL?
+    @Published public private(set) var lastPage0Read: RideRead?
     @Published public private(set) var bonjourDiscoveryState: BridgeBonjourDiscoveryState
     @Published public private(set) var bonjourCandidates: [BridgeBonjourCandidate]
     @Published public private(set) var offeredBonjourCandidate: BridgeBonjourCandidate?
     @Published public private(set) var rejectedBonjourResultCount: Int
-    @Published public var targetMercuryRidesText: String
+    @Published public var targetPage0RidesText: String
+    @Published public var selectedResetSequence: RideSequence?
+    @Published public private(set) var lastResetBlockValues: [Int: String] = [:]
 #if DEBUG
     @Published public private(set) var physicalAcceptanceSummary: BridgePhysicalAcceptanceSummary?
     @Published public private(set) var physicalAcceptanceFailure: BridgePhysicalAcceptanceFailure?
+    @Published public private(set) var slice4PhysicalAcceptanceSummary: BridgeSlice4PhysicalAcceptanceSummary?
+    @Published public private(set) var slice4PhysicalAcceptanceFailure: BridgeSlice4PhysicalAcceptanceFailure?
 #endif
 
     private let credentialStore: any BridgeCredentialStore
@@ -82,6 +93,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private let bonjourBrowserSource: any BridgeBonjourBrowserSource
     private let bonjourQuiescenceDelay: @Sendable () async throws -> Void
     private let relocationNonceGenerator: @Sendable () -> String
+    private let dumpStore: UnknownDumpStore
     private var client: BridgeClient?
     private var bonjourBrowseGeneration = 0
     private var localOperationGeneration = 0
@@ -101,12 +113,13 @@ public final class BridgeConnectionModel: ObservableObject {
     private var automaticReconnectToken = 0
     private var explicitBonjourRelocationTask: Task<Bool, Never>?
     private var explicitBonjourRelocationToken = 0
-    private var mercuryWriteSnapshot: MercuryWriteSnapshot?
+    private var page0WriteSnapshot: Page0WriteSnapshot?
     private var credentialRestoreFailed = false
     private var launchAddressOverrideApplied = false
     private var launchAddressOverrideWasProvided = false
 #if DEBUG
     private var launchPhysicalAcceptanceAttempted = false
+    private var launchSlice4PhysicalAcceptanceAttempted = false
 #endif
 
     public init(
@@ -123,7 +136,8 @@ public final class BridgeConnectionModel: ObservableObject {
         },
         relocationNonceGenerator: @escaping @Sendable () -> String = {
             BridgeRelocationProof.makeNonce()
-        }
+        },
+        dumpStore: UnknownDumpStore = UnknownDumpStore()
     ) {
         self.credentialStore = credentialStore
         self.session = session
@@ -132,21 +146,29 @@ public final class BridgeConnectionModel: ObservableObject {
         self.bonjourBrowserSource = bonjourBrowserSource
         self.bonjourQuiescenceDelay = bonjourQuiescenceDelay
         self.relocationNonceGenerator = relocationNonceGenerator
+        self.dumpStore = dumpStore
         self.bridgeURLText = defaultBridgeURL
         self.state = .unconfigured
         self.message = nil
         self.lastBlock5Value = nil
-        self.lastMercuryBlock5Value = nil
-        self.lastMercuryBlock6Value = nil
-        self.lastMercuryRead = nil
+        self.lastPage0Block5Value = nil
+        self.lastPage0Block6Value = nil
+        self.lastScanBlock4Value = nil
+        self.lastSignalMillivolts = nil
+        self.lastUnknownDumpURL = nil
+        self.lastPage0Read = nil
         self.bonjourDiscoveryState = .idle
         self.bonjourCandidates = []
         self.offeredBonjourCandidate = nil
         self.rejectedBonjourResultCount = 0
-        self.targetMercuryRidesText = ""
+        self.targetPage0RidesText = ""
+        self.selectedResetSequence = nil
+        self.lastResetBlockValues = [:]
 #if DEBUG
         self.physicalAcceptanceSummary = nil
         self.physicalAcceptanceFailure = nil
+        self.slice4PhysicalAcceptanceSummary = nil
+        self.slice4PhysicalAcceptanceFailure = nil
 #endif
         restore()
     }
@@ -239,21 +261,21 @@ public final class BridgeConnectionModel: ObservableObject {
         !isBusy && isPaired && hasSavedCredential && hasEnteredBridgeAddressChange
     }
 
-    public var hasFreshMercurySnapshot: Bool { mercuryWriteSnapshot != nil }
-    public var resolvedMercuryRides: UInt? { lastMercuryRead?.rides }
-    public var mercurySourceBlockNumber: Int? { lastMercuryRead?.sourceBlockNumber }
-    public var mercuryBlocksMatch: Bool? { lastMercuryRead.map(\.blocksMatched) }
-    public var mercuryWarningMessage: String? { lastMercuryRead?.warningMessage }
-    public var mercuryWarningDisplay: String? {
-        guard let read = lastMercuryRead else { return nil }
+    public var hasFreshPage0Snapshot: Bool { page0WriteSnapshot != nil }
+    public var resolvedPage0Rides: UInt? { lastPage0Read?.rides }
+    public var page0SourceBlockNumber: Int? { lastPage0Read?.sourceBlockNumber }
+    public var page0BlocksMatch: Bool? { lastPage0Read.map(\.blocksMatched) }
+    public var page0WarningMessage: String? { lastPage0Read?.warningMessage }
+    public var page0WarningDisplay: String? {
+        guard let read = lastPage0Read else { return nil }
         if let warning = read.warningMessage { return warning }
         return read.status == .unknownEncodingSequence
-            ? "Warning: Mercury mirror encoding is unknown."
+            ? "Warning: page0 mirror encoding is unknown."
             : "None"
     }
 
-    public var canSetMercuryRides: Bool {
-        !isBusy && isPaired && isWritableMercurySnapshot && parsedTargetMercuryRides != nil
+    public var canSetPage0Rides: Bool {
+        !isBusy && isPaired && isWritablePage0Snapshot && parsedTargetPage0Rides != nil
     }
 
     public func restore() {
@@ -300,7 +322,7 @@ public final class BridgeConnectionModel: ObservableObject {
         }
         state = .pairing
         message = nil
-        clearMercurySnapshot()
+        clearPage0Snapshot()
         lastBlock5Value = nil
         let operationGeneration = localOperationGeneration
 
@@ -896,6 +918,25 @@ public final class BridgeConnectionModel: ObservableObject {
             physicalAcceptanceSummary = nil
         }
     }
+
+    /// Runs the launch-triggered Slice 4 scan + Venus reset acceptance only with a
+    /// persisted pairing, a live bearer, and a nonbusy model.
+    public func runLaunchSlice4PhysicalAcceptanceIfRequested() async {
+        guard !launchSlice4PhysicalAcceptanceAttempted else { return }
+        launchSlice4PhysicalAcceptanceAttempted = true
+        guard !isBusy, hasSavedCredential, let client, client.hasCredential else { return }
+
+        let result = await BridgeSlice4PhysicalAcceptanceCoordinator(client: client).run()
+        switch result {
+        case .success(let summary):
+            slice4PhysicalAcceptanceSummary = summary
+            slice4PhysicalAcceptanceFailure = nil
+            message = summary.conciseDescription
+        case .failure(let failure):
+            slice4PhysicalAcceptanceFailure = failure
+            slice4PhysicalAcceptanceSummary = nil
+        }
+    }
 #endif
 
     /// Moves a saved bearer to a new local bridge address transactionally.
@@ -1074,7 +1115,7 @@ public final class BridgeConnectionModel: ObservableObject {
         client?.clearCredential()
         client = nil
         lastBlock5Value = nil
-        clearMercurySnapshot()
+        clearPage0Snapshot()
         state = .unconfigured
 
         do {
@@ -1116,9 +1157,9 @@ public final class BridgeConnectionModel: ObservableObject {
         }
     }
 
-    /// Reads a fresh pair of Mercury mirrors. The raw pair is the only optimistic
-    /// concurrency snapshot that can authorize a later set operation.
-    public func readMercuryRides() async {
+    /// Targeted scan: block 4 + mirrors 5/6 + signal. Known tokens stop after decode;
+    /// unknown tokens fetch the missing five blocks once and persist a local dump.
+    public func scanPage0Token() async {
         guard !isBusy else { return }
         guard let client, client.hasCredential else {
             state = .authenticationRequired
@@ -1126,125 +1167,282 @@ public final class BridgeConnectionModel: ObservableObject {
             return
         }
 
-        state = .readingMercury
+        state = .scanningPage0
+        message = nil
+        lastUnknownDumpURL = nil
+        let operationGeneration = localOperationGeneration
+        do {
+            let scan = try await client.scanPage0()
+            guard operationGeneration == localOperationGeneration else { return }
+            lastScanBlock4Value = scan.block4
+            lastSignalMillivolts = scan.signalMillivolts
+            lastPage0Block5Value = scan.block5
+            lastPage0Block6Value = scan.block6
+
+            guard let block5 = UInt32(scan.block5, radix: 16),
+                  let block6 = UInt32(scan.block6, radix: 16) else {
+                invalidatePage0Snapshot()
+                failPage0("The bridge returned invalid page0 scan values.")
+                return
+            }
+
+            let rideRead = RideBlockResolver.resolve(block5: block5, block6: block6)
+            lastPage0Read = rideRead
+            page0WriteSnapshot = rideRead.status == .success && rideRead.rides != nil
+                ? Page0WriteSnapshot(block5: scan.block5, block6: scan.block6)
+                : nil
+
+            if rideRead.status == .success, let sequence = rideRead.sequence, let rides = rideRead.rides {
+                publishAuthenticatedConnection()
+                message = "Known \(sequence.rawValue) token with \(rides) rides. Block 4 \(scan.block4), signal \(scan.signalMillivolts) mV."
+                return
+            }
+
+            let missing = try await client.readPage0MissingBlocks()
+            guard operationGeneration == localOperationGeneration else { return }
+            let blocks = try Page0ScanWorkflow.assemblePage0(scan: scan, missing: missing)
+            let unknown = UnknownToken(blocks: blocks)
+            do {
+                lastUnknownDumpURL = try dumpStore.save(unknown)
+                publishAuthenticatedConnection()
+                message = RidesViewModel.unknownMessage
+            } catch {
+                lastUnknownDumpURL = nil
+                let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                let failure = detail.isEmpty ? String(describing: error) : detail
+                failPage0("Unknown token — log failed: \(failure)")
+            }
+        } catch BridgeClientError.unauthorized {
+            guard operationGeneration == localOperationGeneration else { return }
+            handleUnauthorized()
+        } catch BridgeClientError.server(let code, _, _) where code == "no_chip" {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            state = .failed(RidesViewModel.noChipMessage)
+            message = RidesViewModel.noChipMessage
+        } catch BridgeClientError.server(let code, let serverMessage, _) where code == "lf_tune_failed" || code == "page0_read_failed" {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            failPage0("Page0 scan failed: \(serverMessage)")
+        } catch is CancellationError {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            lastUnknownDumpURL = nil
+            failPage0("Page0 scan was cancelled before completion.")
+        } catch {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            lastUnknownDumpURL = nil
+            failPage0("Page0 scan failed: \(errorDescription(error))")
+        }
+    }
+
+    /// Reads a fresh pair of page0 mirrors. The raw pair is the only optimistic
+    /// concurrency snapshot that can authorize a later set operation.
+    public func readPage0Rides() async {
+        guard !isBusy else { return }
+        guard let client, client.hasCredential else {
+            state = .authenticationRequired
+            message = BridgeClientError.missingCredential.localizedDescription
+            return
+        }
+
+        state = .readingPage0
         message = nil
         let operationGeneration = localOperationGeneration
         do {
-            let response = try await client.readMercuryMirrors()
+            let response = try await client.readPage0Mirrors()
             guard operationGeneration == localOperationGeneration else { return }
-            applyMercurySnapshot(block5: response.block5, block6: response.block6)
+            applyPage0Snapshot(block5: response.block5, block6: response.block6)
             publishAuthenticatedConnection()
-            if lastMercuryRead?.status == .success {
-                message = "Mercury rides read successfully."
+            if lastPage0Read?.status == .success {
+                message = "Page0 rides read successfully."
             } else {
-                message = "Mercury mirrors read, but the ride encoding is unknown."
+                message = "Page0 mirrors read, but the ride encoding is unknown."
             }
         } catch BridgeClientError.unauthorized {
             guard operationGeneration == localOperationGeneration else { return }
             handleUnauthorized()
         } catch is CancellationError {
             guard operationGeneration == localOperationGeneration else { return }
-            invalidateMercurySnapshot()
-            failMercury("Mercury read was cancelled. Read Mercury rides again before setting a value.")
+            invalidatePage0Snapshot()
+            failPage0("Page0 read was cancelled. Read page0 rides again before setting a value.")
         } catch {
             guard operationGeneration == localOperationGeneration else { return }
-            invalidateMercurySnapshot()
-            failMercury("Mercury read failed: \(errorDescription(error)). Read Mercury rides again before setting a value.")
+            invalidatePage0Snapshot()
+            failPage0("Page0 read failed: \(errorDescription(error)). Read page0 rides again before setting a value.")
         }
     }
 
-    /// Sets both Mercury mirrors from the most recent successful raw snapshot.
+    /// Sets both page0 mirrors from the most recent successful raw snapshot.
     /// There is deliberately no retry or implicit refresh after an ambiguous result.
-    public func setMercuryRides() async {
+    public func setPage0Rides() async {
         guard !isBusy else { return }
         guard let client, client.hasCredential else {
             state = .authenticationRequired
             message = BridgeClientError.missingCredential.localizedDescription
             return
         }
-        guard let read = lastMercuryRead else {
-            failMercury("Read Mercury rides successfully first. A fresh mirror snapshot is required before setting rides.")
+        guard let read = lastPage0Read else {
+            failPage0("Read page0 rides successfully first. A fresh mirror snapshot is required before setting rides.")
             return
         }
         guard read.status == .success, read.rides != nil else {
-            failMercury("Setting Mercury rides is disabled for unknown encoding. Read a known Mercury token before setting rides.")
+            failPage0("Setting page0 rides is disabled for unknown encoding. Read a known sequence token before setting rides.")
             return
         }
-        guard let snapshot = mercuryWriteSnapshot, isWritableMercurySnapshot else {
-            failMercury("Read Mercury rides successfully first. A fresh mirror snapshot is required before setting rides.")
+        guard let snapshot = page0WriteSnapshot, isWritablePage0Snapshot else {
+            failPage0("Read page0 rides successfully first. A fresh mirror snapshot is required before setting rides.")
             return
         }
-        guard let target = parsedTargetMercuryRides,
-              let desired = MercuryRideCodec.encode(target) else {
-            failMercury("Target Mercury rides must be a whole number from 0 through 500.")
+        guard let target = parsedTargetPage0Rides,
+              let sequence = read.sequence,
+              let desired = sequence.encode(target) else {
+            failPage0("Target page0 rides must be a whole number from 0 through 500.")
             return
         }
 
         let operationGeneration = localOperationGeneration
         let desiredHex = String(format: "%08X", desired)
         do {
-            let request = try BridgeMercuryMutationRequest(mutations: [
-                try BridgeMercuryMutation(block: 5, expected: snapshot.block5, desired: desiredHex),
-                try BridgeMercuryMutation(block: 6, expected: snapshot.block6, desired: desiredHex),
+            let request = try BridgePage0MutationRequest(mutations: [
+                try BridgePage0Mutation(block: 5, expected: snapshot.block5, desired: desiredHex),
+                try BridgePage0Mutation(block: 6, expected: snapshot.block6, desired: desiredHex),
             ])
-            state = .settingMercury
+            state = .settingPage0
             message = nil
-            let response = try await client.mutateMercury(request)
+            let response = try await client.mutatePage0(request)
             guard operationGeneration == localOperationGeneration else { return }
             if response.status == "conflict" {
-                invalidateMercurySnapshot()
-                failMercury("Mercury set conflicted with a changed token. No blocks were written and no retry was sent; read Mercury rides again before setting a value.")
+                invalidatePage0Snapshot()
+                failPage0("Page0 set conflicted with a changed token. No blocks were written and no retry was sent; read page0 rides again before setting a value.")
                 return
             }
             if response.status == "verifyFailed" {
-                invalidateMercurySnapshot()
-                failMercury("Mercury set verification failed (\(response.rollbackStatus)). No retry was sent; read Mercury rides again before setting a value.")
+                invalidatePage0Snapshot()
+                failPage0("Page0 set verification failed (\(response.rollbackStatus)). No retry was sent; read page0 rides again before setting a value.")
                 return
             }
             let actual = try actualValues(for: response, matching: request)
-            applyMercurySnapshot(block5: actual.block5, block6: actual.block6)
+            applyPage0Snapshot(block5: actual.block5, block6: actual.block6)
             publishAuthenticatedConnection()
             if response.status == "alreadyApplied" {
-                message = "Mercury rides already applied; no blocks were rewritten."
+                message = "Page0 rides already applied; no blocks were rewritten."
             } else {
-                message = "Mercury rides written and verified."
+                message = "Page0 rides written and verified."
             }
         } catch BridgeClientError.unauthorized {
             guard operationGeneration == localOperationGeneration else { return }
-            invalidateMercurySnapshot()
+            invalidatePage0Snapshot()
             handleUnauthorized()
         } catch is CancellationError {
             guard operationGeneration == localOperationGeneration else { return }
-            invalidateMercurySnapshot()
-            failMercury("Mercury set was cancelled. No retry was sent; read Mercury rides again before setting a value.")
+            invalidatePage0Snapshot()
+            failPage0("Page0 set was cancelled. No retry was sent; read page0 rides again before setting a value.")
         } catch {
             guard operationGeneration == localOperationGeneration else { return }
             // Conflict, verify failure, no chip, timeout, disconnect, and malformed
             // responses all invalidate the expected-value snapshot. Never replay them.
-            invalidateMercurySnapshot()
-            failMercury(mutationFailureMessage(error))
+            invalidatePage0Snapshot()
+            failPage0(mutationFailureMessage(error))
         }
     }
 
     /// Convenience for tests and non-text callers; the same bounded input path is used.
-    public func setMercuryRides(_ rides: UInt) async {
-        targetMercuryRidesText = String(rides)
-        await setMercuryRides()
+    public func setPage0Rides(_ rides: UInt) async {
+        targetPage0RidesText = String(rides)
+        await setPage0Rides()
     }
 
-    private var parsedTargetMercuryRides: UInt? {
-        guard !targetMercuryRidesText.isEmpty,
-              targetMercuryRidesText.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
-              let value = UInt(targetMercuryRidesText),
-              (MercuryRideCodec.minimumRides...MercuryRideCodec.maximumRides).contains(value) else {
+    public var canConfirmReset: Bool {
+        selectedResetSequence != nil && !isBusy && isPaired
+    }
+
+    public func clearResetSelection() {
+        selectedResetSequence = nil
+    }
+
+    /// Explicit profile reset: read blocks 1...6, plan conditional mutations, and apply only changed targets.
+    public func confirmResetProfile() async {
+        guard !isBusy else { return }
+        guard let client, client.hasCredential else {
+            state = .authenticationRequired
+            message = BridgeClientError.missingCredential.localizedDescription
+            return
+        }
+        guard let sequence = selectedResetSequence else {
+            failPage0("Choose a reset profile before confirming.")
+            return
+        }
+
+        let profile = ResetSequence.for(sequence)
+        let operationGeneration = localOperationGeneration
+        state = .resettingPage0
+        message = nil
+        do {
+            let current = try await client.readPage0Blocks1To6()
+            guard operationGeneration == localOperationGeneration else { return }
+            let planned = try Page0ResetPlanningWorkflow.planMutations(
+                currentBlocks: current.blocks,
+                profile: profile
+            )
+            if planned.isEmpty {
+                publishAuthenticatedConnection()
+                message = "Reset profile already applied; no blocks were rewritten."
+                return
+            }
+
+            let request = try BridgePage0MutationRequest(mutations: planned.map {
+                try BridgePage0Mutation(block: $0.block, expected: $0.expected, desired: $0.desired)
+            })
+            let response = try await client.mutatePage0(request)
+            guard operationGeneration == localOperationGeneration else { return }
+            if response.status == "conflict" {
+                invalidatePage0Snapshot()
+                failPage0("Reset conflicted with a changed token. No blocks were written and no retry was sent; read page0 blocks again before resetting.")
+                return
+            }
+            if response.status == "verifyFailed" {
+                invalidatePage0Snapshot()
+                failPage0("Reset verification failed (\(response.rollbackStatus)). No retry was sent; read page0 blocks again before resetting.")
+                return
+            }
+
+            applyVerifiedResetResults(response, matching: request)
+            publishAuthenticatedConnection()
+            if response.status == "alreadyApplied" {
+                message = "Reset profile already applied; no blocks were rewritten."
+            } else {
+                message = "Reset profile written and verified."
+            }
+        } catch BridgeClientError.unauthorized {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            handleUnauthorized()
+        } catch is CancellationError {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            failPage0("Reset was cancelled. No retry was sent; read page0 blocks again before resetting.")
+        } catch {
+            guard operationGeneration == localOperationGeneration else { return }
+            invalidatePage0Snapshot()
+            failPage0(resetFailureMessage(error))
+        }
+    }
+
+    private var parsedTargetPage0Rides: UInt? {
+        guard !targetPage0RidesText.isEmpty,
+              targetPage0RidesText.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+              let value = UInt(targetPage0RidesText),
+              (RideBlockResolver.minimumRides...RideBlockResolver.maximumRides).contains(value) else {
             return nil
         }
         return value
     }
 
     private func actualValues(
-        for response: BridgeMercuryMutationResponse,
-        matching request: BridgeMercuryMutationRequest
+        for response: BridgePage0MutationResponse,
+        matching request: BridgePage0MutationRequest
     ) throws -> (block5: String, block6: String) {
         guard Set(response.results.map(\.block)) == Set(request.mutations.map(\.block)),
               response.results.allSatisfy({ result in
@@ -1259,25 +1457,25 @@ public final class BridgeConnectionModel: ObservableObject {
         return (block5, block6)
     }
 
-    private func applyMercurySnapshot(block5: String, block6: String) {
+    private func applyPage0Snapshot(block5: String, block6: String) {
         guard let raw5 = UInt32(block5, radix: 16), let raw6 = UInt32(block6, radix: 16) else {
-            invalidateMercurySnapshot()
-            failMercury("The bridge returned invalid Mercury mirror values. Read Mercury rides again.")
+            invalidatePage0Snapshot()
+            failPage0("The bridge returned invalid page0 mirror values. Read page0 rides again.")
             return
         }
-        lastMercuryBlock5Value = block5
-        lastMercuryBlock6Value = block6
-        let read = MercuryMirrorResolver.resolve(block5: raw5, block6: raw6)
-        lastMercuryRead = read
+        lastPage0Block5Value = block5
+        lastPage0Block6Value = block6
+        let read = RideBlockResolver.resolve(block5: raw5, block6: raw6)
+        lastPage0Read = read
         // Keep unknown/malformed diagnostics visible, but never let them authorize
-        // a write. The resolver must positively identify a Mercury ride value.
-        mercuryWriteSnapshot = read.status == .success && read.rides != nil
-            ? MercuryWriteSnapshot(block5: block5, block6: block6)
+        // a write. The resolver must positively identify a known ride-sequence value.
+        page0WriteSnapshot = read.status == .success && read.rides != nil
+            ? Page0WriteSnapshot(block5: block5, block6: block6)
             : nil
     }
 
-    private var isWritableMercurySnapshot: Bool {
-        mercuryWriteSnapshot != nil && lastMercuryRead?.status == .success && lastMercuryRead?.rides != nil
+    private var isWritablePage0Snapshot: Bool {
+        page0WriteSnapshot != nil && lastPage0Read?.status == .success && lastPage0Read?.rides != nil
     }
 
     private func handleUnauthorized() {
@@ -1285,20 +1483,20 @@ public final class BridgeConnectionModel: ObservableObject {
         client?.clearCredential()
         client = nil
         lastBlock5Value = nil
-        clearMercurySnapshot()
+        clearPage0Snapshot()
         state = .authenticationRequired
         message = BridgeClientError.unauthorized.localizedDescription
     }
 
-    private func clearMercurySnapshot() {
-        mercuryWriteSnapshot = nil
-        lastMercuryBlock5Value = nil
-        lastMercuryBlock6Value = nil
-        lastMercuryRead = nil
+    private func clearPage0Snapshot() {
+        page0WriteSnapshot = nil
+        lastPage0Block5Value = nil
+        lastPage0Block6Value = nil
+        lastPage0Read = nil
     }
 
-    private func invalidateMercurySnapshot() {
-        clearMercurySnapshot()
+    private func invalidatePage0Snapshot() {
+        clearPage0Snapshot()
     }
 
     private func stateAfterBonjourRelocationEnds() -> BridgeConnectionState {
@@ -1327,22 +1525,50 @@ public final class BridgeConnectionModel: ObservableObject {
         message = nil
     }
 
-    private func failMercury(_ detail: String) {
+    private func failPage0(_ detail: String) {
         state = .failed(detail)
         message = detail
     }
 
-    private func mutationFailureMessage(_ error: Error) -> String {
+    private func applyVerifiedResetResults(
+        _ response: BridgePage0MutationResponse,
+        matching request: BridgePage0MutationRequest
+    ) {
+        var verified: [Int: String] = [:]
+        for result in response.results {
+            guard let actual = result.actual else { continue }
+            verified[result.block] = actual
+        }
+        lastResetBlockValues = verified
+        if let block5 = verified[5], let block6 = verified[6] {
+            applyPage0Snapshot(block5: block5, block6: block6)
+        }
+    }
+
+    private func resetFailureMessage(_ error: Error) -> String {
         if case let BridgeClientError.server(code, _, _) = error, code == "conflict" {
-            return "Mercury set conflicted with a changed token. No blocks were written and no retry was sent; read Mercury rides again before setting a value."
+            return "Reset conflicted with a changed token. No blocks were written and no retry was sent; read page0 blocks again before resetting."
         }
         if case let BridgeClientError.server(code, _, _) = error, code == "no_chip" {
-            return "No supported T55xx chip was found. No retry was sent; read Mercury rides again after checking the token."
+            return "No supported T55xx chip was found. No retry was sent; read page0 blocks again after checking the token."
         }
         if let bridgeError = error as? BridgeClientError {
-            return "Mercury set failed: \(bridgeError.localizedDescription) No retry was sent; read Mercury rides again before setting a value."
+            return "Reset failed: \(bridgeError.localizedDescription) No retry was sent; read page0 blocks again before resetting."
         }
-        return "Mercury set failed. No retry was sent; read Mercury rides again before setting a value."
+        return "Reset failed. No retry was sent; read page0 blocks again before resetting."
+    }
+
+    private func mutationFailureMessage(_ error: Error) -> String {
+        if case let BridgeClientError.server(code, _, _) = error, code == "conflict" {
+            return "Page0 set conflicted with a changed token. No blocks were written and no retry was sent; read page0 rides again before setting a value."
+        }
+        if case let BridgeClientError.server(code, _, _) = error, code == "no_chip" {
+            return "No supported T55xx chip was found. No retry was sent; read page0 rides again after checking the token."
+        }
+        if let bridgeError = error as? BridgeClientError {
+            return "Page0 set failed: \(bridgeError.localizedDescription) No retry was sent; read page0 rides again before setting a value."
+        }
+        return "Page0 set failed. No retry was sent; read page0 rides again before setting a value."
     }
 
     private func errorDescription(_ error: Error) -> String {

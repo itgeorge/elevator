@@ -47,8 +47,21 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
         return Task.FromResult(Value);
     }
 
-    public Task<(string Block5Hex, string Block6Hex)> ReadMercuryMirrorAsync(CancellationToken ct = default) =>
+    public Task<(string Block5Hex, string Block6Hex)> ReadPage0MirrorAsync(CancellationToken ct = default) =>
         Task.FromResult((Value, Value));
+
+    public Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default) =>
+        Task.FromResult(new Page0ScanReadResult("D6D1C733", Value, Value, FakePm3Device.SeedSignalMillivolts));
+
+    public Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0MissingBlocksAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Page0BlockReadResult>>(
+        [
+            new(0, "00148040"),
+            new(1, "43FE0062"),
+            new(2, "5BA494A3"),
+            new(3, "D6D1C733"),
+            new(7, "00000000"),
+        ]);
 
     public Task WritePage0Block5Async(string value, CancellationToken ct = default)
     {
@@ -61,6 +74,31 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
         Value = value;
         return Task.CompletedTask;
     }
+
+    public Task<string> ReadPage0Block1To6Async(int block, CancellationToken ct = default) => block switch
+    {
+        5 => ReadPage0Block5Async(ct),
+        6 => ReadPage0Block6Async(ct),
+        _ => Task.FromResult("11111111"),
+    };
+
+    public Task WritePage0Block1To6Async(int block, string value, CancellationToken ct = default) => block switch
+    {
+        5 => WritePage0Block5Async(value, ct),
+        6 => WritePage0Block6Async(value, ct),
+        _ => Task.CompletedTask,
+    };
+
+    public Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0Blocks1To6Async(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Page0BlockReadResult>>(
+        [
+            new(1, "11111111"),
+            new(2, "22222222"),
+            new(3, "33333333"),
+            new(4, "44444444"),
+            new(5, Value),
+            new(6, Value),
+        ]);
 
     public ValueTask DisposeAsync()
     {
@@ -105,6 +143,18 @@ internal sealed class FakeBridgePm3Session : IBridgePm3Session
     {
         _calls.Add("ensure");
         return Task.CompletedTask;
+    }
+
+    public Task StartLfTuneAsync(CancellationToken ct = default)
+    {
+        _calls.Add("tune");
+        return Task.CompletedTask;
+    }
+
+    public Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default)
+    {
+        _calls.Add("signal");
+        return Task.FromResult((uint)FakePm3Device.SeedSignalMillivolts);
     }
 
     public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)

@@ -90,9 +90,7 @@ public enum TokenDecoder {
     }
 
     private static func decodeRide(_ block: UInt32) -> (RideSequence, UInt)? {
-        for sequence in RideSequence.allCases {
-            if let rides = sequence.decode(block) { return (sequence, rides) }
-        }
-        return nil
+        guard let decoded = RideSequenceRegistry.tryDecode(block) else { return nil }
+        return (decoded.sequence, decoded.rides)
     }
 }

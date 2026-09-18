@@ -3,26 +3,35 @@ import SwiftUI
 public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     public static let addressOverrideEnvironmentKey = "RIDES_BRIDGE_ADDRESS_OVERRIDE"
     public static let physicalAcceptanceEnvironmentKey = "RIDES_PHASE2_PHYSICAL_ACCEPTANCE"
+    public static let slice4PhysicalAcceptanceEnvironmentKey = "RIDES_PHASE4_PHYSICAL_ACCEPTANCE"
 
     public let addressOverride: String?
     public let physicalAcceptanceEnabled: Bool
+    public let slice4PhysicalAcceptanceEnabled: Bool
 
-    public init(addressOverride: String? = nil, physicalAcceptanceEnabled: Bool = false) {
+    public init(
+        addressOverride: String? = nil,
+        physicalAcceptanceEnabled: Bool = false,
+        slice4PhysicalAcceptanceEnabled: Bool = false
+    ) {
         self.addressOverride = addressOverride
         self.physicalAcceptanceEnabled = physicalAcceptanceEnabled
+        self.slice4PhysicalAcceptanceEnabled = slice4PhysicalAcceptanceEnabled
     }
 
     public init(environment: [String: String]) {
         self.init(
             addressOverride: environment[Self.addressOverrideEnvironmentKey],
-            physicalAcceptanceEnabled: environment[Self.physicalAcceptanceEnvironmentKey] == "1"
+            physicalAcceptanceEnabled: environment[Self.physicalAcceptanceEnvironmentKey] == "1",
+            slice4PhysicalAcceptanceEnabled: environment[Self.slice4PhysicalAcceptanceEnvironmentKey] == "1"
         )
     }
 
     public init(environmentLookup: @escaping @Sendable (String) -> String?) {
         self.init(
             addressOverride: environmentLookup(Self.addressOverrideEnvironmentKey),
-            physicalAcceptanceEnabled: environmentLookup(Self.physicalAcceptanceEnvironmentKey) == "1"
+            physicalAcceptanceEnabled: environmentLookup(Self.physicalAcceptanceEnvironmentKey) == "1",
+            slice4PhysicalAcceptanceEnabled: environmentLookup(Self.slice4PhysicalAcceptanceEnvironmentKey) == "1"
         )
     }
 
@@ -31,15 +40,17 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     }
 }
 
-/// Temporary Slice 2 Mercury diagnostic screen. Concept A remains in ContentView for later integration.
+/// Temporary Slice 3 page0 diagnostic screen. Concept A remains in ContentView for later integration.
 public struct BridgeConnectionView: View {
     public static let addressOverrideEnvironmentKey = BridgeConnectionLaunchConfiguration.addressOverrideEnvironmentKey
     public static let physicalAcceptanceEnvironmentKey = BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey
+    public static let slice4PhysicalAcceptanceEnvironmentKey = BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey
 
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
     @State private var didApplyLaunchAddressOverride = false
     @State private var didRunLaunchPhysicalAcceptance = false
+    @State private var didRunLaunchSlice4PhysicalAcceptance = false
     @State private var isScannerPresented = false
     @State private var scannerImportInFlight = false
     private let launchConfiguration: BridgeConnectionLaunchConfiguration
@@ -56,7 +67,8 @@ public struct BridgeConnectionView: View {
         self.scannerCoordinator = scannerCoordinator ?? NativeBridgePairingScannerCoordinator()
         launchConfiguration = BridgeConnectionLaunchConfiguration(
             addressOverride: environmentLookup(),
-            physicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey] == "1"
+            physicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey] == "1",
+            slice4PhysicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey] == "1"
         )
     }
 
@@ -216,53 +228,105 @@ public struct BridgeConnectionView: View {
                     }
                 }
 
-                Section("Mercury rides") {
+                Section("Page0 scan") {
                     Button {
-                        Task { await model.readMercuryRides() }
+                        Task { await model.scanPage0Token() }
                     } label: {
-                        Label("Read Mercury rides", systemImage: "arrow.down.circle")
+                        Label("Scan page0 token", systemImage: "dot.radiowaves.left.and.right")
                     }
                     .disabled(model.isBusy || !model.isPaired)
 
-                    if let value = model.lastMercuryBlock5Value {
+                    if let value = model.lastScanBlock4Value {
+                        LabeledContent("Block 4 (Apt #)", value: value)
+                            .fontDesign(.monospaced)
+                    }
+                    if let signal = model.lastSignalMillivolts {
+                        LabeledContent("Signal", value: "\(signal) mV")
+                    }
+                    if let url = model.lastUnknownDumpURL {
+                        LabeledContent("Unknown dump", value: url.lastPathComponent)
+                            .fontDesign(.monospaced)
+                    }
+                }
+
+                Section("Page0 rides") {
+                    Button {
+                        Task { await model.readPage0Rides() }
+                    } label: {
+                        Label("Read page0 rides", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(model.isBusy || !model.isPaired)
+
+                    if let value = model.lastPage0Block5Value {
                         LabeledContent("Raw block 5", value: value)
                             .fontDesign(.monospaced)
                     }
-                    if let value = model.lastMercuryBlock6Value {
+                    if let value = model.lastPage0Block6Value {
                         LabeledContent("Raw block 6", value: value)
                             .fontDesign(.monospaced)
                     }
-                    if let rides = model.resolvedMercuryRides {
+                    if let rides = model.resolvedPage0Rides {
                         LabeledContent("Resolved rides", value: String(rides))
-                    } else if model.lastMercuryRead != nil {
+                    } else if model.lastPage0Read != nil {
                         Text("Resolved rides: unknown encoding")
                             .foregroundStyle(.secondary)
                     }
-                    if model.lastMercuryRead != nil {
+                    if model.lastPage0Read != nil {
                         LabeledContent(
                             "Source",
-                            value: model.mercurySourceBlockNumber.map { "block \($0)" } ?? "unknown"
+                            value: model.page0SourceBlockNumber.map { "block \($0)" } ?? "unknown"
                         )
                         LabeledContent(
                             "Mirrors",
-                            value: model.mercuryBlocksMatch == true ? "matched" : "mismatched"
+                            value: model.page0BlocksMatch == true ? "matched" : "mismatched"
                         )
-                        LabeledContent("Warning", value: model.mercuryWarningDisplay ?? "None")
+                        LabeledContent("Warning", value: model.page0WarningDisplay ?? "None")
                             .foregroundStyle(.orange)
                     }
 
-                    TextField("Target rides (0–500)", text: $model.targetMercuryRidesText)
+                    TextField("Target rides (0–500)", text: $model.targetPage0RidesText)
                         .keyboardType(.numberPad)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
                     Button {
-                        Task { await model.setMercuryRides() }
+                        Task { await model.setPage0Rides() }
                     } label: {
-                        Label("Set Mercury rides", systemImage: "arrow.up.circle")
+                        Label("Set page0 rides", systemImage: "arrow.up.circle")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!model.canSetMercuryRides)
+                    .disabled(!model.canSetPage0Rides)
+                }
+
+                Section("Page0 reset") {
+                    Text("Choose a reset profile explicitly. Nothing is selected by default.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Picker("Reset profile", selection: $model.selectedResetSequence) {
+                        Text("None").tag(Optional<RideSequence>.none)
+                        ForEach(ResetSequence.all) { profile in
+                            Text(profile.sequence.rawValue.capitalized).tag(Optional(profile.sequence))
+                        }
+                    }
+                    .disabled(model.isBusy || !model.isPaired)
+
+                    Button {
+                        Task { await model.confirmResetProfile() }
+                    } label: {
+                        Label("Confirm reset", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!model.canConfirmReset)
+
+                    if !model.lastResetBlockValues.isEmpty {
+                        ForEach(model.lastResetBlockValues.keys.sorted(), id: \.self) { block in
+                            if let value = model.lastResetBlockValues[block] {
+                                LabeledContent("Verified block \(block)", value: value)
+                                    .fontDesign(.monospaced)
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Bridge Diagnostic")
@@ -283,10 +347,16 @@ public struct BridgeConnectionView: View {
             await model.startAutomaticBonjourReconnect()
 
 #if DEBUG
-            guard !didRunLaunchPhysicalAcceptance, !Task.isCancelled else { return }
-            didRunLaunchPhysicalAcceptance = true
-            guard launchConfiguration.physicalAcceptanceEnabled else { return }
-            await model.runLaunchPhysicalAcceptanceIfRequested()
+            if launchConfiguration.physicalAcceptanceEnabled {
+                guard !didRunLaunchPhysicalAcceptance, !Task.isCancelled else { return }
+                didRunLaunchPhysicalAcceptance = true
+                await model.runLaunchPhysicalAcceptanceIfRequested()
+            }
+            if launchConfiguration.slice4PhysicalAcceptanceEnabled {
+                guard !didRunLaunchSlice4PhysicalAcceptance, !Task.isCancelled else { return }
+                didRunLaunchSlice4PhysicalAcceptance = true
+                await model.runLaunchSlice4PhysicalAcceptanceIfRequested()
+            }
 #endif
         }
     }
@@ -305,7 +375,7 @@ public struct BridgeConnectionView: View {
     private var statusSymbol: String {
         switch model.state {
         case .connected, .restored: "checkmark.circle.fill"
-        case .searching, .pairing, .reading, .readingMercury, .settingMercury, .relocating: "arrow.triangle.2.circlepath"
+        case .searching, .pairing, .reading, .readingPage0, .scanningPage0, .settingPage0, .resettingPage0, .relocating: "arrow.triangle.2.circlepath"
         case .failed, .authenticationRequired: "exclamationmark.triangle.fill"
         case .unconfigured: "link.badge.plus"
         }

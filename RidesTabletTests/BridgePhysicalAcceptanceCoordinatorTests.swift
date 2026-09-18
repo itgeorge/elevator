@@ -44,8 +44,8 @@ private final class PhysicalAcceptanceURLProtocol: URLProtocol {
 final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
     private let baseURL = URL(string: "http://127.0.0.1:5080")!
     private let bearer = "acceptance-test-bearer"
-    private let original5 = String(format: "%08X", MercuryRideCodec.encode(3)!)
-    private let original6 = String(format: "%08X", MercuryRideCodec.encode(4)!)
+    private let original5 = String(format: "%08X", RideSequence.mercury.encode(3)!)
+    private let original6 = String(format: "%08X", RideSequence.mercury.encode(4)!)
 
     override func tearDown() {
         PhysicalAcceptanceURLProtocol.handler = nil
@@ -69,8 +69,8 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
 
     func testSuccessUsesExactSevenRequestSequenceAndRestoresAsymmetricOriginals() async throws {
         var requests: [URLRequest] = []
-        let targetRaw = String(format: "%08X", MercuryRideCodec.encode(5)!)
-        let secondRaw = String(format: "%08X", MercuryRideCodec.encode(6)!)
+        let targetRaw = String(format: "%08X", RideSequence.mercury.encode(5)!)
+        let secondRaw = String(format: "%08X", RideSequence.mercury.encode(6)!)
 
         PhysicalAcceptanceURLProtocol.handler = { [self] request in
             requests.append(request)
@@ -80,7 +80,7 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
             switch requests.count {
             case 1:
                 XCTAssertEqual(request.httpMethod, "GET")
-                XCTAssertEqual(request.url?.path, "/api/v1/hardware/mercury/mirrors")
+                XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/mirrors")
                 return self.json(request, "{\"version\":\"v1\",\"block5\":\"\(self.original5)\",\"block6\":\"\(self.original6)\"}")
             case 2:
                 try self.assertMutation(request, expected: [self.original5, self.original6], desired: [targetRaw, targetRaw])
@@ -93,14 +93,14 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
                 return self.mutationResponse(request, status: "conflict", blockStatus: "conflict", expected: [self.original5, self.original6], desired: [secondRaw, secondRaw], actual: [targetRaw, targetRaw])
             case 5:
                 XCTAssertEqual(request.httpMethod, "GET")
-                XCTAssertEqual(request.url?.path, "/api/v1/hardware/mercury/mirrors")
+                XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/mirrors")
                 return self.json(request, "{\"version\":\"v1\",\"block5\":\"\(targetRaw)\",\"block6\":\"\(targetRaw)\"}")
             case 6:
                 try self.assertMutation(request, expected: [targetRaw, targetRaw], desired: [self.original5, self.original6])
                 return self.mutationResponse(request, status: "written", blockStatus: "written", expected: [targetRaw, targetRaw], desired: [self.original5, self.original6], actual: [self.original5, self.original6])
             case 7:
                 XCTAssertEqual(request.httpMethod, "GET")
-                XCTAssertEqual(request.url?.path, "/api/v1/hardware/mercury/mirrors")
+                XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/mirrors")
                 return self.json(request, "{\"version\":\"v1\",\"block5\":\"\(self.original5)\",\"block6\":\"\(self.original6)\"}")
             default:
                 XCTFail("Unexpected request \(requests.count)")
@@ -123,13 +123,13 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
         XCTAssertEqual(summary.secondTargetRides, 6)
         XCTAssertEqual(PhysicalAcceptanceURLProtocol.requestCount, 7)
         XCTAssertEqual(requests.map { "\($0.httpMethod!) \($0.url!.path)" }, [
-            "GET /api/v1/hardware/mercury/mirrors",
-            "POST /api/v1/hardware/mercury/mutations",
-            "POST /api/v1/hardware/mercury/mutations",
-            "POST /api/v1/hardware/mercury/mutations",
-            "GET /api/v1/hardware/mercury/mirrors",
-            "POST /api/v1/hardware/mercury/mutations",
-            "GET /api/v1/hardware/mercury/mirrors"
+            "GET /api/v1/hardware/page0/mirrors",
+            "POST /api/v1/hardware/page0/mutations",
+            "POST /api/v1/hardware/page0/mutations",
+            "POST /api/v1/hardware/page0/mutations",
+            "GET /api/v1/hardware/page0/mirrors",
+            "POST /api/v1/hardware/page0/mutations",
+            "GET /api/v1/hardware/page0/mirrors"
         ])
         XCTAssertEqual(output.count, 2)
         XCTAssertTrue(output[0].hasPrefix("RIDES_PHASE2_ACCEPTANCE_ORIGINAL "))
@@ -144,8 +144,8 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
             PhysicalAcceptanceURLProtocol.handler = { [self] request in
                 requestNumber += 1
                 if requestNumber == failingRequest { throw URLError(.timedOut) }
-                let targetRaw = String(format: "%08X", MercuryRideCodec.encode(5)!)
-                let secondRaw = String(format: "%08X", MercuryRideCodec.encode(6)!)
+                let targetRaw = String(format: "%08X", RideSequence.mercury.encode(5)!)
+                let secondRaw = String(format: "%08X", RideSequence.mercury.encode(6)!)
                 switch requestNumber {
                 case 1:
                     return self.json(request, "{\"version\":\"v1\",\"block5\":\"\(self.original5)\",\"block6\":\"\(self.original6)\"}")
@@ -201,8 +201,8 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
     }
 
     private func installSuccessHandler() {
-        let targetRaw = String(format: "%08X", MercuryRideCodec.encode(5)!)
-        let secondRaw = String(format: "%08X", MercuryRideCodec.encode(6)!)
+        let targetRaw = String(format: "%08X", RideSequence.mercury.encode(5)!)
+        let secondRaw = String(format: "%08X", RideSequence.mercury.encode(6)!)
         PhysicalAcceptanceURLProtocol.handler = { [self] request in
             switch PhysicalAcceptanceURLProtocol.requestCount {
             case 1:
@@ -247,7 +247,7 @@ final class BridgePhysicalAcceptanceCoordinatorTests: XCTestCase {
 
     private func assertMutation(_ request: URLRequest, expected: [String], desired: [String]) throws {
         XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(request.url?.path, "/api/v1/hardware/mercury/mutations")
+        XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/mutations")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         let body = try XCTUnwrap(request.httpBody)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])

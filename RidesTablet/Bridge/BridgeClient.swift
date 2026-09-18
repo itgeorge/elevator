@@ -301,22 +301,58 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
-    /// Reads exactly the two Mercury ride mirrors. This request is intentionally a
-    /// one-shot hardware read: `send` has no retry path for hardware endpoints.
-    public func readMercuryMirrors() async throws -> BridgeMercuryMirrorResponse {
+    /// Targeted known-token scan: block 4, mirrors 5/6, and LF signal strength.
+    public func scanPage0() async throws -> BridgePage0ScanResponse {
         guard hasCredential else { throw BridgeClientError.missingCredential }
         let data = try await send(
-            path: "api/v1/hardware/mercury/mirrors",
+            path: "api/v1/hardware/page0/scan",
             method: "GET",
             body: nil,
             requiresAuthentication: true
         )
-        return try decode(BridgeMercuryMirrorResponse.self, data: data)
+        return try decode(BridgePage0ScanResponse.self, data: data)
+    }
+
+    /// Reads only the missing page-0 blocks required to assemble an unknown dump.
+    public func readPage0MissingBlocks() async throws -> BridgePage0MissingBlocksResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(
+            path: "api/v1/hardware/page0/missing",
+            method: "GET",
+            body: nil,
+            requiresAuthentication: true
+        )
+        return try decode(BridgePage0MissingBlocksResponse.self, data: data)
+    }
+
+    /// Reads the fixed allowlist of page-0 blocks 1...6 for reset planning.
+    public func readPage0Blocks1To6() async throws -> BridgePage0Blocks1To6Response {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(
+            path: "api/v1/hardware/page0/blocks1to6",
+            method: "GET",
+            body: nil,
+            requiresAuthentication: true
+        )
+        return try decode(BridgePage0Blocks1To6Response.self, data: data)
+    }
+
+    /// Reads exactly the two page0 ride mirrors. This request is intentionally a
+    /// one-shot hardware read: `send` has no retry path for hardware endpoints.
+    public func readPage0Mirrors() async throws -> BridgePage0MirrorResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(
+            path: "api/v1/hardware/page0/mirrors",
+            method: "GET",
+            body: nil,
+            requiresAuthentication: true
+        )
+        return try decode(BridgePage0MirrorResponse.self, data: data)
     }
 
     /// Sends one conditional mutation request. The bridge owns preflight, write,
     /// verification, and rollback; the client never replays this call.
-    public func mutateMercury(_ request: BridgeMercuryMutationRequest) async throws -> BridgeMercuryMutationResponse {
+    public func mutatePage0(_ request: BridgePage0MutationRequest) async throws -> BridgePage0MutationResponse {
         guard hasCredential else { throw BridgeClientError.missingCredential }
         let body: Data
         do {
@@ -325,12 +361,12 @@ public final class BridgeClient: @unchecked Sendable {
             throw BridgeClientError.invalidResponse
         }
         let data = try await send(
-            path: "api/v1/hardware/mercury/mutations",
+            path: "api/v1/hardware/page0/mutations",
             method: "POST",
             body: body,
             requiresAuthentication: true
         )
-        let response = try decode(BridgeMercuryMutationResponse.self, data: data)
+        let response = try decode(BridgePage0MutationResponse.self, data: data)
         // The response is also an optimistic-concurrency acknowledgement. Do not
         // let a syntactically valid response for a different mutation update state.
         guard Set(response.results.map(\.block)) == Set(request.mutations.map(\.block)),

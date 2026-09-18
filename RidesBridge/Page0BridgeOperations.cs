@@ -2,13 +2,13 @@ using System.Globalization;
 
 namespace RidesBridge;
 
-internal sealed record ValidatedMercuryMutation(int Block, string Expected, string Desired);
+internal sealed record ValidatedPage0Mutation(int Block, string Expected, string Desired);
 
-internal static class MercuryMutationValidator
+internal static class Page0MutationValidator
 {
     public static bool TryValidate(
-        MercuryMutationRequest? request,
-        out IReadOnlyList<ValidatedMercuryMutation> mutations,
+        Page0MutationRequest? request,
+        out IReadOnlyList<ValidatedPage0Mutation> mutations,
         out BridgeErrorResponse? error)
     {
         mutations = [];
@@ -20,14 +20,14 @@ internal static class MercuryMutationValidator
             return false;
         }
 
-        if (request.Mutations is null || request.Mutations.Count is < 1 or > 2)
+        if (request.Mutations is null || request.Mutations.Count is < 1 or > 6)
         {
-            error = new BridgeErrorResponse("invalid_mutation_request", "One or two Mercury mutations are required.");
+            error = new BridgeErrorResponse("invalid_mutation_request", "One to six page-0 mutations are required.");
             return false;
         }
 
         var seen = new HashSet<int>();
-        var valid = new List<ValidatedMercuryMutation>(request.Mutations.Count);
+        var valid = new List<ValidatedPage0Mutation>(request.Mutations.Count);
         foreach (var mutation in request.Mutations)
         {
             if (mutation is null)
@@ -39,12 +39,6 @@ internal static class MercuryMutationValidator
             if (mutation.Block < 1 || mutation.Block > 6)
             {
                 error = new BridgeErrorResponse("invalid_mutation_block", "Only page-0 blocks 1 through 6 are valid mutation targets.");
-                return false;
-            }
-
-            if (mutation.Block is not 5 and not 6)
-            {
-                error = new BridgeErrorResponse("mercury_block_not_allowed", "Mercury mutations may target only page-0 blocks 5 and 6.");
                 return false;
             }
 
@@ -61,7 +55,7 @@ internal static class MercuryMutationValidator
                 return false;
             }
 
-            valid.Add(new ValidatedMercuryMutation(mutation.Block, expected, desired));
+            valid.Add(new ValidatedPage0Mutation(mutation.Block, expected, desired));
         }
 
         mutations = valid;
@@ -86,15 +80,15 @@ internal static class MercuryMutationValidator
 }
 
 /// <summary>
-/// Applies the narrow, Mercury-only conditional mutation contract. It deliberately has no
-/// generic block-number or command route: the only legal targets are page-0 blocks 5 and 6.
+/// Applies the narrow, page-0 conditional mutation contract. It deliberately has no
+/// generic block-number or command route: the only legal targets are page-0 blocks 1 through 6.
 /// </summary>
-public sealed class MercuryConditionalWriter
+public sealed class Page0ConditionalWriter
 {
     private readonly IBridgePm3Device _device;
     private readonly TimeSpan _recoveryTimeout;
 
-    public MercuryConditionalWriter(IBridgePm3Device device, TimeSpan? recoveryTimeout = null)
+    public Page0ConditionalWriter(IBridgePm3Device device, TimeSpan? recoveryTimeout = null)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _recoveryTimeout = recoveryTimeout ?? TimeSpan.FromSeconds(5);
@@ -104,12 +98,12 @@ public sealed class MercuryConditionalWriter
 
     internal TimeSpan RecoveryTimeoutForTesting => _recoveryTimeout;
 
-    public async Task<MercuryMutationResponse> ExecuteAsync(
-        MercuryMutationRequest request,
+    public async Task<Page0MutationResponse> ExecuteAsync(
+        Page0MutationRequest request,
         CancellationToken ct = default)
     {
-        if (!MercuryMutationValidator.TryValidate(request, out var validated, out var error))
-            throw new MercuryMutationValidationException(error!);
+        if (!Page0MutationValidator.TryValidate(request, out var validated, out var error))
+            throw new Page0MutationValidationException(error!);
 
         var ordered = validated.OrderBy(m => m.Block).ToArray();
         var states = ordered.Select(m => new MutationState(m)).ToArray();
@@ -165,7 +159,7 @@ public sealed class MercuryConditionalWriter
         return CreateResponse("written", states, "notNeeded", []);
     }
 
-    private async Task<MercuryMutationResponse> FailureAsync(
+    private async Task<Page0MutationResponse> FailureAsync(
         IReadOnlyList<MutationState> states,
         IReadOnlyList<MutationState> changed)
     {
@@ -174,7 +168,7 @@ public sealed class MercuryConditionalWriter
         // Recovery nevertheless has its own finite server-owned budget.
         using var recoveryCts = new CancellationTokenSource(_recoveryTimeout);
         var recoveryCt = recoveryCts.Token;
-        var rollback = new List<MercuryRollbackResult>(changed.Count);
+        var rollback = new List<Page0RollbackResult>(changed.Count);
         foreach (var state in changed.Reverse())
         {
             string? actual = null;
@@ -193,7 +187,7 @@ public sealed class MercuryConditionalWriter
                 // native exception text or command output.
             }
 
-            rollback.Add(new MercuryRollbackResult(
+            rollback.Add(new Page0RollbackResult(
                 state.Mutation.Block,
                 state.Mutation.Expected,
                 actual,
@@ -211,31 +205,14 @@ public sealed class MercuryConditionalWriter
 
     private async Task<string> ReadAsync(int block, CancellationToken ct)
     {
-        var value = block switch
-        {
-            5 => await _device.ReadPage0Block5Async(ct).ConfigureAwait(false),
-            6 => await _device.ReadPage0Block6Async(ct).ConfigureAwait(false),
-            _ => throw new InvalidOperationException("The Mercury adapter received an invalid block."),
-        };
-        if (!MercuryMutationValidator.TryNormalizeBlockHex(value, out var normalized))
+        var value = await _device.ReadPage0Block1To6Async(block, ct).ConfigureAwait(false);
+        if (!Page0MutationValidator.TryNormalizeBlockHex(value, out var normalized))
             throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
         return normalized;
     }
 
-    private async Task WriteAsync(int block, string value, CancellationToken ct)
-    {
-        switch (block)
-        {
-            case 5:
-                await _device.WritePage0Block5Async(value, ct).ConfigureAwait(false);
-                break;
-            case 6:
-                await _device.WritePage0Block6Async(value, ct).ConfigureAwait(false);
-                break;
-            default:
-                throw new InvalidOperationException("The Mercury adapter received an invalid block.");
-        }
-    }
+    private Task WriteAsync(int block, string value, CancellationToken ct) =>
+        _device.WritePage0Block1To6Async(block, value, ct);
 
     private static bool IsDeviceFailure(Exception ex) => ex is BridgeHardwareException
         or IOException
@@ -246,24 +223,24 @@ public sealed class MercuryConditionalWriter
         or FormatException
         or VerificationFailureException;
 
-    private static MercuryMutationResponse CreateResponse(
+    private static Page0MutationResponse CreateResponse(
         string status,
         IEnumerable<MutationState> states,
         string rollbackStatus,
-        IReadOnlyList<MercuryRollbackResult> rollback)
+        IReadOnlyList<Page0RollbackResult> rollback)
     {
-        var results = states.Select(s => new MercuryMutationBlockResult(
+        var results = states.Select(s => new Page0MutationBlockResult(
             s.Mutation.Block,
             s.Status,
             s.Mutation.Expected,
             s.Mutation.Desired,
             s.Actual)).ToArray();
-        return new MercuryMutationResponse(BridgeOptions.ApiVersion, status, results, rollbackStatus, rollback);
+        return new Page0MutationResponse(BridgeOptions.ApiVersion, status, results, rollbackStatus, rollback);
     }
 
-    private sealed class MutationState(ValidatedMercuryMutation mutation)
+    private sealed class MutationState(ValidatedPage0Mutation mutation)
     {
-        public ValidatedMercuryMutation Mutation { get; } = mutation;
+        public ValidatedPage0Mutation Mutation { get; } = mutation;
         public string? Actual { get; set; }
         public string Status { get; set; } = "pending";
     }
@@ -271,10 +248,10 @@ public sealed class MercuryConditionalWriter
     private sealed class VerificationFailureException : Exception;
 }
 
-public sealed class MercuryMutationValidationException : Exception
+public sealed class Page0MutationValidationException : Exception
 {
     public BridgeErrorResponse Error { get; }
 
-    internal MercuryMutationValidationException(BridgeErrorResponse error)
+    internal Page0MutationValidationException(BridgeErrorResponse error)
         : base(error.Message) => Error = error;
 }

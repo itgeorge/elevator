@@ -4,7 +4,7 @@ namespace RidesBridge;
 
 /// <summary>
 /// Production bridge adapter. It intentionally exposes only the authenticated bridge's
-/// block-5 read plus Mercury mirror reads/writes, and talks to Pm3UsbApi directly; no shell,
+/// block-5 read plus page-0 mirror reads/writes, and talks to Pm3UsbApi directly; no shell,
 /// CLI, or arbitrary command surface is used.
 /// </summary>
 internal interface IBridgePm3Session : IAsyncDisposable
@@ -13,6 +13,8 @@ internal interface IBridgePm3Session : IAsyncDisposable
     Task ConnectAsync(CancellationToken ct = default);
     void InvalidateT55DetectCache();
     Task EnsureT55SessionActiveAsync(CancellationToken ct = default);
+    Task StartLfTuneAsync(CancellationToken ct = default);
+    Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default);
     Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default);
     Task WritePage0BlockAsync(uint block, Tokens.T55Block data, CancellationToken ct = default);
 }
@@ -58,7 +60,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
 
     public Task<string> ReadPage0Block6Async(CancellationToken ct = default) => ReadPage0BlockAsync(6, ct);
 
-    public async Task<(string Block5Hex, string Block6Hex)> ReadMercuryMirrorAsync(CancellationToken ct = default)
+    public async Task<(string Block5Hex, string Block6Hex)> ReadPage0MirrorAsync(CancellationToken ct = default)
     {
         await _operationLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -95,6 +97,141 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
 
     public Task WritePage0Block6Async(string value, CancellationToken ct = default) => WritePage0BlockAsync(6, value, ct);
 
+    public Task<string> ReadPage0Block1To6Async(int block, CancellationToken ct = default)
+    {
+        if (block is < 1 or > 6)
+            throw new ArgumentOutOfRangeException(nameof(block), "Only page-0 blocks 1 through 6 can be read.");
+        return ReadPage0BlockAsync((uint)block, ct);
+    }
+
+    public Task WritePage0Block1To6Async(int block, string value, CancellationToken ct = default)
+    {
+        if (block is < 1 or > 6)
+            throw new ArgumentOutOfRangeException(nameof(block), "Only page-0 blocks 1 through 6 can be written.");
+        return WritePage0BlockAsync((uint)block, value, ct);
+    }
+
+    public async Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0Blocks1To6Async(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await EnsureConnectedAsync(ct).ConfigureAwait(false);
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            session.InvalidateT55DetectCache();
+            await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            var results = new Page0BlockReadResult[Page0Blocks1To6.Allowlist.Length];
+            for (var index = 0; index < Page0Blocks1To6.Allowlist.Length; index++)
+            {
+                var block = Page0Blocks1To6.Allowlist[index];
+                var value = await ReadAndValidateAsync(session, (uint)block, ct).ConfigureAwait(false);
+                results[index] = new Page0BlockReadResult(block, value);
+            }
+            return results;
+        }
+        catch (BridgeHardwareException ex) when (ex.Error == BridgeHardwareError.MalformedResponse)
+        {
+            await DiscardSessionAfterFailureAsync().ConfigureAwait(false);
+            throw new BridgeHardwareException(BridgeHardwareError.ReadFailed, "PM3 returned a malformed block response during blocks 1..6 read.", ex);
+        }
+        catch (BridgeHardwareException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationLock.Release();
+        }
+    }
+
+    public async Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await EnsureConnectedAsync(ct).ConfigureAwait(false);
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            session.InvalidateT55DetectCache();
+            await session.StartLfTuneAsync(ct).ConfigureAwait(false);
+            int signalMillivolts;
+            try
+            {
+                signalMillivolts = checked((int)await session.GetLfTuneLastMilliVoltsAsync(ct).ConfigureAwait(false));
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or Pm3CommandException or FormatException)
+            {
+                throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "LF tune did not return a usable signal measurement.", ex);
+            }
+
+            await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            var block4 = await ReadAndValidateAsync(session, 4, ct).ConfigureAwait(false);
+            var block5 = await ReadAndValidateAsync(session, 5, ct).ConfigureAwait(false);
+            var block6 = await ReadAndValidateAsync(session, 6, ct).ConfigureAwait(false);
+            return new Page0ScanReadResult(block4, block5, block6, signalMillivolts);
+        }
+        catch (BridgeHardwareException ex) when (ex.Error == BridgeHardwareError.MalformedResponse)
+        {
+            await DiscardSessionAfterFailureAsync().ConfigureAwait(false);
+            throw new BridgeHardwareException(BridgeHardwareError.ReadFailed, "PM3 returned a malformed block response during page-0 scan.", ex);
+        }
+        catch (BridgeHardwareException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0MissingBlocksAsync(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await EnsureConnectedAsync(ct).ConfigureAwait(false);
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            session.InvalidateT55DetectCache();
+            await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            var results = new Page0BlockReadResult[Page0MissingBlocks.Allowlist.Length];
+            for (var index = 0; index < Page0MissingBlocks.Allowlist.Length; index++)
+            {
+                var block = Page0MissingBlocks.Allowlist[index];
+                var value = await ReadAndValidateAsync(session, (uint)block, ct).ConfigureAwait(false);
+                results[index] = new Page0BlockReadResult(block, value);
+            }
+            return results;
+        }
+        catch (BridgeHardwareException ex) when (ex.Error == BridgeHardwareError.MalformedResponse)
+        {
+            await DiscardSessionAfterFailureAsync().ConfigureAwait(false);
+            throw new BridgeHardwareException(BridgeHardwareError.ReadFailed, "PM3 returned a malformed block response during missing-block read.", ex);
+        }
+        catch (BridgeHardwareException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationLock.Release();
+        }
+    }
+
     private async Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct)
     {
         await _operationLock.WaitAsync(ct).ConfigureAwait(false);
@@ -129,8 +266,8 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
 
     private async Task WritePage0BlockAsync(uint block, string value, CancellationToken ct)
     {
-        if (block is not 5 and not 6 || !IsBlockHex(value))
-            throw new ArgumentException("Mercury writes require an exact 32-bit value and target block 5 or 6.", nameof(value));
+        if (block is < 1 or > 6 || !IsBlockHex(value))
+            throw new ArgumentException("Page-0 writes require an exact 32-bit value and target block 1 through 6.", nameof(value));
 
         await _operationLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -283,6 +420,10 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
         public void InvalidateT55DetectCache() => _pm3.InvalidateT55DetectCache();
 
         public Task EnsureT55SessionActiveAsync(CancellationToken ct = default) => _pm3.EnsureT55SessionActiveAsync(ct);
+
+        public Task StartLfTuneAsync(CancellationToken ct = default) => _pm3.StartLfTuneAsync(ct);
+
+        public Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default) => _pm3.GetLfTuneLastMilliVoltsAsync(ct);
 
         public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default) => _pm3.ReadPage0BlockAsync(block, ct);
 

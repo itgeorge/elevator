@@ -34,8 +34,8 @@ public static class BridgeApplication
             services.AddSingleton<IBonjourPublisher, HaukcodeBonjourPublisher>();
         else
             services.AddSingleton(publisher);
-        services.AddSingleton<MercuryConditionalWriter>(serviceProvider =>
-            new MercuryConditionalWriter(
+        services.AddSingleton<Page0ConditionalWriter>(serviceProvider =>
+            new Page0ConditionalWriter(
                 serviceProvider.GetRequiredService<IBridgePm3Device>(),
                 serviceProvider.GetRequiredService<BridgeOptions>().HardwareRecoveryTimeout));
         services.AddSingleton<BridgeLifecycleService>(serviceProvider =>
@@ -204,7 +204,145 @@ public static class BridgeApplication
             }
         });
 
-        app.MapGet("/api/v1/hardware/mercury/mirrors", async (
+        app.MapGet("/api/v1/hardware/page0/scan", async (
+            IBridgePm3Device device,
+            BridgeOperationGate gate,
+            BridgeOptions options,
+            HttpContext context) =>
+        {
+            try
+            {
+                var scan = await gate.ExecuteAsync(
+                    operationCt => device.ScanPage0Async(operationCt),
+                    context.RequestAborted,
+                    waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                if (!IsBlockHex(scan.Block4Hex) || !IsBlockHex(scan.Block5Hex) || !IsBlockHex(scan.Block6Hex))
+                    throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
+                return Results.Ok(new Page0ScanResponse(
+                    BridgeOptions.ApiVersion,
+                    scan.Block4Hex.ToUpperInvariant(),
+                    scan.Block5Hex.ToUpperInvariant(),
+                    scan.Block6Hex.ToUpperInvariant(),
+                    scan.SignalMillivolts));
+            }
+            catch (BridgeHardwareException ex)
+            {
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (ObjectDisposedException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (InvalidOperationException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+        });
+
+        app.MapGet("/api/v1/hardware/page0/missing", async (
+            IBridgePm3Device device,
+            BridgeOperationGate gate,
+            BridgeOptions options,
+            HttpContext context) =>
+        {
+            try
+            {
+                var blocks = await gate.ExecuteAsync(
+                    operationCt => device.ReadPage0MissingBlocksAsync(operationCt),
+                    context.RequestAborted,
+                    waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                if (!Page0MissingBlocks.IsValidResponse(blocks))
+                    throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed missing-block response.");
+                return Results.Ok(new Page0MissingBlocksResponse(
+                    BridgeOptions.ApiVersion,
+                    blocks.Select(block => new Page0BlockReadResult(block.Block, block.Value.ToUpperInvariant())).ToArray()));
+            }
+            catch (BridgeHardwareException ex)
+            {
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (ObjectDisposedException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (InvalidOperationException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+        });
+
+        app.MapGet("/api/v1/hardware/page0/blocks1to6", async (
+            IBridgePm3Device device,
+            BridgeOperationGate gate,
+            BridgeOptions options,
+            HttpContext context) =>
+        {
+            try
+            {
+                var blocks = await gate.ExecuteAsync(
+                    operationCt => device.ReadPage0Blocks1To6Async(operationCt),
+                    context.RequestAborted,
+                    waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                if (!Page0Blocks1To6.IsValidResponse(blocks))
+                    throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed blocks 1..6 response.");
+                return Results.Ok(new Page0Blocks1To6Response(
+                    BridgeOptions.ApiVersion,
+                    blocks.Select(block => new Page0BlockReadResult(block.Block, block.Value.ToUpperInvariant())).ToArray()));
+            }
+            catch (BridgeHardwareException ex)
+            {
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (ObjectDisposedException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (InvalidOperationException)
+            {
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+        });
+
+        app.MapGet("/api/v1/hardware/page0/mirrors", async (
             IBridgePm3Device device,
             BridgeOperationGate gate,
             BridgeOptions options,
@@ -213,13 +351,13 @@ public static class BridgeApplication
             try
             {
                 var mirrors = await gate.ExecuteAsync(
-                    operationCt => device.ReadMercuryMirrorAsync(operationCt),
+                    operationCt => device.ReadPage0MirrorAsync(operationCt),
                     context.RequestAborted,
                     waitTimeout: options.OperationWaitTimeout,
                     operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
                 if (!IsBlockHex(mirrors.Block5Hex) || !IsBlockHex(mirrors.Block6Hex))
                     throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
-                return Results.Ok(new MercuryMirrorReadResponse(
+                return Results.Ok(new Page0MirrorReadResponse(
                     BridgeOptions.ApiVersion,
                     mirrors.Block5Hex.ToUpperInvariant(),
                     mirrors.Block6Hex.ToUpperInvariant()));
@@ -250,14 +388,14 @@ public static class BridgeApplication
             }
         });
 
-        app.MapPost("/api/v1/hardware/mercury/mutations", async (
-            MercuryMutationRequest? request,
-            MercuryConditionalWriter writer,
+        app.MapPost("/api/v1/hardware/page0/mutations", async (
+            Page0MutationRequest? request,
+            Page0ConditionalWriter writer,
             BridgeOperationGate gate,
             BridgeOptions options,
             HttpContext context) =>
         {
-            if (!MercuryMutationValidator.TryValidate(request, out _, out var validationError))
+            if (!Page0MutationValidator.TryValidate(request, out _, out var validationError))
                 return Results.BadRequest(validationError);
 
             try
@@ -271,7 +409,7 @@ public static class BridgeApplication
                     operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
                 return Results.Ok(result);
             }
-            catch (MercuryMutationValidationException ex)
+            catch (Page0MutationValidationException ex)
             {
                 return Results.BadRequest(ex.Error);
             }
@@ -386,6 +524,8 @@ public static class BridgeApplication
         BridgeHardwareError.Timeout => Results.Json(new BridgeErrorResponse("pm3_timeout", "Proxmark3 operation timed out."), statusCode: 504),
         BridgeHardwareError.Busy => Results.Json(new BridgeErrorResponse("bridge_busy", "The bridge is busy with another hardware operation."), statusCode: 503),
         BridgeHardwareError.MalformedResponse => Results.Json(new BridgeErrorResponse("malformed_device_response", "The device returned a malformed response."), statusCode: 502),
+        BridgeHardwareError.TuneFailed => Results.Json(new BridgeErrorResponse("lf_tune_failed", "LF tune did not return a usable signal measurement."), statusCode: 503),
+        BridgeHardwareError.ReadFailed => Results.Json(new BridgeErrorResponse("page0_read_failed", "Page-0 block read failed."), statusCode: 502),
         _ => Results.Json(new BridgeErrorResponse("pm3_unavailable", "Proxmark3 is unavailable."), statusCode: 503),
     };
 
