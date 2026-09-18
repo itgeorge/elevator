@@ -953,7 +953,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 - [x] Route Reset through explicit-profile conditional mutations; confirmation remains disabled until selection.
 - [x] Preserve exact user-facing requirements already tested in `RidesViewModel`.
 - [x] Remove the temporary root/diagnostic-only workflow once Concept A covers the proven operations; retain useful connection diagnostics without duplicate business logic.
-- [ ] Update `RidesTablet/README.md` and screenshots only after physical Concept A review.
+- [x] Update `RidesTablet/README.md` (minimal operator/bridge wording; screenshots deferred — blocked without iPad).
 
 ## Validation
 
@@ -961,7 +961,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 - [x] Run full non-integration .NET suite including `RidesBridge.Tests`.
 - [x] Run physical iPad smoke matrix over Wi-Fi against `--fake-pm3` (real Proxmark3/black-card steps deferred to plan end).
 - [x] Run physical iPad + real PM3 matrix over Wi-Fi against `--everyday` (2026-09-18; see Final validation notes):
-  - [ ] first pairing/manual or QR (existing Keychain credential reused; no fresh PIN/QR this run);
+  - [ ] first pairing/manual or QR (existing Keychain credential reused; no fresh PIN/QR this run) — **blocked without iPad**;
   - [x] reconnect (`GET /api/v1/pair/status` HTTP 200);
   - [x] known read (bridge `page0/scan`; **nix** token, not Venus fake seed);
   - [x] ride adjustment/write and verified reread (bridge mutations 500→490→0→500 with restore);
@@ -970,11 +970,11 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - [x] unknown dump — physical unrecognized token on antenna (2026-09-18; see Final validation notes);
   - [x] explicit reset/cancel (Concept A smoke reset-cancel + nix mirrors-only reset via parameterized coordinator);
   - [x] bridge/PM3 unavailable — split-network unreachable (`172.20.10.4:5080` hotspot vs iPad on different Wi‑Fi; 2026-09-18; see Final validation notes);
-  - [ ] network loss before a write;
-  - [ ] network loss after server accepted a write, followed by required refresh.
+  - [ ] network loss before a write — **blocked without iPad**;
+  - [ ] network loss after server accepted a write, followed by required refresh — **blocked without iPad**.
 - [x] Confirm known read/write paths did not issue a full dump.
 - [x] Deferred: confirm the black card's final state on real Proxmark3 hardware (2026-09-18; nix @ 500 rides — see Final validation notes; blocks 1..6 restored).
-- [ ] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke.
+- [ ] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke — **blocked without iPad**.
 
 ## Acceptance
 
@@ -1076,7 +1076,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 
 ## Todos
 
-- [ ] Run all focused and complete deterministic suites; record counts and commands:
+- [x] Run all focused and complete deterministic suites; record counts and commands:
 
   ```bash
   dotnet test ElevatorTokens.sln --filter 'Category!=Integration&Category!=IntegrationParity'
@@ -1086,15 +1086,36 @@ Names and exact method grouping may evolve, but the domain/view model must not d
     -destination 'platform=iOS Simulator,name=RidesTablet iPad Air 4'
   ```
 
-- [ ] Run `git diff --check` and inspect `git status --short --branch`.
-- [ ] Confirm no unrelated debug/probe/build outputs are staged.
-- [ ] Confirm committed hotspot evidence still reproduces and no production code depends on its hardcoded IP.
-- [ ] Confirm secrets, pairing codes, bearer tokens, PM3 logs, provisioning artifacts, and unknown token dumps are not committed.
-- [ ] Confirm all HTTP hardware endpoints require authorization and expose no raw PM3 passthrough.
-- [ ] Confirm all write paths reject blocks 0/7 before hardware access.
-- [ ] Confirm normal known-token paths do not perform page-0 dumps.
-- [ ] Summarize final API versions, Swift device boundary, fixture strategy, test results, physical evidence, and remaining risks in this plan.
-- [ ] Commit the final plan update with the final implementation/test/documentation chunk.
+- [x] Run `git diff --check` and inspect `git status --short --branch`.
+- [x] Confirm no unrelated debug/probe/build outputs are staged.
+- [x] Confirm committed hotspot evidence still reproduces and no production code depends on its hardcoded IP.
+- [x] Confirm secrets, pairing codes, bearer tokens, PM3 logs, provisioning artifacts, and unknown token dumps are not committed.
+- [x] Confirm all HTTP hardware endpoints require authorization and expose no raw PM3 passthrough.
+- [x] Confirm all write paths reject blocks 0/7 before hardware access.
+- [x] Confirm normal known-token paths do not perform page-0 dumps.
+- [x] Summarize final API versions, Swift device boundary, fixture strategy, test results, physical evidence, and remaining risks in this plan.
+- [x] Commit the final plan update with the final implementation/test/documentation chunk.
+
+## Final handoff summary (2026-09-19, simulator + dotnet only)
+
+- **API:** `v1` (`BridgeOptions.ApiVersion`). Hardware surface: `GET /api/v1/hardware/page0/scan`, `missing`, `blocks1to6`, legacy `mirrors`/`block5`, and `POST /api/v1/hardware/page0/mutations`. Pairing/health/proof endpoints unchanged from Slice 1B.
+- **Swift boundary:** `RideTokenDevice` (`scan` / `writeRideMirrors` / `reset`) is the domain contract. `NetworkRideTokenDevice` is the only production network adapter: it maps bridge DTOs to `ScanOutcome` / `WriteOutcome` / `ResetOutcome` and never exposes HTTP/bearer/PM3 details to `RidesViewModel`. `FakeProxmark` remains behind `FakeRideTokenDevice` for DEBUG simulator work.
+- **Fixtures:** single checked-in oracle files `TestFixtures/RideEncoding/ride-encoding-v2.json` (all nine registered sequences; legacy `mercury-v1.json` retained) and `TestFixtures/IdentityProfiles/identity-profiles-v1.json` (reset images). Independent C# (`RideEncodingFixtureSupport`, `IdentityProfileFixtureSupport`) and Swift (`RideEncodingFixtureTests`, `IdentityProfileFixtureTests`) consume the same JSON.
+- **Deterministic suites (this handoff):**
+  - `dotnet test ElevatorTokens.sln --filter 'Category!=Integration&Category!=IntegrationParity'` → **704 passed, 2 skipped, 0 failed** (`Tokens.Tests` 140, `RideCaptureCli.Tests` 38, `Pm3UsbApi.Tests` 122+2 skipped, `RidesCli.Tests` 195, `LfElevatorCaptureCli.Tests` 9, `RidesBridge.Tests` 200).
+  - `xcodebuild test … 'RidesTablet iPad Air 4'` → **203 passed, 0 failed**.
+  - `git diff --check` → clean. `git status --short --branch` → branch `ipad-rides`; only untracked `debug/*` and `post-ride-captures.log` (not staged).
+- **Security/repo hygiene evidence:**
+  - No unrelated debug staged; working tree untracked paths match the documented allowlist only.
+  - `git ls-files` contains no PM3 session logs, bearer/PIN artifacts, provisioning profiles, or operator unknown dumps; committed `.bin` files are pre-existing CLI/test fixtures only.
+  - Hotspot IP `172.20.10.x` appears only under committed `iPadHotspotProbe/` evidence; production `RidesBridge`/`RidesTablet` code has no hardcoded hotspot dependency (`BridgeOptions.cs` comment only).
+  - `BridgeApplication.RequiresBearer` gates every `/api/v1/hardware/*` route (401 without bearer; host tests assert this). `Pm3BridgeDeviceAdapter` exposes typed block read/write only—no shell or raw PM3 command passthrough.
+  - `Page0MutationValidator` rejects `mutation.Block < 1 || mutation.Block > 6` with `invalid_mutation_block` before hardware (`RidesBridge.Tests` cover 0/7).
+  - Known-token path: `NetworkRideTokenDevice.scan()` returns `.known` immediately after successful `RideBlockResolver.resolve`; `/missing` is reached only on the unknown branch (`NetworkRideTokenDeviceTests.testKnownScanUsesPage0ScanOnly`, `testNoChipScanDoesNotRequestMissingBlocks`).
+- **Physical evidence already recorded (prior sessions; not re-run this handoff):** nix Concept A end-to-end on real PM3 (`--everyday`), no-chip, unknown dump, bridge-unavailable (cross-network), pm3-unavailable (USB absent). See agent notes below.
+- **`--fake-pm3` profiles (`RIDES_FAKE_PM3_PROFILE` / `Bridge:FakePm3Profile`):** `venus`/`default` (known Venus @ 180), `no-chip`, `tune-failed`, `read-failed`, `unknown` (undecodable mirrors → `/missing` once), `pm3-unavailable` (aliases `pm3_unavailable`, `unavailable`).
+- **Deferred without physical iPad:** fresh QR/manual first pairing, network-loss mid-write and post-write refresh on device, Concept A screenshot refresh, identity-mismatch reset seed on real hardware. Simulator/unit coverage and fake-pm3 profiles cover the failure classes; device-only matrix rows remain open until hardware is available.
+- **Remaining risks:** prototype plaintext HTTP on trusted LAN; physical antenna coupling can flip scan between success, `no_chip`, and `pm3_timeout`; Bonjour TXT URL is an untrusted hint (mitigated by pair/proof); everyday-mode port selection has documented TOCTOU; real-hardware network-loss timing not exercised on device.
 
 ## Agent notes / assumptions
 
@@ -1173,6 +1194,11 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - Unit coverage: `ConceptAPhysicalSmokeCoordinatorTests` adds deterministic `ConceptAPhysicalSmokeFakeDevice` path for **nix** @ 500 and low-ride +10 charge branch.
   - Physical rerun: `--everyday` bridge + `RIDES_SLICE5_CONCEPTA_SMOKE=1` on paired iPad against nix @ 500 (see Final validation notes below).
 - Assumptions: Orchestrator will run deterministic suites and commit; this session updated coordinator/tests/plan only (no commit).
+- Notes (2026-09-19, final handoff — simulator + dotnet only, no physical iPad/USB PM3):
+  - Re-ran full deterministic suites and `git diff --check` / `git status`; recorded counts in **Final handoff summary** above.
+  - Repo hygiene grep: no staged `debug/` or `post-ride-captures.log`; committed tree free of operator secrets/logs/dumps.
+  - Minimal `RidesTablet/README.md` refresh (Concept A + bridge default; fake reader DEBUG-only). Screenshots remain deferred.
+  - Physical-iPad-only matrix rows (fresh pairing/QR, network-loss mid/post-write, screenshots) explicitly left open with **blocked without iPad** note; prior physical evidence (nix Concept A, no-chip, unknown dump, bridge-unavailable, pm3-unavailable) stands.
 
 ---
 
