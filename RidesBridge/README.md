@@ -46,6 +46,7 @@ Select a fake PM3 profile without extra launch flags:
 | `tune-failed` | `RIDES_FAKE_PM3_PROFILE=tune-failed` (aliases: `tunefailed`, `lf_tune_failed`) | LF tune failure: scan returns HTTP 503 `lf_tune_failed` |
 | `read-failed` | `RIDES_FAKE_PM3_PROFILE=read-failed` (aliases: `readfailed`, `page0_read_failed`) | Page-0 scan read failure: scan returns HTTP 502 `page0_read_failed` |
 | `unknown` | `RIDES_FAKE_PM3_PROFILE=unknown` (aliases: `unknown-mirrors`, `unknown_mirrors`) | Undecodable mirrors (`DEADBEEF`/`FACECAFE`): scan succeeds; iPad unknown path may call `/missing` once for dump assembly |
+| `pm3-unavailable` | `RIDES_FAKE_PM3_PROFILE=pm3-unavailable` (aliases: `pm3_unavailable`, `unavailable`) | Disconnected PM3: scan returns HTTP 503 `pm3_unavailable` |
 
 Example no-chip smoke:
 
@@ -71,7 +72,13 @@ Example unknown-mirrors smoke (Concept A unknown → `/missing` once → dump pa
 RIDES_FAKE_PM3_PROFILE=unknown dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
 ```
 
-Startup prints the selected profile briefly (for example `Fake PM3 profile: no-chip`, `Fake PM3 profile: tune-failed`, `Fake PM3 profile: read-failed`, or `Fake PM3 profile: unknown`).
+Example pm3-unavailable smoke (bridge up, USB disconnected):
+
+```sh
+RIDES_FAKE_PM3_PROFILE=pm3-unavailable dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3
+```
+
+Startup prints the selected profile briefly (for example `Fake PM3 profile: no-chip`, `Fake PM3 profile: tune-failed`, `Fake PM3 profile: read-failed`, `Fake PM3 profile: unknown`, or `Fake PM3 profile: pm3-unavailable`).
 
 ## Durable state and precedence
 
