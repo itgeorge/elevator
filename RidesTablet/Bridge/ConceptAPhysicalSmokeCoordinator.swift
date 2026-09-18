@@ -3,12 +3,13 @@
 import Foundation
 
 public struct ConceptAPhysicalSmokeSummary: Equatable, Sendable {
+    public let sequence: RideSequence
     public let detectedRides: UInt
     public let chargedRides: UInt
     public let resetRides: UInt
 
     public var conciseDescription: String {
-        "Slice 5 Concept A smoke passed (detected=\(detectedRides), charged=\(chargedRides), reset=\(resetRides))."
+        "Slice 5 Concept A smoke passed (sequence=\(sequence.rawValue), detected=\(detectedRides), charged=\(chargedRides), reset=\(resetRides))."
     }
 }
 
@@ -22,7 +23,7 @@ public enum ConceptAPhysicalSmokeResult: Equatable, Sendable {
     case failure(ConceptAPhysicalSmokeFailure)
 }
 
-/// Exercises Concept A through `RidesViewModel` + `NetworkRideTokenDevice` against `--fake-pm3`.
+/// Exercises Concept A through `RidesViewModel` + `RideTokenDevice` on any known registered token.
 @MainActor
 public final class ConceptAPhysicalSmokeCoordinator {
     public static let detectStage = "detect"
@@ -33,19 +34,29 @@ public final class ConceptAPhysicalSmokeCoordinator {
     public static let resetStage = "reset"
     public static let restoreStage = "restore"
 
-    public static let expectedBlock4 = "D6D1C733"
-    public static let expectedBlock5 = "BBC7FD03"
-    public static let expectedBlock6 = "BBC7FD03"
-    public static let expectedSignalMillivolts = 420
-    public static let expectedRides: UInt = 180
-    public static let expectedSequence = RideSequence.venus
+    /// Optional `--fake-pm3` Venus seed values for documentation only; smoke does not assert them.
+    public static let fakePm3Block4 = "D6D1C733"
+    public static let fakePm3Block5 = "BBC7FD03"
+    public static let fakePm3Block6 = "BBC7FD03"
+    public static let fakePm3SignalMillivolts = 420
+    public static let fakePm3Rides: UInt = 180
+    public static let fakePm3Sequence = RideSequence.venus
+
+    private struct TokenSnapshot: Equatable {
+        let sequence: RideSequence
+        let rides: UInt
+        let block4Text: String
+        let block5: UInt32
+        let block6: UInt32
+        let signalMillivolts: Int?
+    }
 
     private let model: RidesViewModel
-    private let device: NetworkRideTokenDevice
+    private let device: any RideTokenDevice
     private let log: (String) -> Void
 
     public init(
-        device: NetworkRideTokenDevice,
+        device: any RideTokenDevice,
         configuration: RidesConfiguration = .load(),
         log: @escaping (String) -> Void = { print($0) }
     ) {
@@ -57,17 +68,23 @@ public final class ConceptAPhysicalSmokeCoordinator {
     public func run() async -> ConceptAPhysicalSmokeResult {
         await model.detect()
         guard case .known = model.state,
-              model.currentRides == Self.expectedRides,
-              model.pendingRides == Self.expectedRides,
-              model.aptBlock4Text == Self.expectedBlock4,
-              model.lastSignalMillivolts == Self.expectedSignalMillivolts,
-              model.loadedToken?.sequence == Self.expectedSequence else {
+              let token = model.loadedToken,
+              let signal = model.lastSignalMillivolts else {
             return failure(stage: Self.detectStage, detail: "state=\(model.state.title) rides=\(model.currentRides) signal=\(String(describing: model.lastSignalMillivolts))")
         }
-        log("RIDES_SLICE5_SMOKE_DETECT rides=\(Self.expectedRides) block4=\(Self.expectedBlock4) signal=\(Self.expectedSignalMillivolts)")
+        let snapshot = TokenSnapshot(
+            sequence: token.sequence,
+            rides: model.currentRides,
+            block4Text: model.aptBlock4Text,
+            block5: token.block5,
+            block6: token.block6,
+            signalMillivolts: signal
+        )
+        log("RIDES_SLICE5_SMOKE_DETECT sequence=\(snapshot.sequence.rawValue) rides=\(snapshot.rides) block4=\(snapshot.block4Text) signal=\(signal)")
 
-        let chargedRides: UInt = 170
-        model.adjustRides(by: -10)
+        let chargeDelta = snapshot.rides >= 10 ? -10 : 10
+        let chargedRides = adjustedRides(snapshot.rides, by: chargeDelta)
+        model.adjustRides(by: chargeDelta)
         guard model.canCharge else {
             return failure(stage: Self.chargeStage, detail: "canCharge=false after adjust")
         }
@@ -96,8 +113,8 @@ public final class ConceptAPhysicalSmokeCoordinator {
         var staleBlocks = chargedToken.blocks
         staleBlocks[5] = 0x11111111
         staleBlocks[6] = 0x22222222
-        let staleToken = Token(blocks: staleBlocks, rideCount: chargedRides, sequence: .venus)
-        let conflictRides: UInt = 160
+        let staleToken = Token(blocks: staleBlocks, rideCount: chargedRides, sequence: snapshot.sequence)
+        let conflictRides = conflictTarget(from: chargedRides)
         switch await device.writeRideMirrors(RideMirrorWriteRequest(token: staleToken, desiredRides: conflictRides)) {
         case .requiresRefresh:
             break
@@ -121,9 +138,9 @@ public final class ConceptAPhysicalSmokeCoordinator {
         model.isResetSheetPresented = false
         log("RIDES_SLICE5_SMOKE_RESET_CANCEL selection-required")
 
-        model.selectedResetSequence = .venus
+        model.selectedResetSequence = snapshot.sequence
         guard model.canConfirmReset else {
-            return failure(stage: Self.resetStage, detail: "cannot confirm Venus reset")
+            return failure(stage: Self.resetStage, detail: "cannot confirm \(snapshot.sequence.rawValue) reset")
         }
         await model.confirmReset()
         guard case .known = model.state,
@@ -133,25 +150,36 @@ public final class ConceptAPhysicalSmokeCoordinator {
               !model.isResetSheetPresented else {
             return failure(stage: Self.resetStage, detail: model.message)
         }
-        log("RIDES_SLICE5_SMOKE_RESET rides=0 sequence=venus")
+        log("RIDES_SLICE5_SMOKE_RESET rides=0 sequence=\(snapshot.sequence.rawValue)")
 
-        model.adjustRides(by: Int(Self.expectedRides))
+        model.adjustRides(by: Int(snapshot.rides))
         guard model.canCharge else {
             return failure(stage: Self.restoreStage, detail: "cannot charge restore")
         }
         await model.charge()
         guard case .known = model.state,
-              model.currentRides == Self.expectedRides,
-              model.pendingRides == Self.expectedRides else {
+              model.currentRides == snapshot.rides,
+              model.pendingRides == snapshot.rides,
+              model.loadedToken?.sequence == snapshot.sequence else {
             return failure(stage: Self.restoreStage, detail: model.message)
         }
-        log("RIDES_SLICE5_SMOKE_RESTORE rides=\(Self.expectedRides)")
+        log("RIDES_SLICE5_SMOKE_RESTORE rides=\(snapshot.rides) sequence=\(snapshot.sequence.rawValue)")
 
         return .success(ConceptAPhysicalSmokeSummary(
-            detectedRides: Self.expectedRides,
+            sequence: snapshot.sequence,
+            detectedRides: snapshot.rides,
             chargedRides: chargedRides,
             resetRides: 0
         ))
+    }
+
+    private func adjustedRides(_ rides: UInt, by delta: Int) -> UInt {
+        let maxRides = Int(model.configuration.maxRides)
+        return UInt(max(0, min(maxRides, Int(rides) + delta)))
+    }
+
+    private func conflictTarget(from chargedRides: UInt) -> UInt {
+        chargedRides >= 10 ? chargedRides - 10 : min(chargedRides + 10, model.configuration.maxRides)
     }
 
     private func failure(stage: String, detail: String?) -> ConceptAPhysicalSmokeResult {
