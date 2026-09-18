@@ -124,6 +124,7 @@ public final class BridgeConnectionModel: ObservableObject {
     private var launchSlice4PhysicalAcceptanceAttempted = false
     private var launchSlice5ConceptASmokeAttempted = false
     private var launchNoChipDetectAttempted = false
+    private var launchUnknownDetectAttempted = false
     private var launchBridgeUnavailableDetectAttempted = false
 #endif
 
@@ -1029,6 +1030,44 @@ public final class BridgeConnectionModel: ObservableObject {
         default:
             print("RIDES_NOCHIP_DETECT_FAILURE stage=detect detail=unexpected-state-\(model.state.title)")
             message = "No-chip detect expected .noChip, got \(model.state.title)."
+        }
+    }
+
+    /// One-shot Detect through Concept A for physical unknown-family validation.
+    public func runLaunchUnknownDetectIfRequested() async {
+        guard !launchUnknownDetectAttempted else { return }
+        launchUnknownDetectAttempted = true
+
+        var device: NetworkRideTokenDevice?
+        for _ in 0..<100 {
+            if Task.isCancelled { return }
+            if !isBusy, hasSavedCredential, let ready = makeRideTokenDevice() {
+                device = ready
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard let device else {
+            print("RIDES_UNKNOWN_DETECT_FAILURE stage=connect detail=bridge-not-ready")
+            return
+        }
+
+        let model = RidesViewModel(device: device)
+        await model.detect()
+        switch model.state {
+        case .unknown:
+            let dumpPath = model.lastDumpURL?.lastPathComponent ?? "none"
+            print("RIDES_UNKNOWN_DETECT_SUCCESS state=unknown message=\(model.message ?? RidesViewModel.unknownMessage) dump=\(dumpPath)")
+            message = model.message
+        case .failed(let error):
+            print("RIDES_UNKNOWN_DETECT_FAILURE stage=detect detail=\(error)")
+            message = error
+        case .noChip:
+            print("RIDES_UNKNOWN_DETECT_FAILURE stage=detect detail=no-chip")
+            message = "Unknown detect expected .unknown, got no-chip."
+        default:
+            print("RIDES_UNKNOWN_DETECT_FAILURE stage=detect detail=unexpected-state-\(model.state.title)")
+            message = "Unknown detect expected .unknown, got \(model.state.title)."
         }
     }
 
