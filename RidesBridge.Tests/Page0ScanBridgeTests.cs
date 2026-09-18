@@ -155,6 +155,18 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
+    public async Task FakePm3TuneFailedScanReturns503LfTuneFailed()
+    {
+        await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateTuneFailed());
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var response = await host.Client.GetAsync("/api/v1/hardware/page0/scan");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+        Assert.That((await response.Content.ReadFromJsonAsync<BridgeErrorResponse>())!.Code, Is.EqualTo("lf_tune_failed"));
+    }
+
+    [Test]
     public async Task FakePm3UnknownMirrorsSeedReturnsUndecodableScanAndDeterministicMissingBlocks()
     {
         await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateUnknownMirrorsSeeded());

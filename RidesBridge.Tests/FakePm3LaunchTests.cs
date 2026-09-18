@@ -121,6 +121,9 @@ public sealed class FakePm3LaunchTests
     [TestCase("no-chip", FakePm3Profile.NoChip)]
     [TestCase("nochip", FakePm3Profile.NoChip)]
     [TestCase("no_chip", FakePm3Profile.NoChip)]
+    [TestCase("tune-failed", FakePm3Profile.TuneFailed)]
+    [TestCase("tunefailed", FakePm3Profile.TuneFailed)]
+    [TestCase("lf_tune_failed", FakePm3Profile.TuneFailed)]
     public void ProfileResolverAcceptsDocumentedAliases(string raw, FakePm3Profile expected)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -153,7 +156,7 @@ public sealed class FakePm3LaunchTests
         }).Build();
 
         var error = Assert.Throws<BridgeConfigurationException>(() => FakePm3ProfileResolver.Resolve(configuration));
-        Assert.That(error!.Message, Does.Contain("no-chip"));
+        Assert.That(error!.Message, Does.Contain("tune-failed"));
     }
 
     [Test]
