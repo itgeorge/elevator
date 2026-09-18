@@ -8,6 +8,8 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     public static let noChipDetectEnvironmentKey = "RIDES_NOCHIP_DETECT"
     public static let unknownDetectEnvironmentKey = "RIDES_UNKNOWN_DETECT"
     public static let bridgeUnavailableDetectEnvironmentKey = "RIDES_BRIDGE_UNAVAILABLE_DETECT"
+    public static let simulatorFakeReaderEnvironmentKey = "RIDES_SIMULATOR_FAKE_READER"
+    public static let screenshotSceneEnvironmentKey = "RIDES_SCREENSHOT_SCENE"
 
     public let addressOverride: String?
     public let physicalAcceptanceEnabled: Bool
@@ -16,6 +18,8 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
     public let noChipDetectEnabled: Bool
     public let unknownDetectEnabled: Bool
     public let bridgeUnavailableDetectEnabled: Bool
+    public let simulatorFakeReaderEnabled: Bool
+    public let screenshotScene: SimulatorScreenshotScene?
 
     public init(
         addressOverride: String? = nil,
@@ -24,7 +28,9 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
         slice5ConceptASmokeEnabled: Bool = false,
         noChipDetectEnabled: Bool = false,
         unknownDetectEnabled: Bool = false,
-        bridgeUnavailableDetectEnabled: Bool = false
+        bridgeUnavailableDetectEnabled: Bool = false,
+        simulatorFakeReaderEnabled: Bool = false,
+        screenshotScene: SimulatorScreenshotScene? = nil
     ) {
         self.addressOverride = addressOverride
         self.physicalAcceptanceEnabled = physicalAcceptanceEnabled
@@ -33,6 +39,8 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
         self.noChipDetectEnabled = noChipDetectEnabled
         self.unknownDetectEnabled = unknownDetectEnabled
         self.bridgeUnavailableDetectEnabled = bridgeUnavailableDetectEnabled
+        self.simulatorFakeReaderEnabled = simulatorFakeReaderEnabled
+        self.screenshotScene = screenshotScene
     }
 
     public init(environment: [String: String]) {
@@ -43,7 +51,9 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
             slice5ConceptASmokeEnabled: environment[Self.slice5ConceptASmokeEnvironmentKey] == "1",
             noChipDetectEnabled: environment[Self.noChipDetectEnvironmentKey] == "1",
             unknownDetectEnabled: environment[Self.unknownDetectEnvironmentKey] == "1",
-            bridgeUnavailableDetectEnabled: environment[Self.bridgeUnavailableDetectEnvironmentKey] == "1"
+            bridgeUnavailableDetectEnabled: environment[Self.bridgeUnavailableDetectEnvironmentKey] == "1",
+            simulatorFakeReaderEnabled: environment[Self.simulatorFakeReaderEnvironmentKey] == "1",
+            screenshotScene: SimulatorScreenshotScene.parse(environment[Self.screenshotSceneEnvironmentKey])
         )
     }
 
@@ -55,7 +65,9 @@ public struct BridgeConnectionLaunchConfiguration: Equatable, Sendable {
             slice5ConceptASmokeEnabled: environmentLookup(Self.slice5ConceptASmokeEnvironmentKey) == "1",
             noChipDetectEnabled: environmentLookup(Self.noChipDetectEnvironmentKey) == "1",
             unknownDetectEnabled: environmentLookup(Self.unknownDetectEnvironmentKey) == "1",
-            bridgeUnavailableDetectEnabled: environmentLookup(Self.bridgeUnavailableDetectEnvironmentKey) == "1"
+            bridgeUnavailableDetectEnabled: environmentLookup(Self.bridgeUnavailableDetectEnvironmentKey) == "1",
+            simulatorFakeReaderEnabled: environmentLookup(Self.simulatorFakeReaderEnvironmentKey) == "1",
+            screenshotScene: SimulatorScreenshotScene.parse(environmentLookup(Self.screenshotSceneEnvironmentKey))
         )
     }
 
@@ -74,6 +86,8 @@ public struct BridgeConnectionView: View {
     public static let noChipDetectEnvironmentKey = BridgeConnectionLaunchConfiguration.noChipDetectEnvironmentKey
     public static let unknownDetectEnvironmentKey = BridgeConnectionLaunchConfiguration.unknownDetectEnvironmentKey
     public static let bridgeUnavailableDetectEnvironmentKey = BridgeConnectionLaunchConfiguration.bridgeUnavailableDetectEnvironmentKey
+    public static let simulatorFakeReaderEnvironmentKey = BridgeConnectionLaunchConfiguration.simulatorFakeReaderEnvironmentKey
+    public static let screenshotSceneEnvironmentKey = BridgeConnectionLaunchConfiguration.screenshotSceneEnvironmentKey
 
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
@@ -94,14 +108,14 @@ public struct BridgeConnectionView: View {
     ) {
         _model = StateObject(wrappedValue: BridgeConnectionModel())
         self.scannerCoordinator = scannerCoordinator ?? NativeBridgePairingScannerCoordinator()
+        let addressOverride = environmentLookup()
         launchConfiguration = BridgeConnectionLaunchConfiguration(
-            addressOverride: environmentLookup(),
-            physicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.physicalAcceptanceEnvironmentKey] == "1",
-            slice4PhysicalAcceptanceEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice4PhysicalAcceptanceEnvironmentKey] == "1",
-            slice5ConceptASmokeEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.slice5ConceptASmokeEnvironmentKey] == "1",
-            noChipDetectEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.noChipDetectEnvironmentKey] == "1",
-            unknownDetectEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.unknownDetectEnvironmentKey] == "1",
-            bridgeUnavailableDetectEnabled: ProcessInfo.processInfo.environment[BridgeConnectionLaunchConfiguration.bridgeUnavailableDetectEnvironmentKey] == "1"
+            environmentLookup: { key in
+                if key == BridgeConnectionLaunchConfiguration.addressOverrideEnvironmentKey {
+                    return addressOverride
+                }
+                return ProcessInfo.processInfo.environment[key]
+            }
         )
     }
 

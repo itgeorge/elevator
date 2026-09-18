@@ -974,7 +974,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - [ ] network loss after server accepted a write, followed by required refresh — **blocked without iPad**.
 - [x] Confirm known read/write paths did not issue a full dump.
 - [x] Deferred: confirm the black card's final state on real Proxmark3 hardware (2026-09-18; nix @ 500 rides — see Final validation notes; blocks 1..6 restored).
-- [ ] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke — **blocked without iPad**.
+- [x] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke — **done on iPad Air 4 simulator** via DEBUG `RIDES_SIMULATOR_FAKE_READER=1` + `RIDES_SCREENSHOT_SCENE` (`rides-layout`, `pending-rides`, `reset-sheet`, `unknown-token`, `no-chip` under `RidesTablet/Screenshots/`; not physical PM3).
 
 ## Acceptance
 

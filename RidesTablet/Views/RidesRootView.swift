@@ -1,5 +1,20 @@
 import SwiftUI
 
+public enum SimulatorScreenshotScene: String, Equatable, Sendable {
+    case known
+    case pending
+    case reset
+    case unknown
+    case noChip = "no-chip"
+
+    public static func parse(_ rawValue: String?) -> Self? {
+        guard let rawValue else { return nil }
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "nochip" { return .noChip }
+        return Self(rawValue: normalized)
+    }
+}
+
 /// Owns connection state separately from token state and routes the operator
 /// into Concept A once an authenticated bridge client is ready.
 @MainActor
@@ -38,7 +53,18 @@ struct RidesRootView: View {
             connection.restore()
             await connection.applyLaunchAddressOverride(launchConfiguration.addressOverride)
             await connection.startAutomaticBonjourReconnect()
+#if DEBUG
+            if launchConfiguration.simulatorFakeReaderEnabled {
+                bootstrapSimulatorFakeReader()
+                if let scene = launchConfiguration.screenshotScene, let ridesModel {
+                    await applySimulatorScreenshotScene(scene, to: ridesModel)
+                }
+            } else {
+                refreshOperatorWorkflow()
+            }
+#else
             refreshOperatorWorkflow()
+#endif
 #if DEBUG
             if launchConfiguration.physicalAcceptanceEnabled {
                 await connection.runLaunchPhysicalAcceptanceIfRequested()
@@ -156,4 +182,30 @@ struct RidesRootView: View {
             ridesModel = RidesViewModel(device: device, configuration: .load())
         }
     }
+
+#if DEBUG
+    private func bootstrapSimulatorFakeReader() {
+        usesFakeReader = true
+        ridesModel = RidesViewModel(device: FakeProxmark(), configuration: .load())
+    }
+
+    private func applySimulatorScreenshotScene(_ scene: SimulatorScreenshotScene, to model: RidesViewModel) async {
+        switch scene {
+        case .known:
+            await model.detect()
+        case .pending:
+            await model.detect()
+            model.adjustRides(by: 150)
+        case .reset:
+            await model.detect()
+            model.openReset()
+        case .unknown:
+            model.selectSimulation(.unknownFamily)
+            await model.detect()
+        case .noChip:
+            model.selectSimulation(.noChip)
+            await model.detect()
+        }
+    }
+#endif
 }

@@ -26,6 +26,40 @@ final class ConceptAPhysicalSmokeCoordinatorTests: XCTestCase {
         ]).bridgeUnavailableDetectEnabled)
     }
 
+    func testLaunchConfigurationUsesExactSimulatorFakeReaderKeyAndValue() {
+        let enabled = BridgeConnectionLaunchConfiguration(environment: [
+            "RIDES_SIMULATOR_FAKE_READER": "1"
+        ])
+        XCTAssertTrue(enabled.simulatorFakeReaderEnabled)
+        XCTAssertFalse(BridgeConnectionLaunchConfiguration(environment: [
+            "RIDES_SIMULATOR_FAKE_READER": "true"
+        ]).simulatorFakeReaderEnabled)
+    }
+
+    func testLaunchConfigurationParsesScreenshotSceneValues() {
+        XCTAssertEqual(
+            BridgeConnectionLaunchConfiguration(environment: [
+                "RIDES_SCREENSHOT_SCENE": "pending"
+            ]).screenshotScene,
+            .pending
+        )
+        XCTAssertEqual(
+            BridgeConnectionLaunchConfiguration(environment: [
+                "RIDES_SCREENSHOT_SCENE": "no-chip"
+            ]).screenshotScene,
+            .noChip
+        )
+        XCTAssertEqual(
+            BridgeConnectionLaunchConfiguration(environment: [
+                "RIDES_SCREENSHOT_SCENE": "nochip"
+            ]).screenshotScene,
+            .noChip
+        )
+        XCTAssertNil(BridgeConnectionLaunchConfiguration(environment: [
+            "RIDES_SCREENSHOT_SCENE": "invalid"
+        ]).screenshotScene)
+    }
+
     func testSmokePassesForNonVenusRegisteredToken() async {
         let token = Token.sample(rideCount: 500, sequence: .nix)
         let fake = ConceptAPhysicalSmokeFakeDevice(token: token, signalMillivolts: 46354)
