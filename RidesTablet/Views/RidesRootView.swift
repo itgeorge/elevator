@@ -49,6 +49,9 @@ struct RidesRootView: View {
             if launchConfiguration.slice5ConceptASmokeEnabled {
                 await connection.runLaunchSlice5ConceptAPhysicalSmokeIfRequested()
             }
+            if launchConfiguration.noChipDetectEnabled {
+                await connection.runLaunchNoChipDetectIfRequested()
+            }
 #endif
         }
         .onChange(of: connection.state) { _, _ in
