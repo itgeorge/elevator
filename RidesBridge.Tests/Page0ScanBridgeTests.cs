@@ -176,6 +176,20 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
+    public async Task FakePm3UnavailableScanReturns503Pm3Unavailable()
+    {
+        await using var host = await ScanTestHost.CreateAsync(FakePm3Device.CreateUnavailable());
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        var response = await host.Client.GetAsync("/api/v1/hardware/page0/scan");
+        var error = await response.Content.ReadFromJsonAsync<BridgeErrorResponse>();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+        Assert.That(error!.Code, Is.EqualTo("pm3_unavailable"));
+        Assert.That(error.Message, Is.EqualTo("Proxmark3 is unavailable."));
+    }
+
+    [Test]
     public async Task FakePm3UnknownProfileScanReturnsUndecodableMirrorsNotNoChip()
     {
         await using var host = await ScanTestHost.CreateAsync(FakePm3ProfileResolver.CreateDevice(FakePm3Profile.Unknown));

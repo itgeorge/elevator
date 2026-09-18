@@ -131,6 +131,10 @@ public sealed class FakePm3LaunchTests
     [TestCase("unknown-mirrors", FakePm3Profile.Unknown)]
     [TestCase("unknown_mirrors", FakePm3Profile.Unknown)]
     [TestCase("UNKNOWN", FakePm3Profile.Unknown)]
+    [TestCase("pm3-unavailable", FakePm3Profile.Pm3Unavailable)]
+    [TestCase("pm3_unavailable", FakePm3Profile.Pm3Unavailable)]
+    [TestCase("unavailable", FakePm3Profile.Pm3Unavailable)]
+    [TestCase("PM3-UNAVAILABLE", FakePm3Profile.Pm3Unavailable)]
     public void ProfileResolverAcceptsDocumentedAliases(string raw, FakePm3Profile expected)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -154,7 +158,6 @@ public sealed class FakePm3LaunchTests
     }
 
     [TestCase("empty-antenna")]
-    [TestCase("pm3-unavailable")]
     public void ProfileResolverRejectsInvalidProfiles(string raw)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

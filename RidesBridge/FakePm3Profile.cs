@@ -19,6 +19,9 @@ public enum FakePm3Profile
 
     /// <summary>Undecodable mirrors (DEADBEEF/FACECAFE) for Concept A unknown → missing dump smoke.</summary>
     Unknown,
+
+    /// <summary>Bridge up but PM3 disconnected: chip ops throw <see cref="BridgeHardwareError.Unavailable"/>.</summary>
+    Pm3Unavailable,
 }
 
 public static class FakePm3ProfileResolver
@@ -42,6 +45,7 @@ public static class FakePm3ProfileResolver
         FakePm3Profile.TuneFailed => FakePm3Device.CreateTuneFailed(),
         FakePm3Profile.ReadFailed => FakePm3Device.CreateReadFailed(),
         FakePm3Profile.Unknown => FakePm3Device.CreateUnknownMirrorsSeeded(),
+        FakePm3Profile.Pm3Unavailable => FakePm3Device.CreateUnavailable(),
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Unsupported fake PM3 profile."),
     };
 
@@ -52,6 +56,7 @@ public static class FakePm3ProfileResolver
         FakePm3Profile.TuneFailed => "tune-failed",
         FakePm3Profile.ReadFailed => "read-failed",
         FakePm3Profile.Unknown => "unknown",
+        FakePm3Profile.Pm3Unavailable => "pm3-unavailable",
         _ => profile.ToString().ToLowerInvariant(),
     };
 
@@ -67,9 +72,11 @@ public static class FakePm3ProfileResolver
             return FakePm3Profile.ReadFailed;
         if (IsProfile(value, "unknown", "unknown-mirrors", "unknown_mirrors"))
             return FakePm3Profile.Unknown;
+        if (IsProfile(value, "pm3-unavailable", "pm3_unavailable", "unavailable"))
+            return FakePm3Profile.Pm3Unavailable;
 
         throw new BridgeConfigurationException(
-            $"{ConfigurationKey} / {EnvironmentKey} must be venus, default, no-chip, tune-failed, read-failed, or unknown; received '{value}'.");
+            $"{ConfigurationKey} / {EnvironmentKey} must be venus, default, no-chip, tune-failed, read-failed, unknown, or pm3-unavailable; received '{value}'.");
     }
 
     private static bool IsProfile(string value, params string[] names)
