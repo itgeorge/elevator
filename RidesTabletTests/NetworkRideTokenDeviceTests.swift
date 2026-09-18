@@ -116,6 +116,60 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
         XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
     }
 
+    func testUnreachableScanDoesNotRequestMissingBlocks() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { _ in
+            throw URLError(.cannotConnectToHost)
+        }
+
+        let device = try makeDevice()
+
+        let outcome = await device.scan()
+
+        guard case .failure(let message) = outcome else {
+            return XCTFail("Expected failure outcome")
+        }
+        XCTAssertTrue(message.contains(BridgeClientError.unreachable.localizedDescription ?? ""))
+        XCTAssertNotEqual(message, RidesViewModel.noChipMessage)
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
+    }
+
+    func testTimedOutScanMapsToUnreachableStyleFailure() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { _ in
+            throw URLError(.timedOut)
+        }
+
+        let device = try makeDevice()
+
+        let outcome = await device.scan()
+
+        guard case .failure(let message) = outcome else {
+            return XCTFail("Expected failure outcome")
+        }
+        XCTAssertTrue(message.contains(BridgeClientError.timeout.localizedDescription ?? ""))
+        XCTAssertNotEqual(message, RidesViewModel.noChipMessage)
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
+    }
+
+    @MainActor
+    func testViewModelDetectUnreachableShowsActionableMessageNotNoChip() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { _ in
+            throw URLError(.cannotConnectToHost)
+        }
+
+        let device = try makeDevice()
+        let model = RidesViewModel(device: device)
+
+        await model.detect()
+
+        guard case .failed(let error) = model.state else {
+            return XCTFail("Expected failed state")
+        }
+        XCTAssertTrue(error.contains(BridgeClientError.unreachable.localizedDescription ?? ""))
+        XCTAssertNotEqual(model.message, RidesViewModel.noChipMessage)
+        XCTAssertNil(model.loadedToken)
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
+    }
+
     func testChargeMutatesOnlyBlocksFiveAndSixFromLastReadExpected() async throws {
         let token = Token.sample(rideCount: 180, sequence: .venus)
         let desired = try XCTUnwrap(RideSequence.venus.encode(200))

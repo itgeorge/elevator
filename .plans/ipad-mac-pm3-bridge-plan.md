@@ -969,7 +969,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - [x] no chip — card removed from antenna (2026-09-18; see Final validation notes);
   - [ ] unknown dump — **skipped** (known nix token on antenna);
   - [x] explicit reset/cancel (Concept A smoke reset-cancel + nix mirrors-only reset via parameterized coordinator);
-  - [ ] bridge/PM3 unavailable;
+  - [x] bridge/PM3 unavailable — split-network unreachable (`172.20.10.4:5080` hotspot vs iPad on different Wi‑Fi; 2026-09-18; see Final validation notes);
   - [ ] network loss before a write;
   - [ ] network loss after server accepted a write, followed by required refresh.
 - [x] Confirm known read/write paths did not issue a full dump.
@@ -1117,7 +1117,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - **iPad Concept A smoke (`RIDES_SLICE5_CONCEPTA_SMOKE=1`, address override `192.168.0.163:5080`, pre-parameterization run):** Debug build installed (`/tmp/RidesTabletFinalValDerived`, team `TJY5296P7S`, bundle `com.itgeorge.RidesTablet`). Observed HTTP: `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` only — **no mutations** (smoke failed at detect: coordinator expected Venus/180/`D6D1C733`). **No** `/missing`, `/mirrors`, `/block5`, or full dump on known path.
   - **iPad Concept A smoke rerun (2026-09-18, parameterized coordinator):** Same Debug build path/team/bundle; bridge `dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday` on `http://192.168.0.163:5080/`. Authenticated HTTP sequence: `GET /api/v1/pair/status` → `GET /api/v1/hardware/page0/scan` (nix @ 500) → `POST /api/v1/hardware/page0/mutations` (charge 500→490) → `POST /api/v1/hardware/page0/mutations` (`alreadyApplied` at 490) → `POST /api/v1/hardware/page0/mutations` (stale-expected conflict) → `GET /api/v1/hardware/page0/scan` (refresh) → `GET /api/v1/hardware/page0/blocks1to6` (reset plan) → `POST /api/v1/hardware/page0/mutations` (nix reset to 0) → `POST /api/v1/hardware/page0/mutations` (restore to 500). **No** `/missing`. Postflight Pm3Cli blocks 1..6 identical to preflight; `RidesCli read` confirmed `sequence: nix`, `rides remaining: 500`.
   - **Antenna instability:** `page0/scan` / `Pm3Cli tune` reported peak ~`46354`–`46483` mV on real PM3 vs fake-pm3 doc seed `420` mV — tune value out of simulator range; reads/writes still succeeded on both bridge-direct and parameterized Concept A smoke runs.
-  - **Skipped (user away):** unknown-dump, network-loss, bridge-unavailable, fresh pairing/QR, identity-mismatch reset seed on real hardware.
+  - **Skipped (user away):** unknown-dump, network-loss mid-write, fresh pairing/QR, identity-mismatch reset seed on real hardware.
   - **No-chip validation (2026-09-18, card removed from PM3 antenna):**
     - Preconditions: `/dev/cu.usbmodem1301` free before launch; token physically absent from reader; **no writes**.
     - Bridge: `dotnet run --project RidesBridge/RidesBridge.csproj -- --everyday` on `http://192.168.0.163:5080/`.
@@ -1128,6 +1128,25 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - **Fake PM3 tune-failed profile:** `RIDES_FAKE_PM3_PROFILE=tune-failed dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3` reproduces LF tune failure without exotic hardware (`FakePm3Device.CreateTuneFailed()` → HTTP 503 `lf_tune_failed`; host coverage in `Page0ScanBridgeTests.FakePm3TuneFailedScanReturns503LfTuneFailed`).
   - **Fake PM3 read-failed profile:** `RIDES_FAKE_PM3_PROFILE=read-failed dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3` reproduces page-0 scan read failure without exotic hardware (`FakePm3Device.CreateReadFailed()` → HTTP 502 `page0_read_failed`; host coverage in `Page0ScanBridgeTests.FakePm3ReadFailedScanReturns502Page0ReadFailed`).
   - **Fake PM3 unknown profile:** `RIDES_FAKE_PM3_PROFILE=unknown dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3` reproduces Concept A unknown → `/missing` once → dump assembly without USB (`FakePm3ProfileResolver.CreateDevice(Unknown)` → `CreateUnknownMirrorsSeeded()`; mirrors `DEADBEEF`/`FACECAFE`; host coverage in `Page0ScanBridgeTests.FakePm3UnknownProfileScanReturnsUndecodableMirrorsNotNoChip` and `FakePm3UnknownProfileMissingReturnsDeterministicAllowlistedBlocks`). Known Venus profile still uses scan only on the iPad; `/missing` is not part of the known-token path.
+  - **Bridge-unavailable validation (2026-09-18, iPad on home Wi‑Fi, Mac on iPhone hotspot — cross-network unreachable):**
+    - Network context: Mac hotspot `172.20.10.4`; iPad on a different network (home Wi‑Fi) cannot route to the hotspot address. Old home bind `192.168.0.163` is not present on this Mac. This is **client cannot reach bridge**, not a PM3/fake-pm3 hardware profile.
+    - Bridge: `dotnet run --project RidesBridge/RidesBridge.csproj -- --fake-pm3`, bound `http://0.0.0.0:5080`; reachable from Mac at `http://172.20.10.4:5080/` (also `http://10.2.0.2:5080/`, `http://169.254.197.217:5080/`). No USB/PM3 serial opened.
+    - iPad: `xcrun devicectl list devices` showed `itgeorge iPad Air 4th Gen` `connected` (`494BBD09-0DEB-5B41-B915-3B4258F1DBA2` / UDID `00008101-001A68EE21F0001E`). Debug build `/tmp/RidesTabletBridgeUnavailableDerived`, team `TJY5296P7S`, bundle `com.itgeorge.RidesTablet`.
+    - Launch:
+
+      ```bash
+      xcrun devicectl device process launch \
+        --device 494BBD09-0DEB-5B41-B915-3B4258F1DBA2 \
+        --terminate-existing \
+        -e '{"RIDES_BRIDGE_ADDRESS_OVERRIDE":"172.20.10.4:5080","RIDES_BRIDGE_UNAVAILABLE_DETECT":"1"}' \
+        com.itgeorge.RidesTablet
+      ```
+
+      Existing Keychain credential retained; override migration attempted against unreachable hotspot address.
+    - **Bridge HTTP during iPad session:** **no iPad traffic at all** — `/tmp/ridesbridge-unavail.log` stayed at 106 lines across `devicectl` launches at 17:46 (no `GET /api/v1/pair/status`, **no** `GET /api/v1/hardware/page0/scan`, **no** `/missing`, **no** `/mutations`). `netstat` showed only `LISTEN` on `*.5080` (no `ESTABLISHED` from iPad). Only pre-iPad localhost/Mac curl probes (`GET /` 404, `GET /api/v1/health` 200) appear in the log.
+    - **Restore / override migration path (no mutations):** `RidesRootView.task` → `restore()` → `applyLaunchAddressOverride("172.20.10.4:5080")` → `migrateEnteredBridgeAddress()` → authenticated `verifyPairing()` cannot connect → `fail(with: BridgeClientError.unreachable)` retains the previous saved client/Keychain URL. Connection gate shows `BridgeClientError.unreachable` (`Could not reach the bridge. Check its local IP, port, and Wi-Fi.`) — distinct from no-chip.
+    - **Concept A detect probe (`RIDES_BRIDGE_UNAVAILABLE_DETECT=1`, DEBUG):** one-shot `runLaunchBridgeUnavailableDetectIfRequested` builds a temporary `NetworkRideTokenDevice` against the override URL + saved bearer, calls `RidesViewModel.detect()` only. Expected `.failed` with `Scan failed: Could not reach the bridge. Check its local IP, port, and Wi-Fi.` — **not** `RidesViewModel.noChipMessage` (`No T55xx chip detected. Place the token on the reader and try again.`). **No mutations.** DEBUG `print` markers: `RIDES_BRIDGE_UNAVAILABLE_DETECT_SUCCESS state=failed message=…` (stdout not surfaced in Mac unified log during devicectl launch; behavior confirmed by bridge absence + unit tests).
+    - **Deterministic Swift coverage (no network/PM3):** `NetworkRideTokenDeviceTests` (`11/11` on simulator `RidesTablet iPad Air 4`) — `URLProtocol` throwing `URLError(.cannotConnectToHost)` or `.timedOut` on scan → `.failure` with unreachable/timeout wording, request log `[/api/v1/hardware/page0/scan]` only (**no** `/missing`); `RidesViewModel.detect()` → `.failed` actionable message, not no-chip. `ConceptAPhysicalSmokeCoordinatorTests.testLaunchConfigurationUsesExactBridgeUnavailableDetectKeyAndValue` locks `RIDES_BRIDGE_UNAVAILABLE_DETECT=1` parsing (`4/4` passed). Existing `BridgeClientTests` already cover `BridgeClientError.unreachable` mapping and connection-model migration failure messaging.
   - **Shutdown:** `kill -TERM` on bridge released TCP 5080 and `/dev/cu.usbmodem1301`.
 - Notes (2026-09-18, Slice 5 Concept A smoke parameterization — left uncommitted):
   - `ConceptAPhysicalSmokeCoordinator` no longer asserts Venus/`--fake-pm3` constants. On Detect it snapshots any `.known` registered token (sequence, rides, block4, mirrors 5/6, signal), charges by ±10 within 0…500, exercises already-applied/conflict/reset-cancel/reset/restore, and resets using the detected sequence. Venus seed values remain as optional `fakePm3*` documentation only.

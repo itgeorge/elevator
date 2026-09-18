@@ -52,6 +52,11 @@ struct RidesRootView: View {
             if launchConfiguration.noChipDetectEnabled {
                 await connection.runLaunchNoChipDetectIfRequested()
             }
+            if launchConfiguration.bridgeUnavailableDetectEnabled {
+                await connection.runLaunchBridgeUnavailableDetectIfRequested(
+                    overrideAddress: launchConfiguration.addressOverride
+                )
+            }
 #endif
         }
         .onChange(of: connection.state) { _, _ in
