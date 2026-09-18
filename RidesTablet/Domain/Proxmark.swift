@@ -1,5 +1,60 @@
 import Foundation
 
+/// Hardware-neutral operator outcomes for Concept A Detect.
+public enum ScanOutcome: Equatable, Sendable {
+    case known(Token, signalMillivolts: Int)
+    case unknown(UnknownToken, signalMillivolts: Int)
+    case noChip
+    case failure(String)
+}
+
+/// Compatibility alias for the prototype's older detect/tune/read naming.
+public typealias DetectTuneReadOutcome = ScanOutcome
+
+public struct RideMirrorWriteRequest: Equatable, Sendable {
+    public let token: Token
+    public let desiredRides: UInt
+
+    public init(token: Token, desiredRides: UInt) {
+        self.token = token
+        self.desiredRides = desiredRides
+    }
+
+    public var expectedBlock5: UInt32 { token.block5 }
+    public var expectedBlock6: UInt32 { token.block6 }
+}
+
+public struct ResetMutationRequest: Equatable, Sendable {
+    public let sequence: RideSequence
+
+    public init(sequence: RideSequence) {
+        self.sequence = sequence
+    }
+}
+
+public enum ResetOutcome: Equatable, Sendable {
+    case success(Token)
+    case alreadyApplied(Token)
+    case failure(String)
+    /// Conflict or ambiguous timeout: operator must Detect again before retrying.
+    case requiresRefresh(String)
+}
+
+public enum WriteOutcome: Equatable, Sendable {
+    case success
+    case failure(String)
+    /// Conflict or ambiguous timeout: operator must Detect again before retrying.
+    case requiresRefresh(String)
+}
+
+/// Hardware-neutral boundary for Concept A. Adapters must not expose HTTP DTOs,
+/// bearer tokens, URLSession details, or PM3 command names to the view model.
+public protocol RideTokenDevice: Sendable {
+    func scan() async -> ScanOutcome
+    func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome
+    func reset(_ request: ResetMutationRequest) async -> ResetOutcome
+}
+
 public enum DetectOutcome: Equatable, Sendable {
     case detected
     case noChip
@@ -18,20 +73,6 @@ public enum ReadOutcome: Equatable, Sendable {
     case failure(String)
 }
 
-/// The result of the operator-facing detect button. A real adapter can replace this
-/// with one hardware transaction; the fake keeps the three phases deterministic.
-public enum DetectTuneReadOutcome: Equatable, Sendable {
-    case known(Token, signalMillivolts: Int)
-    case unknown(UnknownToken, signalMillivolts: Int)
-    case noChip
-    case failure(String)
-}
-
-public enum WriteOutcome: Equatable, Sendable {
-    case success
-    case failure(String)
-}
-
 public enum OverwriteOutcome: Equatable, Sendable {
     case success
     case failure(String)
@@ -47,12 +88,12 @@ public enum SimulationScenario: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
-/// Hardware boundary for the prototype. The real Proxmark adapter can replace this later.
+/// Low-level fake/hardware primitives retained for simulator scenarios and domain tests.
 public protocol ProxmarkDevice: Sendable {
     func detect() async -> DetectOutcome
     func tune() async -> TuneOutcome
     func read() async -> ReadOutcome
-    func detectTuneRead() async -> DetectTuneReadOutcome
+    func detectTuneRead() async -> ScanOutcome
     func write(_ token: Token) async -> WriteOutcome
     func overwrite(_ image: [UInt32]) async -> OverwriteOutcome
 }
@@ -60,7 +101,7 @@ public protocol ProxmarkDevice: Sendable {
 public extension ProxmarkDevice {
     /// Compatibility implementation for adapters that have not yet added a single
     /// hardware transaction. The view model still exposes this as one atomic flow.
-    func detectTuneRead() async -> DetectTuneReadOutcome {
+    func detectTuneRead() async -> ScanOutcome {
         switch await detect() {
         case .noChip: return .noChip
         case .failure(let error): return .failure(error)
@@ -81,7 +122,7 @@ public extension ProxmarkDevice {
 }
 
 /// Deterministic async fake used by the simulator and unit tests.
-public final class FakeProxmark: ProxmarkDevice, @unchecked Sendable {
+public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sendable {
     private let lock = NSLock()
     private var storedDetect: DetectOutcome
     private var storedTune: TuneOutcome
@@ -94,8 +135,13 @@ public final class FakeProxmark: ProxmarkDevice, @unchecked Sendable {
     private(set) public var readCallCount = 0
     private(set) public var writeCallCount = 0
     private(set) public var overwriteCallCount = 0
+    private(set) public var scanCallCount = 0
+    private(set) public var writeRideMirrorsCallCount = 0
+    private(set) public var resetCallCount = 0
     private(set) public var lastWrittenToken: Token?
     private(set) public var lastOverwrittenImage: [UInt32]?
+    private(set) public var lastMirrorWriteRequest: RideMirrorWriteRequest?
+    private(set) public var lastResetRequest: ResetMutationRequest?
 
     public init(
         detect: DetectOutcome = .detected,
@@ -184,7 +230,7 @@ public final class FakeProxmark: ProxmarkDevice, @unchecked Sendable {
         }
     }
 
-    public func detectTuneRead() async -> DetectTuneReadOutcome {
+    public func detectTuneRead() async -> ScanOutcome {
         await Task.yield()
         return withLock {
             detectCallCount += 1
@@ -208,6 +254,12 @@ public final class FakeProxmark: ProxmarkDevice, @unchecked Sendable {
         }
     }
 
+    public func scan() async -> ScanOutcome {
+        await Task.yield()
+        withLock { scanCallCount += 1 }
+        return await detectTuneRead()
+    }
+
     public func write(_ token: Token) async -> WriteOutcome {
         await Task.yield()
         return withLock {
@@ -219,8 +271,20 @@ public final class FakeProxmark: ProxmarkDevice, @unchecked Sendable {
                 return .success
             case .failure(let error):
                 return .failure(error)
+            case .requiresRefresh(let error):
+                return .requiresRefresh(error)
             }
         }
+    }
+
+    public func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome {
+        await Task.yield()
+        withLock {
+            writeRideMirrorsCallCount += 1
+            lastMirrorWriteRequest = request
+        }
+        let updated = request.token.withRideCount(request.desiredRides)
+        return await write(updated)
     }
 
     public func overwrite(_ image: [UInt32]) async -> OverwriteOutcome {
@@ -242,6 +306,28 @@ public final class FakeProxmark: ProxmarkDevice, @unchecked Sendable {
             case .failure(let error):
                 return .failure(error)
             }
+        }
+    }
+
+    public func reset(_ request: ResetMutationRequest) async -> ResetOutcome {
+        await Task.yield()
+        withLock {
+            resetCallCount += 1
+            lastResetRequest = request
+        }
+        let image = ResetSequence.for(request.sequence).resetImage()
+        switch await overwrite(image) {
+        case .success:
+            let token: Token
+            switch TokenDecoder.decode(blocks: image) {
+            case .known(let decoded):
+                token = decoded
+            case .unknown, .noChip:
+                token = Token(blocks: image, rideCount: 0, sequence: request.sequence)
+            }
+            return .success(token)
+        case .failure(let error):
+            return .failure(error)
         }
     }
 
