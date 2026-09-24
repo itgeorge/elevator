@@ -961,7 +961,7 @@ Names and exact method grouping may evolve, but the domain/view model must not d
 - [x] Run full non-integration .NET suite including `RidesBridge.Tests`.
 - [x] Run physical iPad smoke matrix over Wi-Fi against `--fake-pm3` (real Proxmark3/black-card steps deferred to plan end).
 - [x] Run physical iPad + real PM3 matrix over Wi-Fi against `--everyday` (2026-09-18; see Final validation notes):
-  - [ ] first pairing/manual or QR (existing Keychain credential reused; no fresh PIN/QR this run) — **blocked without iPad**;
+  - [x] first pairing/manual or QR — fresh QR pairing on physical iPad (2026-09-25; see Final validation notes);
   - [x] reconnect (`GET /api/v1/pair/status` HTTP 200);
   - [x] known read (bridge `page0/scan`; **nix** token, not Venus fake seed);
   - [x] ride adjustment/write and verified reread (bridge mutations 500→490→0→500 with restore);
@@ -970,8 +970,8 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - [x] unknown dump — physical unrecognized token on antenna (2026-09-18; see Final validation notes);
   - [x] explicit reset/cancel (Concept A smoke reset-cancel + nix mirrors-only reset via parameterized coordinator);
   - [x] bridge/PM3 unavailable — split-network unreachable (`172.20.10.4:5080` hotspot vs iPad on different Wi‑Fi; 2026-09-18; see Final validation notes);
-  - [ ] network loss before a write — **blocked without iPad**;
-  - [ ] network loss after server accepted a write, followed by required refresh — **blocked without iPad**.
+  - [x] network loss before a write — physical iPad Wi-Fi-off charge attempt (2026-09-25; see Final validation notes);
+  - [x] network loss after server accepted a write, followed by required refresh — physical iPad Wi-Fi-off mid-write with temporary server-side response-delay hook (2026-09-25; see Final validation notes).
 - [x] Confirm known read/write paths did not issue a full dump.
 - [x] Deferred: confirm the black card's final state on real Proxmark3 hardware (2026-09-18; nix @ 500 rides — see Final validation notes; blocks 1..6 restored).
 - [x] Capture Concept A screenshots on the physical iPad or agreed iPad Air 4 simulator after fake-pm3 smoke — **done on iPad Air 4 simulator** via DEBUG `RIDES_SIMULATOR_FAKE_READER=1` + `RIDES_SCREENSHOT_SCENE` (`rides-layout`, `pending-rides`, `reset-sheet`, `unknown-token`, `no-chip` under `RidesTablet/Screenshots/`; not physical PM3).
@@ -1114,8 +1114,16 @@ Names and exact method grouping may evolve, but the domain/view model must not d
   - Known-token path: `NetworkRideTokenDevice.scan()` returns `.known` immediately after successful `RideBlockResolver.resolve`; `/missing` is reached only on the unknown branch (`NetworkRideTokenDeviceTests.testKnownScanUsesPage0ScanOnly`, `testNoChipScanDoesNotRequestMissingBlocks`).
 - **Physical evidence already recorded (prior sessions; not re-run this handoff):** nix Concept A end-to-end on real PM3 (`--everyday`), no-chip, unknown dump, bridge-unavailable (cross-network), pm3-unavailable (USB absent). See agent notes below.
 - **`--fake-pm3` profiles (`RIDES_FAKE_PM3_PROFILE` / `Bridge:FakePm3Profile`):** `venus`/`default` (known Venus @ 180), `no-chip`, `tune-failed`, `read-failed`, `unknown` (undecodable mirrors → `/missing` once), `pm3-unavailable` (aliases `pm3_unavailable`, `unavailable`).
-- **Deferred without physical iPad:** fresh QR/manual first pairing, network-loss mid-write and post-write refresh on device, identity-mismatch reset seed on real hardware. Concept A screenshots were refreshed on the iPad Air 4 simulator (see Slice 5 validation todo). Simulator/unit coverage and fake-pm3 profiles cover the failure classes; remaining device-only matrix rows stay open until hardware is available.
-- **Remaining risks:** prototype plaintext HTTP on trusted LAN; physical antenna coupling can flip scan between success, `no_chip`, and `pm3_timeout`; Bonjour TXT URL is an untrusted hint (mitigated by pair/proof); everyday-mode port selection has documented TOCTOU; real-hardware network-loss timing not exercised on device.
+- **Deferred device rows — all completed 2026-09-25:** fresh QR first pairing, network-loss before write, network-loss after accepted write + refresh, and identity-mismatch reset on real hardware (see 2026-09-25 agent notes). Concept A screenshots were refreshed on the iPad Air 4 simulator (see Slice 5 validation todo). All physical matrix rows are now closed.
+- **Remaining risks:** prototype plaintext HTTP on trusted LAN; physical antenna coupling can flip scan between success, `no_chip`, and `pm3_timeout`; Bonjour TXT URL is an untrusted hint (mitigated by pair/proof); everyday-mode port selection has documented TOCTOU.
+- Notes (2026-09-25, physical iPad matrix completion — nix card @ 500 on `/dev/cu.usbmodem1301`, Mac Wi-Fi `192.168.0.148:5080`, `--everyday` bridge):
+  - **Preflight:** read-only Pm3Cli snapshot blocks 1..6 `1BFE002A F100C605 82045966 82045966 FEC63352 FEC63352`; `RidesCli read` → nix @ 500. iPad Air 4 (`494BBD09-0DEB-5B41-B915-3B4258F1DBA2`) reinstalled with fresh HEAD (`b724b93`) Debug build (team `TJY5296P7S`, `-allowProvisioningUpdates` required after prior profile expiry).
+  - **Fresh QR pairing:** operator tapped Forget (local reset), bridge restarted for a fresh 2-minute PIN, VisionKit scanned the lossless PNG QR for `192.168.0.148:5080`. Log: exactly one `POST /api/v1/pair` → 200; operator Detect → one `GET /api/v1/hardware/page0/scan` → 200, iPad showed 500 rides. No legacy endpoints, no `/missing`.
+  - **Network loss before a write:** Wi-Fi toggled off, Charge 490 attempted. iPad showed actionable error icon, no retry. Bridge log: zero requests of any kind during the offline window (zero `/mutations`). Wi-Fi restored → Detect → 500 unchanged.
+  - **Network loss after server accepted a write + refresh:** temporary uncommitted env-gated hook `RIDESBRIDGE_DEBUG_WRITE_RESPONSE_DELAY_MS=15000` delayed the mutation response after write/verify completed (reverted immediately after; never committed). Charge 490 → Wi-Fi off within the window. Bridge log: one `POST /api/v1/hardware/page0/mutations` → 200 in 19.66s (~4.7s hardware + 15s delay); client never saw the response and errored without retry. Wi-Fi restored → Detect → 490, proving the server-side write landed and refresh reports true hardware state. Clean bridge restart → Charge 500 → 200 at normal latency → scan confirmed 500.
+  - **Identity-mismatch reset on real hardware (Mac-driven, no iPad interaction):** fresh localhost PIN pair → bearer; `GET blocks1to6` matched preflight. Six-block conditional mutation nix → Venus reset image (`43FE0062 5BA494A3 D6D1C733 D6D1C733 48C74948 48C74948`) → `written`, all six verified, `rollbackStatus: notNeeded`. Follow-up scan returned Venus identity/mirrors (block4 `D6D1C733`, mirrors `48C74948`, signal 41138 mV) — first real-card exercise of the extended 1..6 reset path. Restore mutation (expected Venus → desired original nix) → `written`, all six verified.
+  - **Final restore verification:** bridge stopped (TCP 5080 and USB released); independent Pm3Cli blocks 1..6 byte-identical to preflight; `RidesCli read` → nix @ 500. Temporary bearer file deleted; no secrets/logs staged.
+  - **Deterministic state:** working tree identical to `b724b93` plus this plan update; today's suite runs on this exact code were green (.NET 711 passed/2 skipped; Swift 205/205).
 
 ## Agent notes / assumptions
 
