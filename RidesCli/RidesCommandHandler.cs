@@ -214,7 +214,7 @@ public sealed class RidesCommandHandler
 
     private bool ExecuteReset(string[] args)
     {
-        if (!TryParseResetArgs(args, out var profileName, out var force, out var resetApt, out var error))
+        if (!TryParseResetArgs(args, out var profileName, out var force, out var resetApt, out var ridesOnly, out var error))
         {
             _output.WriteLine(error);
             return true;
@@ -235,7 +235,7 @@ public sealed class RidesCommandHandler
             return true;
         }
 
-        return ExecuteResetCore(profile!, force, resetApt).GetAwaiter().GetResult();
+        return ExecuteResetCore(profile!, force, resetApt, ridesOnly).GetAwaiter().GetResult();
     }
 
     private static bool TryParseResetArgs(
@@ -243,11 +243,13 @@ public sealed class RidesCommandHandler
         out string? profileName,
         out bool force,
         out bool resetApt,
+        out bool ridesOnly,
         out string error)
     {
         profileName = null;
         force = false;
         resetApt = false;
+        ridesOnly = false;
         error = string.Empty;
 
         for (var i = 0; i < args.Length; i++)
@@ -264,6 +266,12 @@ public sealed class RidesCommandHandler
                 continue;
             }
 
+            if (args[i] == "--ridesonly")
+            {
+                ridesOnly = true;
+                continue;
+            }
+
             if ((args[i] == "--sequence" || args[i] == "--profile") && i + 1 < args.Length)
             {
                 profileName = args[++i];
@@ -271,6 +279,12 @@ public sealed class RidesCommandHandler
             }
 
             error = FormatResetUsage();
+            return false;
+        }
+
+        if (resetApt && ridesOnly)
+        {
+            error = $"Error: --resetapt and --ridesonly cannot be combined. {FormatResetUsage()}";
             return false;
         }
 
@@ -344,7 +358,7 @@ public sealed class RidesCommandHandler
     }
 
     private static string FormatResetUsage() =>
-        $"Usage: reset [--sequence|--profile <name>] [-f] [--resetapt]   Reset token using current sequence, or a named resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
+        $"Usage: reset [--sequence|--profile <name>] [-f] [--resetapt] [--ridesonly]   Reset token using current sequence, or a named resettable identity profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})";
 
     private async Task<bool> ExecuteTuneCore()
     {
@@ -403,7 +417,7 @@ public sealed class RidesCommandHandler
         }
     }
 
-    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile, bool force, bool resetApt)
+    private async Task<bool> ExecuteResetCore(TokenIdentityProfile profile, bool force, bool resetApt, bool ridesOnly)
     {
         _rides = null;
         _encodingSequence = null;
@@ -433,7 +447,9 @@ public sealed class RidesCommandHandler
             }
         }
 
-        if (!force && !PromptForYesNo($"Overwrite token with reset image and set rides to 0 using profile '{profile.FriendlyName}'? [y/N]"))
+        if (!force && !PromptForYesNo(ridesOnly
+                ? $"Reset ride blocks to 0 using profile '{profile.FriendlyName}'? [y/N]"
+                : $"Overwrite token with reset image and set rides to 0 using profile '{profile.FriendlyName}'? [y/N]"))
         {
             _output.WriteLine("Cancelled.");
             return true;
@@ -444,19 +460,27 @@ public sealed class RidesCommandHandler
         resetBlocks[5] = zeroBlock;
         resetBlocks[6] = zeroBlock;
 
-        var includeBlock4 = resetApt
-            || currentBlocks is null
-            || PrepareResetBlock4(currentBlocks, resetBlocks);
-        var targetBlockNumbers = SelectResetTargetBlockNumbers(
-            force,
-            resetApt,
-            includeBlock4,
-            currentBlocks,
-            resetBlocks,
-            profile);
+        IReadOnlyList<uint> targetBlockNumbers;
+        if (ridesOnly)
+        {
+            targetBlockNumbers = new uint[] { 5, 6 };
+        }
+        else
+        {
+            var includeBlock4 = resetApt
+                || currentBlocks is null
+                || PrepareResetBlock4(currentBlocks, resetBlocks);
+            targetBlockNumbers = SelectResetTargetBlockNumbers(
+                force,
+                resetApt,
+                includeBlock4,
+                currentBlocks,
+                resetBlocks,
+                profile);
 
-        if (targetBlockNumbers.Count == 2 && targetBlockNumbers[0] == 5 && targetBlockNumbers[1] == 6)
-            _output.WriteLine("Token already matches requested reset identity; resetting ride blocks only.");
+            if (targetBlockNumbers.Count == 2 && targetBlockNumbers[0] == 5 && targetBlockNumbers[1] == 6)
+                _output.WriteLine("Token already matches requested reset identity; resetting ride blocks only.");
+        }
 
         var result = await WriteResetBlocksSafelyAsync(currentBlocks, resetBlocks, targetBlockNumbers).ConfigureAwait(false);
 
@@ -980,9 +1004,10 @@ public sealed class RidesCommandHandler
         _output.WriteLine("  tune-probe <label> [--samples N] [--timeout SEC]");
         _output.WriteLine("                TEMPORARY: record LF tune samples to debug/lf-tune-probes/");
         _output.WriteLine("  read [-d]     Read token blocks 5 and 6 and show rides (use -d for full dump); also shows apartment when secret is set");
-        _output.WriteLine($"  reset [--sequence|--profile <name>] [-f] [--resetapt]   Reset using current sequence, or a named profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
+        _output.WriteLine($"  reset [--sequence|--profile <name>] [-f] [--resetapt] [--ridesonly]   Reset using current sequence, or a named profile (known: {TokenIdentityProfiles.FormatResettableFriendlyNames()})");
         _output.WriteLine("                omit profile to use the token's recognized sequence; -f with no recognized sequence defaults to mercury");
         _output.WriteLine("                -f skips the confirmation prompt (and decode warning when a profile is named)");
+        _output.WriteLine("                --ridesonly resets only ride blocks 5 and 6 to 0; all other blocks are left untouched");
         _output.WriteLine("  set <number>  Set rides to token [0-500]");
         _output.WriteLine("  add <addnum>  Add rides to token [0-500]");
         _output.WriteLine("  price set <number>   Preview cost for set");

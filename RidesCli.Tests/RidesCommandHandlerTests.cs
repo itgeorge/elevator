@@ -519,6 +519,112 @@ public class RidesCommandHandlerTests
     }
 
     [Test]
+    public void Reset_ridesOnly_without_profile_resets_ride_blocks_using_current_sequence()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Venus, 256);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--ridesonly"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(output.Lines, Has.Some.EqualTo("rides remaining: 0"));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 5, 6 }));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo(TokenIdentityProfiles.Venus.Block1.ToHex()));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo(TokenIdentityProfiles.Venus.Block2.ToHex()));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo(TokenIdentityProfiles.Venus.Block3.ToHex()));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo(TokenIdentityProfiles.Venus.Block4.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetRides(), Is.EqualTo(0u));
+    }
+
+    [TestCase("--profile")]
+    [TestCase("--sequence")]
+    public void Reset_ridesOnly_named_profile_writes_only_ride_blocks_with_that_sequence(string option)
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", option, "venus", "--ridesonly"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 5, 6 }));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("9BFE0062"));
+        Assert.That(pm3.GetBlockHex(2), Is.EqualTo("5BA4A3DE"));
+        Assert.That(pm3.GetBlockHex(3), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(4), Is.EqualTo("D5D1D713"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+    }
+
+    [Test]
+    public void Reset_ridesOnly_force_skips_prompt_and_zeroes_ride_blocks()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Venus, 100);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput());
+
+        handler.Execute(["reset", "-f", "--ridesonly"]);
+
+        Assert.That(output.Lines, Has.None.Contains("[y/N]"));
+        Assert.That(output.Lines, Has.Some.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 5, 6 }));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo(TokenIdentityProfiles.Venus.Block1.ToHex()));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Venus.Encode(0).ToHex()));
+    }
+
+    [Test]
+    public void Reset_ridesOnly_cancelled_does_not_modify_token()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("n"));
+
+        handler.Execute(["reset", "--sequence", "mercury", "--ridesonly"]);
+        handler.Execute(["reset", "--sequence", "mercury", "--ridesonly"]);
+
+        Assert.That(output.Lines, Has.Some.EqualTo("Cancelled."));
+        Assert.That(pm3.WrittenBlocks, Is.Empty);
+        Assert.That(pm3.GetRides(), Is.EqualTo(73u));
+    }
+
+    [Test]
+    public void Reset_rejects_resetapt_combined_with_ridesOnly()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithRides(73);
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--resetapt", "--ridesonly"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("--resetapt and --ridesonly cannot be combined"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.WrittenBlocks, Is.Empty);
+    }
+
+    [Test]
+    public void Reset_ridesOnly_failure_retries_once_then_rolls_back_previous_values()
+    {
+        var output = new StringBuilderRidesOutput();
+        var pm3 = FakeRidesPm3Api.WithSequenceRides(EncodingSequences.Mercury, 73);
+        pm3.RemainingWriteFailuresByBlock[6] = 2;
+        var handler = new RidesCommandHandler(pm3, output, new RidesConfig(), new ScriptedRidesInput("y"));
+
+        handler.Execute(["reset", "--sequence", "mercury", "--ridesonly"]);
+
+        Assert.That(output.Lines, Has.Some.Contains("block 6 write/verify failed"));
+        Assert.That(output.Lines, Has.Some.Contains("Rollback to previous block values succeeded"));
+        Assert.That(output.Lines, Has.None.EqualTo("Success."));
+        Assert.That(pm3.GetBlockHex(1), Is.EqualTo("9BFE0062"));
+        Assert.That(pm3.GetBlockHex(5), Is.EqualTo(EncodingSequences.Mercury.Encode(73).ToHex()));
+        Assert.That(pm3.GetBlockHex(6), Is.EqualTo(EncodingSequences.Mercury.Encode(73).ToHex()));
+        Assert.That(pm3.WrittenBlocks, Is.EqualTo(new uint[] { 5, 6, 6, 5 }));
+    }
+
+    [Test]
     public void Read_matching_blocks_decodes_rides_without_tune_or_dump()
     {
         var output = new StringBuilderRidesOutput();
