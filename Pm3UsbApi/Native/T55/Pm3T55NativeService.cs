@@ -5,6 +5,22 @@ using Pm3UsbApi.Native.Transport;
 
 namespace Pm3UsbApi.Native.T55;
 
+internal interface IPm3T55Transport
+{
+    Pm3Capabilities Capabilities { get; }
+
+    void DiscardPendingInput();
+
+    Pm3ResponseFrame SendCommandAndWait(
+        ushort command,
+        ReadOnlySpan<byte> payload,
+        ushort expectedResponseCommand,
+        TimeSpan timeout,
+        CancellationToken ct);
+
+    byte[] DownloadBigBuf(uint startIndex, uint byteCount, TimeSpan timeout, CancellationToken ct);
+}
+
 /// <summary>
 /// Native USB T55x7 detect and read for elevator tokens (ASK/Manchester).
 /// </summary>
@@ -18,14 +34,37 @@ internal sealed class Pm3T55NativeService
     private const int AcquireMaxAttempts = 2;
     private static readonly TimeSpan DownloadTimeout = TimeSpan.FromSeconds(8);
 
-    private readonly Pm3SerialTransport _transport;
+    private readonly IPm3T55Transport _transport;
     private readonly Pm3GraphState _graph = new();
     private readonly byte[] _sampleScratch = new byte[Pm3GraphState.MaxGraphSamples];
     private readonly byte[] _demodWork = new byte[Pm3GraphState.MaxGraphSamples];
 
     public Pm3T55NativeService(Pm3SerialTransport transport)
+        : this(new SerialTransportAdapter(transport))
     {
-        _transport = transport;
+    }
+
+    internal Pm3T55NativeService(IPm3T55Transport transport)
+    {
+        _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+    }
+
+    private sealed class SerialTransportAdapter(Pm3SerialTransport transport) : IPm3T55Transport
+    {
+        public Pm3Capabilities Capabilities => transport.Capabilities;
+
+        public void DiscardPendingInput() => transport.DiscardPendingInput();
+
+        public Pm3ResponseFrame SendCommandAndWait(
+            ushort command,
+            ReadOnlySpan<byte> payload,
+            ushort expectedResponseCommand,
+            TimeSpan timeout,
+            CancellationToken ct) =>
+            transport.SendCommandAndWait(command, payload, expectedResponseCommand, timeout, ct);
+
+        public byte[] DownloadBigBuf(uint startIndex, uint byteCount, TimeSpan timeout, CancellationToken ct) =>
+            transport.DownloadBigBuf(startIndex, byteCount, timeout, ct);
     }
 
     public Pm3T55DetectOutcome Detect(Pm3T55Config config, CancellationToken ct)
@@ -306,6 +345,10 @@ internal sealed class Pm3T55NativeService
             try
             {
                 raw = _transport.DownloadBigBuf(0, (uint)_transport.Capabilities.T55SampleCount, DownloadTimeout, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception)
             {

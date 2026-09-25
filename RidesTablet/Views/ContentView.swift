@@ -3,13 +3,16 @@ import SwiftUI
 @MainActor
 struct ContentView: View {
     @StateObject private var model: RidesViewModel
+    var onOpenConnection: (() -> Void)?
 
-    init() {
+    init(onOpenConnection: (() -> Void)? = nil) {
         _model = StateObject(wrappedValue: RidesViewModel(configuration: .load()))
+        self.onOpenConnection = onOpenConnection
     }
 
-    init(model: RidesViewModel) {
+    init(model: RidesViewModel, onOpenConnection: (() -> Void)? = nil) {
         _model = StateObject(wrappedValue: model)
+        self.onOpenConnection = onOpenConnection
     }
 
     var body: some View {
@@ -36,8 +39,18 @@ struct ContentView: View {
             .navigationTitle("Rides")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    SimulationMenu(model: model)
+                if let onOpenConnection {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onOpenConnection) {
+                            Label("Connection", systemImage: "antenna.radiowaves.left.and.right")
+                        }
+                        .accessibilityLabel("Connection diagnostics")
+                    }
+                }
+                if model.usesSimulationScenarios {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        SimulationMenu(model: model)
+                    }
                 }
             }
         }

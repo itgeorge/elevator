@@ -46,15 +46,17 @@ public final class RidesViewModel: ObservableObject {
     @Published public private(set) var simulationScenario: SimulationScenario = .goodToken
 
     public let configuration: RidesConfiguration
-    private let device: any ProxmarkDevice
+    private let device: any RideTokenDevice
+    private let legacyDevice: (any ProxmarkDevice)?
     private let dumpStore: UnknownDumpStore
 
     public init(
-        device: any ProxmarkDevice = FakeProxmark(),
+        device: any RideTokenDevice = FakeProxmark(),
         configuration: RidesConfiguration = .prototype,
         dumpStore: UnknownDumpStore = UnknownDumpStore()
     ) {
         self.device = device
+        self.legacyDevice = device as? any ProxmarkDevice
         self.configuration = configuration
         self.dumpStore = dumpStore
         if let fake = device as? FakeProxmark {
@@ -67,6 +69,7 @@ public final class RidesViewModel: ObservableObject {
         return false
     }
 
+    public var usesSimulationScenarios: Bool { device is FakeProxmark }
     public var hasKnownToken: Bool { loadedToken != nil }
     public var hasRideChange: Bool { hasKnownToken && pendingRides != currentRides }
     public var canCharge: Bool { hasRideChange && canAdjust }
@@ -93,7 +96,7 @@ public final class RidesViewModel: ObservableObject {
         guard !isBusy else { return }
         resetForNewDetect()
         state = .working("Detecting, tuning and reading…")
-        switch await device.detectTuneRead() {
+        switch await device.scan() {
         case .known(let token, let signal):
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
@@ -115,9 +118,14 @@ public final class RidesViewModel: ObservableObject {
     // Kept as small compatibility actions for domain tests and future hardware screens.
     public func tune() async {
         guard !isBusy else { return }
+        guard let legacyDevice else {
+            state = .failed("Tune is unavailable for this reader.")
+            message = "Tune is unavailable for this reader."
+            return
+        }
         state = .working("Tuning…")
         message = nil
-        let outcome = await device.tune()
+        let outcome = await legacyDevice.tune()
         lastTune = outcome
         if case .measured(let signal) = outcome {
             lastSignalMillivolts = signal
@@ -130,10 +138,15 @@ public final class RidesViewModel: ObservableObject {
 
     public func read() async {
         guard !isBusy else { return }
+        guard let legacyDevice else {
+            state = .failed("Read is unavailable for this reader.")
+            message = "Read is unavailable for this reader."
+            return
+        }
         state = .working("Reading…")
         message = nil
         lastDumpURL = nil
-        switch await device.read() {
+        switch await legacyDevice.read() {
         case .known(let token): setKnown(token)
         case .noChip:
             state = .noChip
@@ -153,7 +166,7 @@ public final class RidesViewModel: ObservableObject {
 
     /// The cash controls are deliberately ride controls underneath: €1.50 is 50 rides.
     public func adjustCost(by amount: Decimal) {
-        let rides = Int((amount / configuration.pricePerRideEUR) as NSDecimalNumber)
+        let rides = ((amount / configuration.pricePerRideEUR) as NSDecimalNumber).intValue
         adjustRides(by: rides)
     }
 
@@ -170,7 +183,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func selectSimulation(_ scenario: SimulationScenario) {
-        guard !isBusy else { return }
+        guard !isBusy, usesSimulationScenarios else { return }
         simulationScenario = scenario
         (device as? FakeProxmark)?.apply(scenario)
     }
@@ -179,14 +192,19 @@ public final class RidesViewModel: ObservableObject {
         guard canCharge, let token = loadedToken else { return }
         state = .working("Charging…")
         message = nil
-        let updated = token.withRideCount(pendingRides)
-        switch await device.write(updated) {
+        let request = RideMirrorWriteRequest(token: token, desiredRides: pendingRides)
+        switch await device.writeRideMirrors(request) {
         case .success:
+            let updated = token.withRideCount(pendingRides)
             loadedToken = updated
             currentRides = pendingRides
             state = .known(updated)
             message = "Charge successful."
         case .failure(let error):
+            state = .failed(error)
+            message = error
+        case .requiresRefresh(let error):
+            clearLoadedTokenForRefresh()
             state = .failed(error)
             message = error
         }
@@ -206,19 +224,22 @@ public final class RidesViewModel: ObservableObject {
         guard canConfirmReset, let sequence = selectedResetSequence else { return }
         state = .working("Resetting…")
         message = nil
-        let image = ResetSequence.for(sequence).resetImage()
-        switch await device.overwrite(image) {
-        case .success:
-            let token = Token(blocks: image, rideCount: 0, sequence: sequence)
+        switch await device.reset(ResetMutationRequest(sequence: sequence)) {
+        case .success(let token), .alreadyApplied(let token):
             loadedToken = token
-            currentRides = 0
-            pendingRides = 0
+            currentRides = min(token.rideCount, configuration.maxRides)
+            pendingRides = currentRides
             state = .known(token)
             message = "Reset successful."
             isResetSheetPresented = false
         case .failure(let error):
             state = .failed(error)
             message = error
+        case .requiresRefresh(let error):
+            clearLoadedTokenForRefresh()
+            state = .failed(error)
+            message = error
+            isResetSheetPresented = false
         }
     }
 
@@ -244,6 +265,12 @@ public final class RidesViewModel: ObservableObject {
         lastSignalMillivolts = nil
         lastDumpURL = nil
         message = nil
+    }
+
+    private func clearLoadedTokenForRefresh() {
+        loadedToken = nil
+        currentRides = 0
+        pendingRides = 0
     }
 
     private func setKnown(_ token: Token) {

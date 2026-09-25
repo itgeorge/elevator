@@ -18,4 +18,11 @@
     <ProjectReference Include="..\RidesCli\RidesCli.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\TestFixtures\RideEncoding\RideEncodingFixtureModels.cs" Link="RideEncodingFixtureModels.cs" />
+    <Compile Include="..\TestFixtures\RideEncoding\RideEncodingFixtureSupport.cs" Link="RideEncodingFixtureSupport.cs" />
+    <Compile Include="..\TestFixtures\IdentityProfiles\IdentityProfileFixtureModels.cs" Link="IdentityProfileFixtureModels.cs" />
+    <Compile Include="..\TestFixtures\IdentityProfiles\IdentityProfileFixtureSupport.cs" Link="IdentityProfileFixtureSupport.cs" />
+  </ItemGroup>
+
 </Project>
