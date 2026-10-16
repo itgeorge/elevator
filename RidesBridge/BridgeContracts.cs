@@ -10,6 +10,8 @@ public sealed record PairProofResponse(string BridgeId, string ApiVersion, strin
 public sealed record BlockReadResponse(int Block, string Value);
 public sealed record Page0MirrorReadResponse(string Version, string Block5, string Block6);
 public sealed record Page0ScanResponse(string Version, string Block4, string Block5, string Block6, int SignalMillivolts);
+public sealed record CalibrationSignalSample(int SignalMillivolts, bool ChipPresent);
+public sealed record CalibrationSignalResponse(string Version, int SignalMillivolts, bool ChipPresent);
 public sealed record Page0BlockReadResult(int Block, string Value);
 public sealed record Page0MissingBlocksResponse(string Version, IReadOnlyList<Page0BlockReadResult> Blocks);
 public sealed record Page0Blocks1To6Response(string Version, IReadOnlyList<Page0BlockReadResult> Blocks);
@@ -33,7 +35,7 @@ public sealed record Page0MutationResponse(
     IReadOnlyList<Page0MutationBlockResult> Results,
     string RollbackStatus,
     IReadOnlyList<Page0RollbackResult> Rollback);
-public sealed record BridgeErrorResponse(string Code, string Message);
+public sealed record BridgeErrorResponse(string Code, string Message, int? SignalMillivolts = null);
 
 public enum BridgeHardwareError
 {
@@ -49,9 +51,14 @@ public enum BridgeHardwareError
 public sealed class BridgeHardwareException : Exception
 {
     public BridgeHardwareError Error { get; }
+    public int? SignalMillivolts { get; }
 
-    public BridgeHardwareException(BridgeHardwareError error, string message, Exception? inner = null)
-        : base(message, inner) => Error = error;
+    public BridgeHardwareException(BridgeHardwareError error, string message, Exception? inner = null, int? signalMillivolts = null)
+        : base(message, inner)
+    {
+        Error = error;
+        SignalMillivolts = signalMillivolts;
+    }
 
     public static BridgeHardwareException Unavailable(Exception? inner = null) =>
         new(BridgeHardwareError.Unavailable, "Proxmark3 is unavailable.", inner);
@@ -69,5 +76,7 @@ public interface IBridgePm3Device : IAsyncDisposable
     Task WritePage0Block1To6Async(int block, string value, CancellationToken ct = default);
     Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0Blocks1To6Async(CancellationToken ct = default);
     Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default);
+    async Task<CalibrationSignalSample> MeasureCalibrationSignalAsync(CancellationToken ct = default) =>
+        new((await ScanPage0Async(ct).ConfigureAwait(false)).SignalMillivolts, true);
     Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0MissingBlocksAsync(CancellationToken ct = default);
 }

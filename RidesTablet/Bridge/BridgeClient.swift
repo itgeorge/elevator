@@ -27,6 +27,7 @@ public enum BridgeClientError: Error, Equatable, LocalizedError, Sendable {
     case invalidJSON
     case invalidResponse
     case server(code: String, message: String, statusCode: Int)
+    case noChipWithSignal(Int)
 
     public var errorDescription: String? {
         switch self {
@@ -46,6 +47,8 @@ public enum BridgeClientError: Error, Equatable, LocalizedError, Sendable {
             return "The bridge returned an invalid or incompatible response. Check that it is a healthy v1 bridge."
         case .server(let code, let message, _):
             return "Bridge error \(code): \(message)"
+        case .noChipWithSignal(let signal):
+            return "No supported T55xx chip is present (signal \(signal) mV)."
         }
     }
 }
@@ -301,6 +304,12 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
+    public func measureCalibrationSignal() async throws -> BridgeCalibrationSignalResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(path: "api/v1/hardware/calibration/signal", method: "GET", body: nil, requiresAuthentication: true)
+        return try decode(BridgeCalibrationSignalResponse.self, data: data)
+    }
+
     /// Targeted known-token scan: block 4, mirrors 5/6, and LF signal strength.
     public func scanPage0() async throws -> BridgePage0ScanResponse {
         guard hasCredential else { throw BridgeClientError.missingCredential }
@@ -450,6 +459,9 @@ public final class BridgeClient: @unchecked Sendable {
         guard (200...299).contains(http.statusCode) else {
             do {
                 let error = try decode(BridgeErrorResponse.self, data: data)
+                if error.code == "no_chip", let signal = error.signalMillivolts {
+                    throw BridgeClientError.noChipWithSignal(signal)
+                }
                 throw BridgeClientError.server(
                     code: sanitizedServerValue(error.code, ephemeralSecrets: ephemeralSecrets),
                     message: sanitizedServerValue(error.message, ephemeralSecrets: ephemeralSecrets),

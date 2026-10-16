@@ -70,6 +70,42 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
         XCTAssertEqual(token.block4, 0xD6D1C733)
     }
 
+    @MainActor
+    func testKnownTokenOutsideCalibratedSignalRangeIsStillAccepted() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            switch request.url?.path {
+            case "/api/v1/hardware/calibration/signal":
+                if NetworkRideTokenDeviceURLProtocol.requestLog.count == 1 {
+                    return self.json(request, #"{"version":"v1","signalMillivolts":100,"chipPresent":false}"#)
+                }
+                return self.json(request, #"{"version":"v1","signalMillivolts":200,"chipPresent":true}"#)
+            case "/api/v1/hardware/page0/scan":
+                return self.json(
+                    request,
+                    #"{"version":"v1","block4":"D6D1C733","block5":"BBC7FD03","block6":"BBC7FD03","signalMillivolts":3000}"#
+                )
+            default:
+                return self.json(request, #"{"code":"unexpected","message":"bad path"}"#, status: 500)
+            }
+        }
+
+        let model = RidesViewModel(device: try makeDevice())
+        await model.performPrimaryAction()
+        await model.performPrimaryAction()
+        XCTAssertEqual(model.calibrationStep, .ready)
+
+        await model.performPrimaryAction()
+
+        XCTAssertEqual(model.loadedToken?.rideCount, 180)
+        XCTAssertEqual(model.lastSignalMillivolts, 3_000)
+        XCTAssertEqual(model.signalNormalizedFraction, 1.0) // Meter clamps; scan acceptance is independent.
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, [
+            "/api/v1/hardware/calibration/signal",
+            "/api/v1/hardware/calibration/signal",
+            "/api/v1/hardware/page0/scan",
+        ])
+    }
+
     func testUnknownScanFetchesMissingBlocksOnce() async throws {
         NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
             switch request.url?.path {
@@ -114,6 +150,33 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
 
         XCTAssertEqual(outcome, .noChip)
         XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
+    }
+
+    func testNoChipScanCarriesFreshMeasuredSignal() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            self.json(request, #"{"code":"no_chip","message":"No chip","signalMillivolts":18000}"#, status: 409)
+        }
+
+        let device = try makeDevice()
+        let outcome = await device.scan()
+
+        XCTAssertEqual(outcome, .noChipWithSignal(18_000))
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
+    }
+
+    @MainActor
+    func testViewModelShowsNoChipSignalAndClearsStaleSignalOnUnavailable() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            self.json(request, #"{"code":"no_chip","message":"No chip","signalMillivolts":18000}"#, status: 409)
+        }
+        let model = RidesViewModel(device: try makeDevice())
+        await model.detect()
+        XCTAssertEqual(model.lastSignalMillivolts, 18_000)
+        XCTAssertEqual(model.lastTune, .measured(millivolts: 18_000))
+
+        NetworkRideTokenDeviceURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        await model.detect()
+        XCTAssertNil(model.lastSignalMillivolts)
     }
 
     func testUnreachableScanDoesNotRequestMissingBlocks() async throws {

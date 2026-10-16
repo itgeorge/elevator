@@ -9,6 +9,14 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
         self.client = client
     }
 
+    public func measureCalibrationSignal() async -> CalibrationSignalOutcome {
+        do {
+            let sample = try await client.measureCalibrationSignal()
+            return .measured(millivolts: sample.signalMillivolts, chipPresent: sample.chipPresent)
+        }
+        catch { return .failure(Self.describe(error, operation: "Calibration")) }
+    }
+
     public func scan() async -> ScanOutcome {
         do {
             let scan = try await client.scanPage0()
@@ -33,6 +41,8 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
             let missing = try await client.readPage0MissingBlocks()
             let assembled = try Page0ScanWorkflow.assemblePage0(scan: scan, missing: missing)
             return .unknown(UnknownToken(blocks: assembled), signalMillivolts: scan.signalMillivolts)
+        } catch BridgeClientError.noChipWithSignal(let signal) {
+            return .noChipWithSignal(signal)
         } catch BridgeClientError.server(let code, _, _) where code == "no_chip" {
             return .noChip
         } catch BridgeClientError.server(let code, let message, _) where code == "lf_tune_failed" || code == "page0_read_failed" {

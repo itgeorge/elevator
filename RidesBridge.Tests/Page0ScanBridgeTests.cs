@@ -39,6 +39,38 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
+    public async Task CalibrationEndpointReturnsAuthenticatedSignalSamplesForPresentAndAbsentChip()
+    {
+        var present = new RecordingScanDevice { SignalMillivolts = 61_178 };
+        await using var presentHost = await ScanTestHost.CreateAsync(present);
+        presentHost.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await presentHost.PairAsync());
+        var presentResponse = await presentHost.Client.GetAsync("/api/v1/hardware/calibration/signal");
+        Assert.That(presentResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await presentResponse.Content.ReadFromJsonAsync<CalibrationSignalResponse>(),
+            Is.EqualTo(new CalibrationSignalResponse("v1", 61_178, true)));
+        Assert.That(present.Calls, Is.EqualTo(new[] { "tune" }));
+
+        var absent = RecordingScanDevice.CreateNoChip();
+        await using var absentHost = await ScanTestHost.CreateAsync(absent);
+        absentHost.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await absentHost.PairAsync());
+        var absentResponse = await absentHost.Client.GetAsync("/api/v1/hardware/calibration/signal");
+        Assert.That(absentResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await absentResponse.Content.ReadFromJsonAsync<CalibrationSignalResponse>(),
+            Is.EqualTo(new CalibrationSignalResponse("v1", FakePm3Device.SeedSignalMillivolts, false)));
+        Assert.That(absent.Calls, Is.EqualTo(new[] { "tune" }));
+    }
+
+    [Test]
+    public async Task CalibrationEndpointRequiresAuthenticationBeforeTouchingHardware()
+    {
+        var device = new RecordingScanDevice();
+        await using var host = await ScanTestHost.CreateAsync(device);
+        var response = await host.Client.GetAsync("/api/v1/hardware/calibration/signal");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(device.Calls, Is.Empty);
+    }
+
+    [Test]
     public async Task ScanRequiresAuthenticationAndDoesNotTouchHardware()
     {
         var device = new RecordingScanDevice();
@@ -148,7 +180,9 @@ public sealed class Page0ScanBridgeTests
         var response = await host.Client.GetAsync("/api/v1/hardware/page0/scan");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
-        Assert.That((await response.Content.ReadFromJsonAsync<BridgeErrorResponse>())!.Code, Is.EqualTo("no_chip"));
+        var error = await response.Content.ReadFromJsonAsync<BridgeErrorResponse>();
+        Assert.That(error!.Code, Is.EqualTo("no_chip"));
+        Assert.That(error.SignalMillivolts, Is.EqualTo(18_000));
     }
 
     [Test]
@@ -302,6 +336,15 @@ public sealed class Page0ScanBridgeTests
         public Task<string> ReadPage0Block6Async(CancellationToken ct = default) => ReadAsync(6, ct);
         public Task<(string Block5Hex, string Block6Hex)> ReadPage0MirrorAsync(CancellationToken ct = default) =>
             Task.FromResult((Blocks[5], Blocks[6]));
+
+        public Task<CalibrationSignalSample> MeasureCalibrationSignalAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            Calls.Add("tune");
+            if (FailTune) throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "LF tune failed.");
+            return Task.FromResult(new CalibrationSignalSample(
+                FailNoChip ? FakePm3Device.SeedSignalMillivolts : SignalMillivolts, !FailNoChip));
+        }
 
         public Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default)
         {

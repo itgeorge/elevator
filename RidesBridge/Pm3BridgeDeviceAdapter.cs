@@ -149,6 +149,45 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
         }
     }
 
+    public async Task<CalibrationSignalSample> MeasureCalibrationSignalAsync(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await EnsureConnectedAsync(ct).ConfigureAwait(false);
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            session.InvalidateT55DetectCache();
+            await session.StartLfTuneAsync(ct).ConfigureAwait(false);
+            int signal;
+            try
+            {
+                signal = checked((int)await session.GetLfTuneLastMilliVoltsAsync(ct).ConfigureAwait(false));
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or Pm3CommandException or FormatException)
+            {
+                throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "LF tune did not return a usable signal measurement.", ex);
+            }
+            try
+            {
+                await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+                return new CalibrationSignalSample(signal, true);
+            }
+            catch (Exception ex)
+            {
+                // Native PM3 detect commonly reports absence as Pm3CommandException;
+                // normalize it through the same mapper used by every hardware operation.
+                var mapped = await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+                if (mapped.Error == BridgeHardwareError.NoChip)
+                    return new CalibrationSignalSample(signal, false);
+                throw mapped;
+            }
+        }
+        catch (BridgeHardwareException) { throw; }
+        catch (Exception ex) { throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false); }
+        finally { _operationLock.Release(); }
+    }
+
     public async Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default)
     {
         await _operationLock.WaitAsync(ct).ConfigureAwait(false);
@@ -169,7 +208,20 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
                 throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "LF tune did not return a usable signal measurement.", ex);
             }
 
-            await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                var mapped = ex as BridgeHardwareException ?? await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+                if (mapped.Error != BridgeHardwareError.NoChip) throw mapped;
+                throw new BridgeHardwareException(
+                    BridgeHardwareError.NoChip,
+                    mapped.Message,
+                    mapped,
+                    signalMillivolts);
+            }
             var block4 = await ReadAndValidateAsync(session, 4, ct).ConfigureAwait(false);
             var block5 = await ReadAndValidateAsync(session, 5, ct).ConfigureAwait(false);
             var block6 = await ReadAndValidateAsync(session, 6, ct).ConfigureAwait(false);

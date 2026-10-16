@@ -93,6 +93,19 @@ public sealed class FakePm3Device : IBridgePm3Device
         return (block5, block6);
     }
 
+    public Task<CalibrationSignalSample> MeasureCalibrationSignalAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            ThrowIfDisposed();
+            ThrowIfUnavailable();
+            if (_failTune) throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "Fake PM3 tune failed.");
+            if (_noChip) return Task.FromResult(new CalibrationSignalSample(18_000, false));
+            return Task.FromResult(new CalibrationSignalSample(_signalMillivolts, true));
+        }
+    }
+
     public Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -100,9 +113,10 @@ public sealed class FakePm3Device : IBridgePm3Device
         {
             ThrowIfDisposed();
             ThrowIfUnavailable();
-            ThrowIfNoChip();
             if (_failTune)
                 throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "Fake PM3 tune failed.");
+            if (_noChip)
+                throw new BridgeHardwareException(BridgeHardwareError.NoChip, "No supported T55xx chip is present.", signalMillivolts: 18_000);
             if (_failScanReads)
                 throw new BridgeHardwareException(BridgeHardwareError.ReadFailed, "Fake PM3 scan read failed.");
 

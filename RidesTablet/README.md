@@ -5,13 +5,13 @@ An iPad-only SwiftUI operator app for non-technical token operators. It targets 
 ## Operator flow
 
 1. On first launch, complete bridge pairing (QR scan or manual URL + PIN) in the connection gate; later launches reconnect automatically when safe.
-2. Put a token on the reader and tap **Detect token**. Detect, tune, and read run as one flow. Signal is shown in millivolts so the token can be repositioned.
+2. Calibrate once per app session: remove the token and tap **Calibrate: NO token**, then place it and tap **Calibrate: PLACE token**. The app checks the expected token presence at each step. Calibration sets the signal meter range with a margin. Then tap **Detect token**; detect, tune, and read run as one flow. A fresh signal measurement remains visible even when no token is detected, so reposition and tap Detect again to compare.
 3. On a known read, the merged panel shows Current rides, the noneditable **PENDING** total, and EUR. The three minus controls on the left and plus controls on the right adjust pending rides by 1, 10, and 100; values stay within 0–500.
-4. The blue PENDING card shows a muted live equation: the signed delta followed by `=` (for example, `+ 150 =`; decreases use `− 20 =`). The change is priced at €0.03 per ride. EUR is adjusted with the aligned `−€1.50` and `+€1.50` buttons; the round control on the EUR row rounds the signed delta to the nearest 50 rides (€1.50), with midpoints away from zero.
-5. Tap **Charge token** only after a known token has changed. A successful write makes pending the new current count.
-6. `RESET` is in the merged panel for known and unknown tokens and requires an explicit profile selection. The confirmation button is disabled until a profile is selected. Idle, working, no-chip, and failure states replace the controls with centered status content; unknown saves report `Unknown, logged`, while log failures remain errors.
+4. The blue PENDING card shows the current count plus the signed change followed by `=` (for example, `180 + 150 =`; decreases use `180 − 20 =`). The change is priced at €0.03 per ride. EUR is adjusted with `−€1.50` / `+€1.50` buttons (50 whole rides). The × at the top-right of the blue PENDING card sets the pending total to zero; it does not change the token until **Charge token** is tapped. The round control on the EUR row rounds the signed delta to the nearest 50 rides (€1.50), with midpoints away from zero.
+5. Tap **Charge token** only after a known token has changed. A successful write makes pending the new current count and adds a recent-charge entry with local time, ride-count equation, and actual EUR amount. Sequence metadata is retained in saved history but no longer shown as a table column. Tap its time for the full local date/time. History keeps the last 100 completed charges on this iPad across app launches. Single-line rows use aligned columns and full-width separators; Time and ride columns stay compact while EUR fills the remaining width and aligns at the right edge. The TOTAL row shows the number of saved charges, net rides added, and net EUR amount across that saved history. It is newest first and scrollable, below the reader in landscape or below ride counts in portrait.
+6. `RESET` is in the merged panel for known and unknown tokens and requires an explicit profile selection. Every sequence resets to **0 rides**, including Mercury; both the token mirrors and the displayed count use zero. The confirmation button is disabled until a profile is selected. Idle, working, no-chip, and failure states replace the controls with centered status content; unknown saves report `Unknown, logged`, while log failures remain errors.
 
-The compact Apt # control row keeps disabled Cancel on the left and disabled Save on the right, with the read-only Block 4 value in the middle. Portrait uses the seamless Detect/signal strip, centered Current → PENDING → EUR controls, Apt row, and large Charge action. Landscape switches to a two-column reader/Apt and count/status layout, with Charge pinned below the right column.
+Portrait uses the seamless calibration/Detect and signal strip, centered Current → PENDING → EUR controls, and large Charge action. Landscape switches to a two-column reader and count/status layout, with Charge pinned below the right column. The unused Apt # / Cancel / Save row is hidden.
 
 Connection diagnostics (Bonjour browse, manual URL, block-5 connectivity probe) live in the settings sheet and do not duplicate Concept A business logic.
 
@@ -42,7 +42,7 @@ SIMCTL_CHILD_RIDES_SCREENSHOT_SCENE=known \
   xcrun simctl launch --terminate-running-process <UDID> com.example.RidesTablet
 ```
 
-`RIDES_SCREENSHOT_SCENE` accepts `known`, `pending`, `reset`, `unknown`, and `no-chip` (alias `nochip`). Each scene runs Detect (and opens the reset sheet or adjusts pending where needed) before you capture with `xcrun simctl io <UDID> screenshot path.png`.
+`RIDES_SCREENSHOT_SCENE` accepts `known`, `pending`, `history`, `reset`, `unknown`, and `no-chip` (alias `nochip`). Each scene runs Detect (and opens the reset sheet or adjusts pending where needed) before you capture with `xcrun simctl io <UDID> screenshot path.png`. `history` generates three fake charges in an isolated screenshot history store; it never writes a real token or adds demo entries to the operator history.
 
 ## Simulation scenarios (DEBUG fake reader only)
 

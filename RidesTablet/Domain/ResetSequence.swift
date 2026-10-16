@@ -9,7 +9,7 @@ public struct ResetSequence: Codable, Equatable, Identifiable, Sendable {
     public let block4: UInt32
     public let block0: UInt32
     public let block7: UInt32
-    /// Ride count encoded into the reset mirror blocks. Mercury uses 500; all others use 0.
+    /// Ride count encoded into the operator reset mirror blocks.
     public let resetRideCount: UInt
 
     public var id: String { sequence.rawValue }
@@ -43,7 +43,7 @@ public struct ResetSequence: Codable, Equatable, Identifiable, Sendable {
     }
 
     public static let all: [ResetSequence] = [
-        .init(sequence: .mercury, block1: 0x9BFE0062, block2: 0x5BA4A3DE, block3: 0xD5D1D713, block4: 0xD5D1D713, resetRideCount: 500),
+        .init(sequence: .mercury, block1: 0x9BFE0062, block2: 0x5BA4A3DE, block3: 0xD5D1D713, block4: 0xD5D1D713),
         .init(sequence: .venus, block1: 0x43FE0062, block2: 0x5BA494A3, block3: 0xD6D1C733, block4: 0xD6D1C733),
         .init(sequence: .earth, block1: 0xD3FE005D, block2: 0x522BC69D, block3: 0x650432F5, block4: 0x650432F5),
         .init(sequence: .pluto, block1: 0x83FE002A, block2: 0xF100C064, block3: 0xA3045930, block4: 0xA3045930),

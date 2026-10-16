@@ -3,6 +3,7 @@ import SwiftUI
 public enum SimulatorScreenshotScene: String, Equatable, Sendable {
     case known
     case pending
+    case history
     case reset
     case unknown
     case noChip = "no-chip"
@@ -186,7 +187,15 @@ struct RidesRootView: View {
 #if DEBUG
     private func bootstrapSimulatorFakeReader() {
         usesFakeReader = true
-        ridesModel = RidesViewModel(device: FakeProxmark(), configuration: .load())
+        if launchConfiguration.screenshotScene != nil {
+            let suite = "RidesTablet.ScreenshotHistory"
+            let defaults = UserDefaults(suiteName: suite)!
+            defaults.removePersistentDomain(forName: suite)
+            ridesModel = RidesViewModel(device: FakeProxmark(), configuration: .load(),
+                                       chargeHistoryStore: UserDefaultsChargeHistoryStore(defaults: defaults))
+        } else {
+            ridesModel = RidesViewModel(device: FakeProxmark(), configuration: .load())
+        }
     }
 
     private func applySimulatorScreenshotScene(_ scene: SimulatorScreenshotScene, to model: RidesViewModel) async {
@@ -196,6 +205,18 @@ struct RidesRootView: View {
         case .pending:
             await model.detect()
             model.adjustRides(by: 150)
+        case .history:
+            // Fixture-only completed charges; the real reader is never used here.
+            model.selectSimulation(.noChip)
+            await model.performPrimaryAction()
+            model.selectSimulation(.goodToken)
+            await model.performPrimaryAction()
+            await model.detect()
+            for delta in [50, 33, -20] {
+                model.adjustRides(by: delta)
+                await model.charge()
+            }
+            model.adjustRides(by: 33)
         case .reset:
             await model.detect()
             model.openReset()

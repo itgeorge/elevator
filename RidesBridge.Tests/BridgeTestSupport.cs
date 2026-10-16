@@ -112,17 +112,20 @@ internal sealed class FakeBridgePm3Session : IBridgePm3Session
     private readonly List<string> _calls;
     private readonly Func<CancellationToken, Task<string>> _read;
     private readonly Exception? _disposeException;
+    private readonly Exception? _ensureException;
 
     public bool Disposed { get; private set; }
 
     public FakeBridgePm3Session(
         List<string> calls,
         Func<CancellationToken, Task<string>>? read = null,
-        Exception? disposeException = null)
+        Exception? disposeException = null,
+        Exception? ensureException = null)
     {
         _calls = calls;
         _read = read ?? (_ => Task.FromResult("A1B2C3D4"));
         _disposeException = disposeException;
+        _ensureException = ensureException;
     }
 
     public Task<bool> IsConnectedAsync(CancellationToken ct = default)
@@ -142,6 +145,7 @@ internal sealed class FakeBridgePm3Session : IBridgePm3Session
     public Task EnsureT55SessionActiveAsync(CancellationToken ct = default)
     {
         _calls.Add("ensure");
+        if (_ensureException is not null) throw _ensureException;
         return Task.CompletedTask;
     }
 

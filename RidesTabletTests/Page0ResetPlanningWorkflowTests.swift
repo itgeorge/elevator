@@ -37,6 +37,23 @@ final class Page0ResetPlanningWorkflowTests: XCTestCase {
         XCTAssertEqual(planned.first?.desired, format(image[1]))
     }
 
+    func testEveryProfilePlansBothMirrorsToZeroWithoutChangingIdentity() throws {
+        for profile in ResetSequence.all {
+            let oneRide = try XCTUnwrap(profile.sequence.encode(1))
+            let current = try blocks(
+                b1: profile.block1, b2: profile.block2, b3: profile.block3, b4: profile.block4,
+                b5: oneRide, b6: oneRide
+            )
+
+            let planned = try Page0ResetPlanningWorkflow.planMutations(currentBlocks: current, profile: profile)
+            XCTAssertEqual(planned.map(\.block), [5, 6], profile.sequence.rawValue)
+            XCTAssertEqual(planned.map(\.desired), [
+                format(profile.sequence.zeroBlock), format(profile.sequence.zeroBlock)
+            ], profile.sequence.rawValue)
+            XCTAssertEqual(profile.identityBlocks, [profile.block1, profile.block2, profile.block3, profile.block4])
+        }
+    }
+
     func testAlreadyAppliedProfileProducesNoMutations() throws {
         let venus = ResetSequence.for(.venus)
         let image = venus.resetImage()

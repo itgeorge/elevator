@@ -5,6 +5,7 @@ public enum ScanOutcome: Equatable, Sendable {
     case known(Token, signalMillivolts: Int)
     case unknown(UnknownToken, signalMillivolts: Int)
     case noChip
+    case noChipWithSignal(Int)
     case failure(String)
 }
 
@@ -51,6 +52,7 @@ public enum WriteOutcome: Equatable, Sendable {
 /// bearer tokens, URLSession details, or PM3 command names to the view model.
 public protocol RideTokenDevice: Sendable {
     func scan() async -> ScanOutcome
+    func measureCalibrationSignal() async -> CalibrationSignalOutcome
     func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome
     func reset(_ request: ResetMutationRequest) async -> ResetOutcome
 }
@@ -58,6 +60,11 @@ public protocol RideTokenDevice: Sendable {
 public enum DetectOutcome: Equatable, Sendable {
     case detected
     case noChip
+    case failure(String)
+}
+
+public enum CalibrationSignalOutcome: Equatable, Sendable {
+    case measured(millivolts: Int, chipPresent: Bool)
     case failure(String)
 }
 
@@ -96,6 +103,10 @@ public protocol ProxmarkDevice: Sendable {
     func detectTuneRead() async -> ScanOutcome
     func write(_ token: Token) async -> WriteOutcome
     func overwrite(_ image: [UInt32]) async -> OverwriteOutcome
+}
+
+public extension RideTokenDevice {
+    func measureCalibrationSignal() async -> CalibrationSignalOutcome { .failure("Calibration signal measurement is unavailable.") }
 }
 
 public extension ProxmarkDevice {
@@ -251,6 +262,20 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
             case .noChip: return .noChip
             case .failure(let error): return .failure(error)
             }
+        }
+    }
+
+    public func measureCalibrationSignal() async -> CalibrationSignalOutcome {
+        await Task.yield()
+        return withLock {
+            tuneCallCount += 1
+            guard case .measured(let signal) = storedTune else {
+                if case .failure(let error) = storedTune { return .failure(error) }
+                return .failure("Could not tune reader.")
+            }
+            let present: Bool
+            if case .detected = storedDetect { present = true } else { present = false }
+            return .measured(millivolts: signal, chipPresent: present)
         }
     }
 

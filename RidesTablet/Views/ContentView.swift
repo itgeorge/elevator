@@ -63,7 +63,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Token rides")
                 .font(.system(size: 34, weight: .bold, design: .rounded))
-            Text("Place one token on the reader, then tap Detect.")
+            Text(model.calibrationStep == .ready
+                 ? "Place one token on the reader, then tap Detect."
+                 : model.calibrationStep == .noToken
+                    ? "Remove all tokens, then calibrate the empty reader."
+                    : "Place one token on the reader, then finish calibration.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
         }
@@ -81,7 +85,7 @@ private struct OneScreenLayout: View {
             HStack(alignment: .top, spacing: 18) {
                 VStack(spacing: 14) {
                     DetectStrip(model: model, layout: .landscape)
-                    AptControlRow(model: model)
+                    ChargeHistoryView(charges: model.completedCharges, maxRowsHeight: 130)
                 }
                 .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
 
@@ -93,9 +97,172 @@ private struct OneScreenLayout: View {
             VStack(spacing: 14) {
                 DetectStrip(model: model, layout: .portrait)
                 MainPanel(model: model)
-                AptControlRow(model: model)
+                ChargeHistoryView(charges: model.completedCharges, maxRowsHeight: 200)
             }
         }
+    }
+}
+
+private struct ChargeHistoryView: View {
+    let charges: [CompletedCharge]
+    let maxRowsHeight: CGFloat
+    @State private var timestampPopover: UUID?
+    @State private var availableWidth: CGFloat = 0
+
+    // Tight metadata/count columns retain their readable widths. EUR absorbs
+    // any room left in the shared table; the outer scroller handles narrow layouts.
+    private let tightWidths: [CGFloat] = [86, 54, 62, 54]
+    private let minimumEURWidth: CGFloat = 92
+    private let columnGap: CGFloat = 8
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+    private static let fullTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+    private static let euroFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_IE")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    private var signedRideTotal: Int { charges.reduce(0) { $0 + $1.addedRides } }
+    private var amountTotal: Decimal { charges.reduce(Decimal.zero) { $0 + $1.amountEUR } }
+    private var minimumTableWidth: CGFloat {
+        tightWidths.reduce(0, +) + minimumEURWidth + columnGap * 4
+    }
+    private var tableWidth: CGFloat { max(minimumTableWidth, availableWidth - 24) }
+    private var widths: [CGFloat] {
+        tightWidths + [max(minimumEURWidth, tableWidth - minimumTableWidth + minimumEURWidth)]
+    }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Completed charges")
+                    .font(.title3.weight(.semibold))
+                summaryRow
+                headerRow
+                Rectangle().fill(Color.primary.opacity(0.16)).frame(height: 1)
+                if charges.isEmpty {
+                    Text("Successful charges appear here.")
+                        .font(.body).foregroundStyle(.secondary)
+                        .frame(width: tableWidth, height: 48, alignment: .leading)
+                } else {
+                    ScrollView(.vertical) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(charges.enumerated()), id: \.element.id) { index, charge in
+                                chargeRow(charge)
+                                if index < charges.count - 1 {
+                                    Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                                }
+                            }
+                        }
+                    }
+                    .scrollIndicators(.visible)
+                    .frame(width: tableWidth, height: min(CGFloat(charges.count) * 40, maxRowsHeight))
+                }
+            }
+            .frame(width: tableWidth, alignment: .leading)
+            .padding(12)
+        }
+        .scrollIndicators(.visible)
+        // A horizontal scroller otherwise may report an undersized vertical
+        // ideal size, clipping the card's rounded bottom in the outer layout.
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { availableWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, width in availableWidth = width }
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
+        .environment(\.colorScheme, .light)
+        .accessibilityLabel("Completed charge history, newest first")
+    }
+
+    private var summaryRow: some View {
+        HStack(spacing: columnGap) {
+            Text("TOTAL · \(charges.count) charges")
+                .font(.body.weight(.semibold))
+                .frame(width: widths[0] + widths[1] + columnGap, alignment: .leading)
+            Text(signedRideTotal >= 0 ? "+\(signedRideTotal)" : "−\(abs(signedRideTotal))")
+                .font(.body.weight(.semibold).monospacedDigit())
+                .frame(width: widths[2], alignment: .trailing)
+            Text("—").frame(width: widths[3], alignment: .trailing)
+            Text(Self.euroFormatter.string(from: amountTotal as NSDecimalNumber) ?? "0.00")
+                .font(.body.weight(.semibold).monospacedDigit())
+                .frame(width: widths[4], alignment: .trailing)
+        }
+        .lineLimit(1)
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: columnGap) {
+            column("Time", 0, alignment: .leading)
+            column("Initial", 1, alignment: .trailing)
+            column("Δ rides", 2, alignment: .trailing)
+            column("Total", 3, alignment: .trailing)
+            column("EUR", 4, alignment: .trailing)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+    }
+
+    private func column(_ title: String, _ index: Int, alignment: Alignment) -> some View {
+        Text(title).frame(width: widths[index], alignment: alignment)
+    }
+
+    private func chargeRow(_ charge: CompletedCharge) -> some View {
+        HStack(spacing: columnGap) {
+            Button {
+                timestampPopover = charge.id
+            } label: {
+                Text(Self.timeFormatter.string(from: charge.timestamp))
+                    .font(.body.monospacedDigit().weight(.medium))
+                    .frame(width: widths[0], alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.blue)
+            .popover(isPresented: Binding(
+                get: { timestampPopover == charge.id },
+                set: { if !$0 { timestampPopover = nil } }
+            )) {
+                Text(Self.fullTimeFormatter.string(from: charge.timestamp))
+                    .font(.body.monospacedDigit())
+                    .padding(16)
+                    .presentationCompactAdaptation(.popover)
+            }
+            Text("\(charge.initialRides)")
+                .frame(width: widths[1], alignment: .trailing)
+            Text("\(charge.addedRides >= 0 ? "+" : "−")\(abs(charge.addedRides))")
+                .frame(width: widths[2], alignment: .trailing)
+            Text("= \(charge.totalRides)")
+                .frame(width: widths[3], alignment: .trailing)
+            Text(Self.euroFormatter.string(from: charge.amountEUR as NSDecimalNumber) ?? "0.00")
+                .frame(width: widths[4], alignment: .trailing)
+        }
+        .font(.body.monospacedDigit())
+        .lineLimit(1)
+        .frame(height: 39)
+        .foregroundStyle(.primary)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -151,6 +318,8 @@ private struct MainPanel: View {
         }
         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)))
+        // This prototype deliberately uses white cards in either system appearance.
+        .environment(\.colorScheme, .light)
         .accessibilityElement(children: .contain)
     }
 }
@@ -288,13 +457,14 @@ private struct DetectStrip: View {
             RoundedRectangle(cornerRadius: 20)
                 .stroke(Color.black.opacity(0.08))
         }
+        .environment(\.colorScheme, .light)
     }
 
     private var detectButton: some View {
         Button {
-            Task { await model.detect() }
+            Task { await model.performPrimaryAction() }
         } label: {
-            Label(model.isBusy ? "Working…" : "Detect token", systemImage: model.isBusy ? "hourglass" : "dot.radiowaves.left.and.right")
+            Label(model.isBusy ? "Working…" : model.primaryActionTitle, systemImage: model.isBusy ? "hourglass" : "dot.radiowaves.left.and.right")
                 .font(.title2.bold())
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, minHeight: layout == .portrait ? 92 : 82)
@@ -302,8 +472,10 @@ private struct DetectStrip: View {
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy)
-        .accessibilityLabel("Detect token")
-        .accessibilityHint("Detects, tunes, and reads the token in one step")
+        .accessibilityLabel(model.primaryActionTitle)
+        .accessibilityHint(model.calibrationStep == .ready
+                           ? "Detects, tunes, and reads the token in one step"
+                           : "Measures reader signal and checks the expected token presence")
     }
 }
 
@@ -334,7 +506,9 @@ private struct SignalView: View {
                     }
             }
             .frame(height: 14)
-            Text("Reposition the token if the signal is weak.")
+            Text(model.signalCalibrationReady
+                 ? "Calibrated signal · reposition the token if weak."
+                 : "Calibrate empty, then with a token to set the signal scale.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -344,13 +518,12 @@ private struct SignalView: View {
     }
 
     private var signalFraction: CGFloat {
-        guard let signal = model.lastSignalMillivolts else { return 0 }
-        return min(1, max(0.04, CGFloat(signal) / 500))
+        CGFloat(model.signalNormalizedFraction ?? 0)
     }
 
     private var signalColor: Color {
-        guard let signal = model.lastSignalMillivolts else { return .gray }
-        return signal < 200 ? .orange : .green
+        guard let fraction = model.signalNormalizedFraction else { return .gray }
+        return fraction < 0.4 ? .orange : .green
     }
 }
 
@@ -408,16 +581,34 @@ private struct PendingRidesDisplay: View {
     let emphasized: Bool
 
     var body: some View {
-        VStack(spacing: 4) {
-            Text("PENDING")
-                .font(.caption.bold())
-                .tracking(1.2)
+        VStack(spacing: 2) {
+            HStack {
+                Spacer(minLength: 44)
+                Text("PENDING")
+                    .font(.caption.bold())
+                    .tracking(1.2)
+                Spacer()
+                Button {
+                    model.clearPendingRides()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.bold())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .disabled(!model.canAdjust)
+                .accessibilityLabel("Clear pending rides to zero")
+                .accessibilityIdentifier("clear-pending-rides")
+            }
+            .frame(height: 44)
             Text(equationText)
                 .font(.title3.weight(.semibold).monospacedDigit())
-                .foregroundStyle(Color.white.opacity(0.78))
+                .foregroundStyle(.white)
                 .accessibilityHidden(true)
             Text(model.hasKnownToken ? "\(model.pendingRides)" : "—")
-                .font(.system(size: emphasized ? 72 : 64, weight: .bold, design: .rounded).monospacedDigit())
+                .font(.system(size: emphasized ? 64 : 56, weight: .bold, design: .rounded).monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
@@ -425,14 +616,14 @@ private struct PendingRidesDisplay: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 8)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: AdjustmentButtonMetrics.railHeight, maxHeight: AdjustmentButtonMetrics.railHeight, alignment: .center)
         .background(Color.blue, in: RoundedRectangle(cornerRadius: 16))
         .overlay {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.white.opacity(0.85), lineWidth: 2)
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Pending rides")
         .accessibilityValue(accessibilityValue)
         .accessibilityIdentifier("pending-rides-display")
@@ -440,7 +631,8 @@ private struct PendingRidesDisplay: View {
 
     private var equationText: String {
         let delta = Int(model.pendingRides) - Int(model.currentRides)
-        return delta < 0 ? "− \(-delta) =" : "+ \(delta) ="
+        let signedDelta = delta < 0 ? "− \(-delta)" : "+ \(delta)"
+        return "\(model.currentRides) \(signedDelta) ="
     }
 
     private var accessibilityValue: String {
@@ -525,16 +717,16 @@ private struct EURCard: View {
     @ObservedObject var model: RidesViewModel
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             eurButton(title: "−€1.50", amount: -model.configuration.cashIncrementEUR)
-            HStack(spacing: 5) {
+            HStack(spacing: 8) {
                 VStack(spacing: 0) {
                     Text("EUR")
                         .font(.caption2.bold())
                         .tracking(1.1)
                     Text(model.costText)
                         .font(.system(size: 28, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(model.costEUR < 0 ? .green : .primary)
+                        .foregroundStyle(model.costEUR < 0 ? Color.green : Color.black)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
@@ -546,11 +738,12 @@ private struct EURCard: View {
                     model.round(.costDelta)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 150, maxWidth: .infinity)
             .frame(height: AdjustmentButtonMetrics.height)
             eurButton(title: "+€1.50", amount: model.configuration.cashIncrementEUR)
         }
         .frame(height: AdjustmentButtonMetrics.height)
+        .foregroundStyle(Color.black)
         .accessibilityElement(children: .contain)
     }
 
@@ -607,41 +800,6 @@ private struct RoundingControl: View {
         .disabled(disabled)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(accessibilityHint)
-    }
-}
-
-private struct AptControlRow: View {
-    @ObservedObject var model: RidesViewModel
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Button("Cancel") {}
-                .frame(width: 76, height: 48)
-                .disabled(true)
-            HStack(spacing: 7) {
-                Text("Apt #")
-                    .font(.headline)
-                Spacer(minLength: 4)
-                Text("Block 4")
-                    .font(.subheadline)
-                Text(model.aptBlock4Text)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 52)
-            .frame(maxWidth: .infinity)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08)))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            Button("Save") {}
-                .frame(width: 76, height: 48)
-                .disabled(true)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Apartment number row")
-        .accessibilityHint("Cancel is on the left and Save is on the right; the apartment number is read-only")
     }
 }
 

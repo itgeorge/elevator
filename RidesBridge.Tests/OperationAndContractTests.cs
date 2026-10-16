@@ -260,6 +260,23 @@ public sealed class OperationAndContractTests
     }
 
     [Test]
+    public async Task CalibrationPreservesSignalWhenNativeDetectReportsNoChip()
+    {
+        var calls = new List<string>();
+        var session = new FakeBridgePm3Session(calls, ensureException: new Pm3UsbApi.Pm3CommandException("No T55 chip detected."));
+        var adapter = new Pm3BridgeDeviceAdapter(
+            new BridgeOptions { BindUrl = "http://127.0.0.1:5080", DataDirectory = Path.GetTempPath() },
+            _ => session);
+
+        var sample = await adapter.MeasureCalibrationSignalAsync();
+
+        Assert.That(sample, Is.EqualTo(new CalibrationSignalSample(FakePm3Device.SeedSignalMillivolts, false)));
+        Assert.That(calls, Does.Contain("signal"));
+        Assert.That(calls, Does.Contain("ensure"));
+        await adapter.DisposeAsync();
+    }
+
+    [Test]
     public async Task AdapterReleasesOperationLockAfterFailedRead()
     {
         var readCount = 0;

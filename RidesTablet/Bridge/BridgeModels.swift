@@ -176,21 +176,46 @@ public struct BridgeBlockResponse: Codable, Equatable, Sendable {
 public struct BridgeErrorResponse: Codable, Equatable, Sendable {
     public let code: String
     public let message: String
+    public let signalMillivolts: Int?
 
-    public init(code: String, message: String) {
+    public init(code: String, message: String, signalMillivolts: Int? = nil) {
         self.code = code
         self.message = message
+        self.signalMillivolts = signalMillivolts
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        try requireExactKeys(decoder, ["code", "message"])
+        let keys = try decoder.container(keyedBy: AnyBridgeCodingKey.self).allKeys.map(\.stringValue)
+        guard Set(keys) == ["code", "message"] || Set(keys) == ["code", "message", "signalMillivolts"] else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid bridge error fields."))
+        }
         let code = try container.decode(String.self, forKey: .code)
         let message = try container.decode(String.self, forKey: .message)
-        guard !code.isEmpty, !message.isEmpty else {
-            throw DecodingError.dataCorruptedError(forKey: .message, in: container, debugDescription: "Bridge error must contain a code and message.")
+        let signal = try container.decodeIfPresent(Int.self, forKey: .signalMillivolts)
+        guard !code.isEmpty, !message.isEmpty, signal.map({ $0 >= 0 }) ?? true else {
+            throw DecodingError.dataCorruptedError(forKey: .message, in: container, debugDescription: "Bridge error must contain valid fields.")
         }
-        self.init(code: code, message: message)
+        self.init(code: code, message: message, signalMillivolts: signal)
+    }
+}
+
+public struct BridgeCalibrationSignalResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let signalMillivolts: Int
+    public let chipPresent: Bool
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try values.decode(String.self, forKey: .version)
+        let signal = try values.decode(Int.self, forKey: .signalMillivolts)
+        let present = try values.decode(Bool.self, forKey: .chipPresent)
+        guard version == "v1", signal >= 0 else {
+            throw DecodingError.dataCorruptedError(forKey: .signalMillivolts, in: values, debugDescription: "Invalid calibration signal response.")
+        }
+        self.version = version
+        self.signalMillivolts = signal
+        self.chipPresent = present
     }
 }
 

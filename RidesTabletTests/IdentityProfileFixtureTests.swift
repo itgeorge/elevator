@@ -29,7 +29,9 @@ final class IdentityProfileFixtureTests: XCTestCase {
         for entry in fixture.profiles where entry.canReset {
             let sequence = try XCTUnwrap(RideSequenceRegistry.sequence(named: entry.rideSequence), entry.friendlyName)
             let oracle = ResetSequence.for(sequence)
-            let image = oracle.resetImage()
+            // The shared v1 Mercury fixture records its legacy default-500 reset image;
+            // operator resets now use zero and must not rewrite that historical fixture.
+            let image = sequence == .mercury ? oracle.resetImage(rideCount: 500) : oracle.resetImage()
             let fixtureImage = try entry.resetImage.map { blocks in
                 try blocks.map { try parse($0) }
             }
@@ -46,12 +48,6 @@ final class IdentityProfileFixtureTests: XCTestCase {
         let venus21ff = fixture.profiles.first { $0.friendlyName == "venus21ff" }!
         XCTAssertFalse(venus21ff.canReset)
         XCTAssertNil(venus21ff.resetImage)
-    }
-
-    func testMercuryResetImageUsesFiveHundredRides() {
-        let image = ResetSequence.for(.mercury).resetImage()
-        XCTAssertEqual(image[5], RideSequence.mercury.encode(500))
-        XCTAssertEqual(image[6], RideSequence.mercury.encode(500))
     }
 
     private struct Fixture: Decodable {

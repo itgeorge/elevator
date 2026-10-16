@@ -204,6 +204,22 @@ public static class BridgeApplication
             }
         });
 
+        app.MapGet("/api/v1/hardware/calibration/signal", async (
+            IBridgePm3Device device, BridgeOperationGate gate, BridgeOptions options, HttpContext context) =>
+        {
+            try
+            {
+                var signal = await gate.ExecuteAsync(operationCt => device.MeasureCalibrationSignalAsync(operationCt),
+                    context.RequestAborted, waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                return Results.Ok(new CalibrationSignalResponse(BridgeOptions.ApiVersion, signal.SignalMillivolts, signal.ChipPresent));
+            }
+            catch (BridgeHardwareException ex) { return HardwareError(ex.Error); }
+            catch (OperationCanceledException) { return Results.StatusCode(StatusCodes.Status499ClientClosedRequest); }
+            catch (IOException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (UnauthorizedAccessException) { return HardwareError(BridgeHardwareError.Unavailable); }
+        });
+
         app.MapGet("/api/v1/hardware/page0/scan", async (
             IBridgePm3Device device,
             BridgeOperationGate gate,
@@ -228,7 +244,9 @@ public static class BridgeApplication
             }
             catch (BridgeHardwareException ex)
             {
-                return HardwareError(ex.Error);
+                return ex.Error == BridgeHardwareError.NoChip && ex.SignalMillivolts is int signal
+                    ? Results.Json(new BridgeErrorResponse("no_chip", "No supported T55xx chip is present.", signal), statusCode: 409)
+                    : HardwareError(ex.Error);
             }
             catch (OperationCanceledException)
             {
