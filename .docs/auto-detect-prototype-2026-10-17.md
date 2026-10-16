@@ -2,7 +2,7 @@
 
 ## Operator behavior
 
-- The reader strip has equal-width, flat **Detect** and **Auto** controls with a shared vertical divider and only outer rounded corners. Auto is off initially. A hollow diode means off, yellow means an active scan cycle, and green means enabled between cycles. Only the yellow diode softly pulses; there are no changing Auto icons, button-scale animations, shadows, or background pulses. Reduce Motion disables the diode animation.
+- The reader strip has equal-width, flat **Detect** and **Auto** controls with a shared vertical divider. Detect remains blue; Auto is neutral-colored, with a straight right edge and divider where it meets the signal panel. Only the exposed outer leading corners of the control group are rounded. Auto is off initially. A hollow diode means off, yellow means an active scan cycle, and green means enabled between cycles. Only the yellow diode softly pulses; there are no changing Auto icons, button-scale animations, shadows, or background pulses. Reduce Motion disables the diode animation.
 - Detect turns Auto off, cancels/drains its in-flight work, and does a single read. Initial manual calibration steps remain available before a token has been loaded. Auto can start without calibration; calibration is a meter reference, never a token-acceptance gate.
 - Auto preserves pending edits when a full read confirms the same observed snapshot (block 4, mirrors 5/6, decoded sequence/count). A changed snapshot is adopted as a new read. Read-confirmed absence clears the loaded token and pending count.
 - Unknown snapshots still use the normal full-dump workflow, but an unchanged unknown presentation is not repeatedly saved on every confirmation.

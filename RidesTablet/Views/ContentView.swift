@@ -440,7 +440,7 @@ private struct DetectStrip: View {
     @State private var diodePulse = false
 
     private var diodeColor: Color {
-        guard model.isAutoScanning else { return .white.opacity(0.65) }
+        guard model.isAutoScanning else { return .gray.opacity(0.65) }
         return model.isAutoScanCycleActive ? .yellow : .green
     }
 
@@ -484,12 +484,14 @@ private struct DetectStrip: View {
         HStack(spacing: 0) {
             detectButton.frame(maxWidth: .infinity, maxHeight: .infinity)
             Rectangle()
-                .fill(Color.white.opacity(0.72))
+                .fill(Color.gray.opacity(0.35))
                 .frame(width: 1)
             autoButton.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Color.blue)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .background(Color.white)
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Color.gray.opacity(0.35)).frame(width: 1)
+        }
     }
 
     private var detectButton: some View {
@@ -504,6 +506,10 @@ private struct DetectStrip: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                .background(Color.blue, in: UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 14, bottomLeading: 14),
+                    style: .continuous
+                ))
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy)
@@ -527,7 +533,7 @@ private struct DetectStrip: View {
                     .accessibilityHidden(true)
                 Text("Auto")
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.blue)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
