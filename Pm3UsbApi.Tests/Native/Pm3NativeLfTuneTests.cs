@@ -96,6 +96,66 @@ public class Pm3NativeLfTuneTests
   }
 
   [Test]
+  public void MeasurePeakMillivolts_CancellationAfterSample_AttemptsShutdownAndPreservesCancellation()
+  {
+    using var cts = new CancellationTokenSource();
+    var phases = new List<byte>();
+    var send = (byte[] payload) =>
+    {
+      phases.Add(payload[0]);
+      if (payload[0] == 2)
+      {
+        cts.Cancel();
+        return VoltageFrame(123u);
+      }
+
+      return SuccessFrame();
+    };
+
+    var exception = Assert.Throws<OperationCanceledException>(() =>
+      Pm3NativeLfTune.MeasurePeakMillivolts(
+        send,
+        sampleCount: 3,
+        timeout: TimeSpan.FromSeconds(3),
+        ct: cts.Token));
+
+    Assert.That(exception!.CancellationToken, Is.EqualTo(cts.Token));
+    Assert.That(phases, Is.EqualTo(new byte[] { 1, 2, 3 }));
+  }
+
+  [Test]
+  public void MeasurePeakMillivolts_MeasurementError_AttemptsShutdownAndPreservesOriginalError()
+  {
+    var phases = new List<byte>();
+    var send = (byte[] payload) =>
+    {
+      phases.Add(payload[0]);
+      if (payload[0] == 2)
+      {
+        return new Pm3ResponseFrame
+        {
+          Command = Pm3CommandCodes.CmdMeasureAntennaTuningLf,
+          Status = 1,
+          Reason = 0,
+          IsNg = true,
+          Data = BitConverter.GetBytes(123u),
+        };
+      }
+
+      if (payload[0] == 3)
+        throw new IOException("shutdown failed");
+
+      return SuccessFrame();
+    };
+
+    var exception = Assert.Throws<InvalidOperationException>(() =>
+      Pm3NativeLfTune.MeasurePeakMillivolts(send, sampleCount: 3, timeout: TimeSpan.FromSeconds(3)));
+
+    Assert.That(exception!.Message, Is.EqualTo("LF tune measurement failed."));
+    Assert.That(phases, Is.EqualTo(new byte[] { 1, 2, 3 }));
+  }
+
+  [Test]
   public void MeasurePeakMillivolts_SendsInitAndShutdown()
   {
     var phases = new List<byte>();

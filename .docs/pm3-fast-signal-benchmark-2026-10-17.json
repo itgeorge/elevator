@@ -1,0 +1,181 @@
+{
+  "measuredAt": "2026-10-17T02:22:25.817331+03:00",
+  "mode": "physical native PM3; read-only; full scans before/after and 25 lightweight signal probes",
+  "targetIntervalMs": 100,
+  "hardwareWritesPerformed": false,
+  "before": {
+    "present": false,
+    "elapsedMs": 3972.839,
+    "signalMillivolts": 70477
+  },
+  "samples": [
+    {
+      "iteration": 0,
+      "startMs": 0,
+      "elapsedMs": 52.4876,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 1,
+      "startMs": 101.1195,
+      "elapsedMs": 49.9387,
+      "signalMillivolts": 70425
+    },
+    {
+      "iteration": 2,
+      "startMs": 201.5525,
+      "elapsedMs": 50.4369,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 3,
+      "startMs": 302.0624,
+      "elapsedMs": 50.4517,
+      "signalMillivolts": 70442
+    },
+    {
+      "iteration": 4,
+      "startMs": 402.6081,
+      "elapsedMs": 50.864,
+      "signalMillivolts": 70400
+    },
+    {
+      "iteration": 5,
+      "startMs": 503.5475,
+      "elapsedMs": 50.7958,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 6,
+      "startMs": 604.4435,
+      "elapsedMs": 50.3672,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 7,
+      "startMs": 704.8828,
+      "elapsedMs": 50.7896,
+      "signalMillivolts": 70425
+    },
+    {
+      "iteration": 8,
+      "startMs": 805.7266,
+      "elapsedMs": 51.0264,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 9,
+      "startMs": 905.8398,
+      "elapsedMs": 49.8466,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 10,
+      "startMs": 1006.7721,
+      "elapsedMs": 50.3657,
+      "signalMillivolts": 70408
+    },
+    {
+      "iteration": 11,
+      "startMs": 1106.477,
+      "elapsedMs": 51.1667,
+      "signalMillivolts": 70400
+    },
+    {
+      "iteration": 12,
+      "startMs": 1206.7647,
+      "elapsedMs": 51.7222,
+      "signalMillivolts": 70408
+    },
+    {
+      "iteration": 13,
+      "startMs": 1306.8835,
+      "elapsedMs": 50.8539,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 14,
+      "startMs": 1407.7979,
+      "elapsedMs": 49.1808,
+      "signalMillivolts": 70425
+    },
+    {
+      "iteration": 15,
+      "startMs": 1508.0469,
+      "elapsedMs": 49.7678,
+      "signalMillivolts": 70425
+    },
+    {
+      "iteration": 16,
+      "startMs": 1608.8726,
+      "elapsedMs": 49.2507,
+      "signalMillivolts": 70408
+    },
+    {
+      "iteration": 17,
+      "startMs": 1709.1815,
+      "elapsedMs": 50.6045,
+      "signalMillivolts": 70408
+    },
+    {
+      "iteration": 18,
+      "startMs": 1809.8758,
+      "elapsedMs": 44.877,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 19,
+      "startMs": 1910.5492,
+      "elapsedMs": 48.1046,
+      "signalMillivolts": 70408
+    },
+    {
+      "iteration": 20,
+      "startMs": 2010.7111,
+      "elapsedMs": 48.4731,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 21,
+      "startMs": 2111.2478,
+      "elapsedMs": 50.6884,
+      "signalMillivolts": 70417
+    },
+    {
+      "iteration": 22,
+      "startMs": 2212.0072,
+      "elapsedMs": 50.8893,
+      "signalMillivolts": 70408
+    },
+    {
+      "iteration": 23,
+      "startMs": 2312.9557,
+      "elapsedMs": 52.2082,
+      "signalMillivolts": 70391
+    },
+    {
+      "iteration": 24,
+      "startMs": 2412.4993,
+      "elapsedMs": 52.9506,
+      "signalMillivolts": 70425
+    }
+  ],
+  "after": {
+    "present": false,
+    "elapsedMs": 3340.8929,
+    "signalMillivolts": 70408
+  },
+  "summary": {
+    "medianProbeMs": 50.605,
+    "p95ProbeMs": 52.208,
+    "maxProbeMs": 52.951,
+    "medianStartIntervalMs": 100.541,
+    "minSignalMv": 70391,
+    "maxSignalMv": 70442
+  },
+  "notes": [
+    "The PM3 had no readable token during this benchmark; both diagnostic scans returned NoChip.",
+    "The 250 ms RF settle is retained for actual T55 operations; tune-only/version probes skip it.",
+    "No write/reset APIs were called."
+  ]
+}

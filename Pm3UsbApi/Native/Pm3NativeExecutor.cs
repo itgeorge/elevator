@@ -38,7 +38,7 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
 
         var effectiveTimeout = timeout ?? _options.DefaultCommandTimeout;
         await EnsureTransportAsync(portOverride, effectiveTimeout, ct).ConfigureAwait(false);
-        PrepareForT55Operation();
+        PrepareForT55Operation(RequiresRfSettle(commands));
 
         if (commands.Count == 1)
         {
@@ -126,7 +126,13 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         };
     }
 
-    private void PrepareForT55Operation()
+    internal static bool RequiresRfSettle(IReadOnlyList<IPm3DeviceCommand> commands)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        return commands.Any(command => command is not (LfTuneCommand or HwVersionCommand));
+    }
+
+    private void PrepareForT55Operation(bool requiresRfSettle)
     {
         if (_transport is null)
             return;
@@ -141,7 +147,7 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
         }
 
         _transport.DiscardPendingInput();
-        if (_lfTuneRecentlyActive)
+        if (requiresRfSettle && _lfTuneRecentlyActive)
         {
             WaitForRfSettle(CancellationToken.None);
             _transport?.DiscardPendingInput();
@@ -339,7 +345,8 @@ public sealed class Pm3NativeExecutor : IPm3CommandExecutor
             peak = Pm3NativeLfTune.MeasurePeakMillivolts(
                 payload =>
                 {
-                    lastResponse = Send(Pm3CommandCodes.CmdMeasureAntennaTuningLf, payload, measureTimeout, ct);
+                    var sendToken = payload[0] == 3 ? CancellationToken.None : ct;
+                    lastResponse = Send(Pm3CommandCodes.CmdMeasureAntennaTuningLf, payload, measureTimeout, sendToken);
                     return lastResponse;
                 },
                 sampleCount,

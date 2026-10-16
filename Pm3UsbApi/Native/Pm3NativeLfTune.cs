@@ -25,37 +25,42 @@ internal static class Pm3NativeLfTune
         if (response.Status != Pm3CommandCodes.Pm3Success)
             throw new InvalidOperationException("LF tune initialization failed.");
 
-        var startedTick = now();
         uint peak = 0;
         var samplesTaken = 0;
+        var startedTick = now();
         var deadline = startedTick + (long)timeout.TotalMilliseconds;
         var probe = LfTuneProbeSession.Current;
 
-        while (samplesTaken < sampleCount && now() < deadline)
-        {
-            ct.ThrowIfCancellationRequested();
-            response = send(measure);
-            if (response.Status == Pm3CommandCodes.Pm3EopAborted || response.Data.Length != sizeof(uint))
-                break;
-
-            if (response.Status != Pm3CommandCodes.Pm3Success)
-                throw new InvalidOperationException("LF tune measurement failed.");
-
-            var volt = BitConverter.ToUInt32(response.Data, 0);
-            if (volt > peak)
-                peak = volt;
-
-            probe?.RecordSample(samplesTaken, now() - startedTick, volt, peak);
-            samplesTaken++;
-        }
-
         try
         {
-            send(shutdown);
+            while (samplesTaken < sampleCount && now() < deadline)
+            {
+                ct.ThrowIfCancellationRequested();
+                response = send(measure);
+                if (response.Status == Pm3CommandCodes.Pm3EopAborted || response.Data.Length != sizeof(uint))
+                    break;
+
+                if (response.Status != Pm3CommandCodes.Pm3Success)
+                    throw new InvalidOperationException("LF tune measurement failed.");
+
+                var volt = BitConverter.ToUInt32(response.Data, 0);
+                if (volt > peak)
+                    peak = volt;
+
+                probe?.RecordSample(samplesTaken, now() - startedTick, volt, peak);
+                samplesTaken++;
+            }
         }
-        catch
+        finally
         {
-            // Best effort shutdown, same as client on abort.
+            try
+            {
+                send(shutdown);
+            }
+            catch
+            {
+                // Best effort shutdown; preserve cancellation and measurement failures.
+            }
         }
 
         if (peak == 0)
