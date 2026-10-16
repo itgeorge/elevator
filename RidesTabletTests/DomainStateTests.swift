@@ -3,6 +3,49 @@ import XCTest
 
 @MainActor
 final class DomainStateTests: XCTestCase {
+    func testAutoScanCadenceStartsFastAndSlowsAfterKnownOrUnknownConfirmation() async throws {
+        let fast: TimeInterval = 0.75
+        let slow: TimeInterval = 3
+        let knownModel = RidesViewModel(device: FakeProxmark(), periodicConfirmInterval: 0)
+        XCTAssertEqual(knownModel.currentAutoScanInterval, fast)
+        knownModel.toggleAutoScanning()
+        await knownModel.runAutoScanCycleForTesting()
+        for _ in 0..<500 where knownModel.currentAutoScanInterval == fast { await Task.yield() }
+        XCTAssertEqual(knownModel.currentAutoScanInterval, slow)
+        knownModel.stopAutoScanning()
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let unknown = UnknownToken(blocks: [0x00148040, 1, 2, 3, 4, 0xDEAD1234, 0xDEAD1234, 0])
+        let unknownModel = RidesViewModel(
+            device: FakeProxmark(read: .unknown(unknown)),
+            dumpStore: UnknownDumpStore(directory: directory),
+            periodicConfirmInterval: 0
+        )
+        unknownModel.toggleAutoScanning()
+        await unknownModel.runAutoScanCycleForTesting()
+        for _ in 0..<500 where unknownModel.currentAutoScanInterval == fast { await Task.yield() }
+        XCTAssertNil(unknownModel.loadedToken)
+        XCTAssertEqual(unknownModel.currentAutoScanInterval, slow)
+        unknownModel.stopAutoScanning()
+    }
+
+    func testAutoScanCadenceUsesInjectedIntervalsAndConfirmedRemovalReturnsFast() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 0.2, occupiedAutoScanInterval: 1.7, periodicConfirmInterval: 0)
+        XCTAssertEqual(model.currentAutoScanInterval, 0.2)
+        model.toggleAutoScanning()
+        await model.runAutoScanCycleForTesting()
+        for _ in 0..<500 where model.currentAutoScanInterval == 0.2 { await Task.yield() }
+        XCTAssertEqual(model.currentAutoScanInterval, 1.7)
+
+        fake.set(read: .noChip)
+        await model.runAutoScanCycleForTesting()
+        for _ in 0..<500 where model.currentAutoScanInterval == 1.7 { await Task.yield() }
+        XCTAssertEqual(model.currentAutoScanInterval, 0.2)
+        model.stopAutoScanning()
+    }
+
     func testAutoScanWorksWithoutCalibrationAndPreservesPendingForSameSnapshot() async {
         let fake = FakeProxmark()
         let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 0)

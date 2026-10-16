@@ -437,32 +437,28 @@ private struct DetectStrip: View {
     @ObservedObject var model: RidesViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let layout: Layout
-    @State private var pulse = false
+    @State private var diodePulse = false
 
-    private var autoActive: Bool { model.isAutoScanning }
-    private var pulseScale: CGFloat {
-        guard autoActive else { return 1 }
-        return pulse ? (model.isAutoScanCycleActive ? 1.075 : 1.035) : 1
+    private var diodeColor: Color {
+        guard model.isAutoScanning else { return .white.opacity(0.65) }
+        return model.isAutoScanCycleActive ? .yellow : .green
     }
 
     var body: some View {
         Group {
             if layout == .portrait {
                 HStack(spacing: 0) {
-                    detectButton
-                    autoButton(compact: true)
-                        .frame(width: 108)
+                    controlGroup.frame(maxWidth: .infinity)
                     SignalView(model: model)
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal, 12)
                 }
                 .frame(height: 92)
             } else {
                 VStack(spacing: 0) {
-                    HStack(spacing: 8) {
-                        detectButton.frame(height: 58)
-                        autoButton(compact: false).frame(width: 150, height: 58)
-                    }
-                    .padding(.horizontal, 10)
+                    controlGroup
+                        .frame(height: 58)
+                        .padding(.horizontal, 10)
                     statusLine
                         .frame(height: 28)
                     SignalView(model: model)
@@ -478,9 +474,22 @@ private struct DetectStrip: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay { RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)) }
         .environment(\.colorScheme, .light)
-        .onAppear { updatePulse() }
-        .onChange(of: autoActive) { _, _ in updatePulse() }
-        .onChange(of: model.isAutoScanCycleActive) { _, _ in updatePulse() }
+        .onAppear { updateDiodePulse() }
+        .onChange(of: model.isAutoScanning) { _, _ in updateDiodePulse() }
+        .onChange(of: model.isAutoScanCycleActive) { _, _ in updateDiodePulse() }
+        .onChange(of: reduceMotion) { _, _ in updateDiodePulse() }
+    }
+
+    private var controlGroup: some View {
+        HStack(spacing: 0) {
+            detectButton.frame(maxWidth: .infinity, maxHeight: .infinity)
+            Rectangle()
+                .fill(Color.white.opacity(0.72))
+                .frame(width: 1)
+            autoButton.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color.blue)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var detectButton: some View {
@@ -490,8 +499,11 @@ private struct DetectStrip: View {
             Label(model.isBusy ? "Working…" : model.primaryActionTitle, systemImage: model.isBusy ? "hourglass" : "dot.radiowaves.left.and.right")
                 .font(.title2.bold())
                 .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy)
@@ -502,32 +514,24 @@ private struct DetectStrip: View {
                            : "Measures reader signal and checks the expected token presence")
     }
 
-    private func autoButton(compact: Bool) -> some View {
+    private var autoButton: some View {
         Button {
             model.toggleAutoScanning()
         } label: {
-            Group {
-                if compact {
-                    VStack(spacing: 3) {
-                        Label("Auto", systemImage: model.isAutoScanCycleActive ? "dot.radiowaves.left.and.right" : "arrow.triangle.2.circlepath")
-                            .font(.headline)
-                        Text(shortStatus).font(.caption2).lineLimit(1).minimumScaleFactor(0.75)
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        Image(systemName: model.isAutoScanCycleActive ? "dot.radiowaves.left.and.right" : "arrow.triangle.2.circlepath")
-                            .symbolEffect(.pulse, isActive: model.isAutoScanCycleActive && !reduceMotion)
-                        Text(model.isAutoScanning ? "Auto · On" : "Auto · Off")
-                            .font(.headline)
-                    }
-                }
+            HStack(spacing: 9) {
+                Circle()
+                    .strokeBorder(diodeColor, lineWidth: model.isAutoScanning ? 0 : 1.5)
+                    .background(Circle().fill(model.isAutoScanning ? diodeColor : .clear))
+                    .frame(width: 10, height: 10)
+                    .opacity(model.isAutoScanning && model.isAutoScanCycleActive && !reduceMotion && diodePulse ? 0.42 : 1)
+                    .accessibilityHidden(true)
+                Text("Auto")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
             }
-            .foregroundStyle(autoActive ? Color.white : Color.blue)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(autoActive ? Color.blue : Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.blue.opacity(0.35)))
-            .scaleEffect(reduceMotion ? 1 : pulseScale)
-            .shadow(color: autoActive ? Color.blue.opacity(model.isAutoScanCycleActive ? 0.35 : 0.18) : .clear, radius: model.isAutoScanCycleActive ? 9 : 5)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy && !model.isAutoScanning)
@@ -537,15 +541,8 @@ private struct DetectStrip: View {
         .accessibilityIdentifier("auto-scan-toggle")
     }
 
-    private var shortStatus: String {
-        if model.isAutoScanCycleActive { return "Scanning" }
-        return model.isAutoScanning ? "Enabled" : (model.isBusy ? "Unavailable" : "Off")
-    }
-
     private var statusLine: some View {
         HStack(spacing: 6) {
-            Image(systemName: model.isAutoScanCycleActive ? "dot.radiowaves.left.and.right" : "circle.dotted")
-                .foregroundStyle(model.isAutoScanCycleActive ? Color.blue : Color.secondary)
             Text(model.autoScanStatus)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -556,10 +553,14 @@ private struct DetectStrip: View {
         .padding(.horizontal, 14)
     }
 
-    private func updatePulse() {
-        guard autoActive, !reduceMotion else { pulse = false; return }
-        withAnimation(.easeInOut(duration: model.isAutoScanCycleActive ? 0.55 : 1.15).repeatForever(autoreverses: true)) {
-            pulse = true
+    private func updateDiodePulse() {
+        guard model.isAutoScanning, model.isAutoScanCycleActive, !reduceMotion else {
+            diodePulse = false
+            return
+        }
+        diodePulse = false
+        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+            diodePulse = true
         }
     }
 }

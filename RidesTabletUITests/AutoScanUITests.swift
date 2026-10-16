@@ -18,6 +18,18 @@ final class AutoScanUITests: XCTestCase {
         app = nil
     }
 
+    func testDetectAndAutoControlsHaveEqualWidthAndStableAutoLabel() {
+        let detect = app.buttons["detect-primary-action"]
+        let auto = app.buttons["auto-scan-toggle"]
+        XCTAssertTrue(detect.waitForExistence(timeout: 20))
+        XCTAssertTrue(auto.waitForExistence(timeout: 10))
+        XCTAssertTrue(auto.staticTexts["Auto"].exists)
+        XCTAssertEqual(detect.frame.width, auto.frame.width, accuracy: 2)
+        XCTAssertTrue(auto.waitForValue("Off"))
+        auto.tap()
+        XCTAssertTrue(auto.waitForValue("On"))
+    }
+
     func testAutoScanLeavesPendingRidesAloneAndManualDetectStopsIt() {
         let autoToggle = app.buttons["auto-scan-toggle"]
         let pending = app.descendants(matching: .any)["pending-rides-display"]

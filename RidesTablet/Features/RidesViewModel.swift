@@ -107,7 +107,9 @@ public final class RidesViewModel: ObservableObject {
     private let dumpStore: UnknownDumpStore
     private let chargeHistoryStore: any ChargeHistoryStore
     private let autoScanInterval: TimeInterval
+    private let occupiedAutoScanInterval: TimeInterval
     private let periodicConfirmInterval: TimeInterval
+    private var confirmedTokenPresence = false
     private var autoScanTask: Task<Void, Never>?
     private var drainingAutoScanTask: Task<Void, Never>?
     private var cycleGeneration = 0
@@ -127,6 +129,7 @@ public final class RidesViewModel: ObservableObject {
         dumpStore: UnknownDumpStore = UnknownDumpStore(),
         chargeHistoryStore: any ChargeHistoryStore = UserDefaultsChargeHistoryStore(),
         autoScanInterval: TimeInterval = 0.75,
+        occupiedAutoScanInterval: TimeInterval = 3,
         periodicConfirmInterval: TimeInterval = 8
     ) {
         self.device = device
@@ -135,11 +138,17 @@ public final class RidesViewModel: ObservableObject {
         self.dumpStore = dumpStore
         self.chargeHistoryStore = chargeHistoryStore
         self.autoScanInterval = max(0, autoScanInterval)
+        self.occupiedAutoScanInterval = max(0, occupiedAutoScanInterval)
         self.periodicConfirmInterval = max(0, periodicConfirmInterval)
         self.completedCharges = chargeHistoryStore.load()
         if let fake = device as? FakeProxmark {
             simulationScenario = fake.scenario
         }
+    }
+
+    /// Poll cadence based on the latest confirmed presence read, not local token data.
+    var currentAutoScanInterval: TimeInterval {
+        confirmedTokenPresence ? occupiedAutoScanInterval : autoScanInterval
     }
 
     public var isBusy: Bool {
@@ -214,7 +223,7 @@ public final class RidesViewModel: ObservableObject {
                     await self.runAutoScanCycle(generation: generation)
                     guard !Task.isCancelled, self.isAutoScanning, self.cycleGeneration == generation else { return nil }
                     let elapsed = Date().timeIntervalSince(started)
-                    return max(0, self.autoScanInterval * pow(2.0, Double(min(self.autoFailureCount, 4))) - elapsed)
+                    return max(0, self.currentAutoScanInterval * pow(2.0, Double(min(self.autoFailureCount, 4))) - elapsed)
                 }()
                 guard let delay else { break }
                 if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
@@ -263,6 +272,7 @@ public final class RidesViewModel: ObservableObject {
         lastFullScanAt = Date()
         switch result {
         case .known(let token, let measuredSignal):
+            confirmedTokenPresence = true
             lastTune = .measured(millivolts: measuredSignal)
             lastSignalMillivolts = measuredSignal
             lastConfirmedSignal = measuredSignal
@@ -272,6 +282,7 @@ public final class RidesViewModel: ObservableObject {
             autoFailureCount = 0
             autoScanStatus = "Token confirmed."
         case .unknown(let token, let measuredSignal):
+            confirmedTokenPresence = true
             lastTune = .measured(millivolts: measuredSignal)
             lastSignalMillivolts = measuredSignal
             lastConfirmedSignal = measuredSignal
@@ -287,6 +298,7 @@ public final class RidesViewModel: ObservableObject {
             }
             autoScanStatus = "Unknown token confirmed."
         case .noChip:
+            confirmedTokenPresence = false
             lastConfirmedSignal = signal
             lastConfirmedUnknownBlocks = nil
             autoConfirmationIsStale = false
@@ -296,6 +308,7 @@ public final class RidesViewModel: ObservableObject {
             message = Self.noChipMessage
             autoScanStatus = "No token confirmed."
         case .noChipWithSignal(let measuredSignal):
+            confirmedTokenPresence = false
             lastTune = .measured(millivolts: measuredSignal)
             lastSignalMillivolts = measuredSignal
             lastConfirmedSignal = measuredSignal
@@ -380,18 +393,22 @@ public final class RidesViewModel: ObservableObject {
         state = .working("Detecting, tuning and reading…")
         switch await device.scan() {
         case .known(let token, let signal):
+            confirmedTokenPresence = true
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             setKnown(token)
             message = "Token loaded."
         case .unknown(let token, let signal):
+            confirmedTokenPresence = true
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             logUnknown(token)
         case .noChip:
+            confirmedTokenPresence = false
             state = .noChip
             message = Self.noChipMessage
         case .noChipWithSignal(let signal):
+            confirmedTokenPresence = false
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             state = .noChip
@@ -446,14 +463,18 @@ public final class RidesViewModel: ObservableObject {
         message = nil
         lastDumpURL = nil
         switch await legacyDevice.read() {
-        case .known(let token): setKnown(token)
+        case .known(let token):
+            confirmedTokenPresence = true
+            setKnown(token)
         case .noChip:
+            confirmedTokenPresence = false
             state = .noChip
             message = Self.noChipMessage
         case .failure(let error):
             state = .failed(error)
             message = error
         case .unknown(let token):
+            confirmedTokenPresence = true
             logUnknown(token)
         }
     }
@@ -588,15 +609,18 @@ public final class RidesViewModel: ObservableObject {
         defer { lastFullScanAt = Date() }
         switch await device.scan() {
         case .known(let token, let signal):
+            confirmedTokenPresence = true
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             adoptConfirmed(token)
         case .unknown(let token, let signal):
+            confirmedTokenPresence = true
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             clearLoadedTokenForRefresh()
             logUnknown(token)
         case .noChip, .noChipWithSignal:
+            confirmedTokenPresence = false
             clearLoadedTokenForRefresh()
             loadedToken = nil
             state = .noChip

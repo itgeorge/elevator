@@ -2,7 +2,7 @@
 
 ## Operator behavior
 
-- The reader strip has **Detect** and **Auto** controls. Auto is off initially. Its blue background pulses while enabled, with stronger feedback during a cycle; Reduce Motion disables the movement.
+- The reader strip has equal-width, flat **Detect** and **Auto** controls with a shared vertical divider and only outer rounded corners. Auto is off initially. A hollow diode means off, yellow means an active scan cycle, and green means enabled between cycles. Only the yellow diode softly pulses; there are no changing Auto icons, button-scale animations, shadows, or background pulses. Reduce Motion disables the diode animation.
 - Detect turns Auto off, cancels/drains its in-flight work, and does a single read. Initial manual calibration steps remain available before a token has been loaded. Auto can start without calibration; calibration is a meter reference, never a token-acceptance gate.
 - Auto preserves pending edits when a full read confirms the same observed snapshot (block 4, mirrors 5/6, decoded sequence/count). A changed snapshot is adopted as a new read. Read-confirmed absence clears the loaded token and pending count.
 - Unknown snapshots still use the normal full-dump workflow, but an unchanged unknown presentation is not repeatedly saved on every confirmation.
@@ -14,7 +14,7 @@
 
 The bridge adds authenticated `GET /api/v1/hardware/signal`, an eight-sample LF tune with a one-second tune bound. It performs no T55 detection, block read, or write, and uses the existing hardware gate and adapter lock. The native mutation-session optimization is unchanged.
 
-The client targets **750 ms start-to-start** for non-overlapping signal cycles. It never queues catch-up polls. Full confirmation runs initially, after two meaningful signal-edge probes, or after an eight-second fallback. The edge threshold is 15% of the calibration span with a 1,000 mV minimum, or 1,500 mV without calibration. These are confirmation hints, not acceptance thresholds; the periodic fallback permits reads outside the calibrated range or without a strong edge. Failures back off rather than starting overlapping requests.
+The client targets **750 ms start-to-start** while initially searching or after read-confirmed absence, and **3 seconds** after a known or unknown token has been read-confirmed. It never overlaps cycles or queues catch-up polls. A failed confirmation preserves the last confirmed presence instead of assuming removal. Full confirmation runs initially, after two meaningful signal-edge probes, or after an eight-second fallback. The edge threshold is 15% of the calibration span with a 1,000 mV minimum, or 1,500 mV without calibration. These are confirmation hints, not acceptance thresholds; the periodic fallback permits reads outside the calibrated range or without a strong edge. Failures back off rather than starting overlapping requests.
 
 With a physical token present, the read-only benchmark measured median eight-sample tune time **296.966 ms** and full scan time **1,905.941 ms**. Full confirmations naturally take longer than a signal polling interval, and no-chip confirmation can take longer still. Raw timing receipt: [`pm3-auto-scan-benchmark-2026-10-16.json`](pm3-auto-scan-benchmark-2026-10-16.json).
 
@@ -22,7 +22,7 @@ No server-side reader/session ID is required for this prototype. Client task gen
 
 ## Validation
 
-- Full simulator run: 222 unit tests passed; UI tests cover preserving pending edits while polling, manual Detect stopping Auto, and portrait/landscape control availability. A dedicated fake-reader UI test also confirms removal and new placement through the simulation menu. Simulator tests use only FakeProxmark and an isolated history store.
+- Initial full simulator run: 222 unit tests passed; UI tests cover preserving pending edits while polling, manual Detect stopping Auto, and portrait/landscape control availability. A dedicated fake-reader UI test also confirms removal and new placement through the simulation menu. Simulator tests use only FakeProxmark and an isolated history store.
 - Non-hardware .NET suite: 727 passed, 1 skipped; warnings-as-errors build succeeded with zero warnings/errors.
 - Physical iPad UI automation was attempted, but its XCTest runner timed out enabling automation before test actions ran. This is not reported as a passing physical UI test.
 - A separate opt-in, DEBUG-only in-app smoke checked the **real iPad model → saved-pairing bridge → native PM3** read-only path. It loaded 250 rides, adjusted pending to 251 without charging, preserved 251 over 12 seconds of polling and a periodic confirmation, then ran manual Detect, which stopped Auto and restored pending to the actual 250. Bridge logs showed 15 signal requests and three full scans, all HTTP 200, with zero mutation requests. Machine receipt: [`pm3-auto-scan-physical-smoke-2026-10-17.json`](pm3-auto-scan-physical-smoke-2026-10-17.json).
@@ -37,3 +37,7 @@ The device smoke is opt-in via `RIDES_AUTO_SCAN_READ_ONLY_SMOKE=1` when launchin
 - Different physical tokens with identical observed block-4/mirror payloads cannot be distinguished if no removal or other observable change is seen. This is snapshot reconciliation, not a globally unique token ID.
 - App backgrounding intentionally stops Auto. No background reader service or push infrastructure was added.
 - A client started against an older bridge without the new signal endpoint must use manual Detect or restart with the updated bridge.
+
+## Indicator / cadence refinement validation
+
+224 unit tests and four simulator UI tests passed (one physical-only UI test skipped). Added checks cover equal button widths, stable Auto text, fast initial/absent cadence, slower known and unknown presence, and injected interval values. Existing simulated removal/replacement and pending-preservation checks still pass. The updated app was installed and launched on the iPad; the existing bridge was left running. No token writes were performed during this refinement.

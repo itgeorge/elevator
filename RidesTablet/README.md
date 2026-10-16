@@ -17,9 +17,9 @@ Connection diagnostics (Bonjour browse, manual URL, block-5 connectivity probe) 
 
 ## Automatic scanning
 
-The reader strip now has separate **Detect** and **Auto** controls. Auto toggles read-only polling on/off; its blue background pulses while enabled, with stronger cycle feedback. Reduce Motion is respected. Pressing Detect stops/drains Auto and performs a single manual scan (or the initial calibration step if no token has yet been loaded and calibration has not been completed).
+The reader strip has equal-width **Detect** and **Auto** controls joined by a vertical divider. Auto toggles read-only polling on/off. Only its small diode changes state: hollow means off, yellow means a scan cycle is active, and green means enabled between cycles. Only the yellow diode softly pulses; button backgrounds and icons stay stable. Reduce Motion is respected. Pressing Detect stops/drains Auto and performs a single manual scan (or the initial calibration step if no token has yet been loaded and calibration has not been completed).
 
-Signal probes target **750 ms start-to-start**, never overlapping. Actual PM3 eight-sample probes measured about **297 ms**; full token-confirmation scans take about **1.9 seconds**, so an initial scan, two consistent signal-edge hints, or the eight-second fallback triggers full reads instead of reading all blocks every cycle. Calibration is an optional meter reference for Auto, not an acceptance gate.
+Signal probes target **750 ms start-to-start** while searching or after confirmed removal, and **3 seconds** while a known or unknown token is confirmed present, never overlapping. Actual PM3 eight-sample probes measured about **297 ms**; full token-confirmation scans take about **1.9 seconds**, so an initial scan, two consistent signal-edge hints, or the eight-second fallback triggers full reads instead of reading all blocks every cycle. Calibration is an optional meter reference for Auto, not an acceptance gate.
 
 Repeated reads of the same unchanged block-4 / mirror snapshot preserve pending edits. Changed snapshots replace the loaded count; read-confirmed absence clears it. Repeated identical unknown snapshots do not repeatedly overwrite their dump. A failed full confirmation disables charging until a fresh confirmation succeeds.
 
