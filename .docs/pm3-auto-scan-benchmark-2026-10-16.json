@@ -1,0 +1,184 @@
+{
+  "capturedAt": "2026-10-16T23:53:44.371337+03:00",
+  "mode": "read-only native PM3, physical token present",
+  "rows": [
+    {
+      "operation": "tune",
+      "samples": 3,
+      "iteration": 0,
+      "elapsedMs": 22.34,
+      "signalMillivolts": 62906
+    },
+    {
+      "operation": "tune",
+      "samples": 3,
+      "iteration": 1,
+      "elapsedMs": 271.6707,
+      "signalMillivolts": 62880
+    },
+    {
+      "operation": "tune",
+      "samples": 3,
+      "iteration": 2,
+      "elapsedMs": 269.4118,
+      "signalMillivolts": 62923
+    },
+    {
+      "operation": "tune",
+      "samples": 3,
+      "iteration": 3,
+      "elapsedMs": 272.723,
+      "signalMillivolts": 62940
+    },
+    {
+      "operation": "tune",
+      "samples": 3,
+      "iteration": 4,
+      "elapsedMs": 277.4963,
+      "signalMillivolts": 62940
+    },
+    {
+      "operation": "tune",
+      "samples": 8,
+      "iteration": 0,
+      "elapsedMs": 295.4567,
+      "signalMillivolts": 62966
+    },
+    {
+      "operation": "tune",
+      "samples": 8,
+      "iteration": 1,
+      "elapsedMs": 296.9656,
+      "signalMillivolts": 62940
+    },
+    {
+      "operation": "tune",
+      "samples": 8,
+      "iteration": 2,
+      "elapsedMs": 295.434,
+      "signalMillivolts": 62932
+    },
+    {
+      "operation": "tune",
+      "samples": 8,
+      "iteration": 3,
+      "elapsedMs": 297.0907,
+      "signalMillivolts": 62889
+    },
+    {
+      "operation": "tune",
+      "samples": 8,
+      "iteration": 4,
+      "elapsedMs": 303.5247,
+      "signalMillivolts": 62914
+    },
+    {
+      "operation": "tune",
+      "samples": 12,
+      "iteration": 0,
+      "elapsedMs": 320.5434,
+      "signalMillivolts": 62923
+    },
+    {
+      "operation": "tune",
+      "samples": 12,
+      "iteration": 1,
+      "elapsedMs": 318.8308,
+      "signalMillivolts": 62932
+    },
+    {
+      "operation": "tune",
+      "samples": 12,
+      "iteration": 2,
+      "elapsedMs": 319.8275,
+      "signalMillivolts": 62923
+    },
+    {
+      "operation": "tune",
+      "samples": 12,
+      "iteration": 3,
+      "elapsedMs": 316.5932,
+      "signalMillivolts": 62897
+    },
+    {
+      "operation": "tune",
+      "samples": 12,
+      "iteration": 4,
+      "elapsedMs": 322.0239,
+      "signalMillivolts": 62940
+    },
+    {
+      "operation": "tune",
+      "samples": 35,
+      "iteration": 0,
+      "elapsedMs": 430.033,
+      "signalMillivolts": 62923
+    },
+    {
+      "operation": "tune",
+      "samples": 35,
+      "iteration": 1,
+      "elapsedMs": 434.6678,
+      "signalMillivolts": 62966
+    },
+    {
+      "operation": "tune",
+      "samples": 35,
+      "iteration": 2,
+      "elapsedMs": 438.7525,
+      "signalMillivolts": 62940
+    },
+    {
+      "operation": "tune",
+      "samples": 35,
+      "iteration": 3,
+      "elapsedMs": 429.0645,
+      "signalMillivolts": 62914
+    },
+    {
+      "operation": "tune",
+      "samples": 35,
+      "iteration": 4,
+      "elapsedMs": 441.5485,
+      "signalMillivolts": 62923
+    },
+    {
+      "operation": "fullScan",
+      "iteration": 0,
+      "elapsedMs": 2191.5687,
+      "signalMillivolts": 62897,
+      "unchanged": true,
+      "snapshotSha256": "3d2d30e9ecadf1033148894449ac43a0ee8478e3b56b22aa8e52c07bfdf2965c"
+    },
+    {
+      "operation": "fullScan",
+      "iteration": 1,
+      "elapsedMs": 1897.7093,
+      "signalMillivolts": 62871,
+      "unchanged": true,
+      "snapshotSha256": "3d2d30e9ecadf1033148894449ac43a0ee8478e3b56b22aa8e52c07bfdf2965c"
+    },
+    {
+      "operation": "fullScan",
+      "iteration": 2,
+      "elapsedMs": 1905.9411,
+      "signalMillivolts": 62880,
+      "unchanged": true,
+      "snapshotSha256": "3d2d30e9ecadf1033148894449ac43a0ee8478e3b56b22aa8e52c07bfdf2965c"
+    }
+  ],
+  "hardwareWritesPerformed": false,
+  "intervalRecommendationSeconds": 0.75,
+  "notes": [
+    "Measured with a physical token present; empty-reader transition testing still requires token removal.",
+    "Normal signal polls use 8 tune samples. Full confirmation scans are slower and intentionally not performed every polling interval.",
+    "PM3 code issues no write or reset command."
+  ],
+  "summary": {
+    "tune3MedianMs": 271.671,
+    "tune8MedianMs": 296.966,
+    "tune12MedianMs": 319.827,
+    "tune35MedianMs": 434.668,
+    "fullScanMedianMs": 1905.941
+  }
+}

@@ -61,6 +61,23 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
+    public async Task SignalEndpointIsAuthenticatedTuneOnlyAndDoesNotDetectOrRead()
+    {
+        var device = new RecordingScanDevice { SignalMillivolts = 12_345 };
+        await using var host = await ScanTestHost.CreateAsync(device);
+        var unauthorized = await host.Client.GetAsync("/api/v1/hardware/signal");
+        Assert.That(unauthorized.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(device.Calls, Is.Empty);
+
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+        var response = await host.Client.GetAsync("/api/v1/hardware/signal");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await response.Content.ReadFromJsonAsync<HardwareSignalResponse>(),
+            Is.EqualTo(new HardwareSignalResponse("v1", 12_345)));
+        Assert.That(device.Calls, Is.EqualTo(new[] { "tune" }));
+    }
+
+    [Test]
     public async Task CalibrationEndpointRequiresAuthenticationBeforeTouchingHardware()
     {
         var device = new RecordingScanDevice();

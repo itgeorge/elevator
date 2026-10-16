@@ -200,6 +200,23 @@ public struct BridgeErrorResponse: Codable, Equatable, Sendable {
     }
 }
 
+public struct BridgeHardwareSignalResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let signalMillivolts: Int
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "signalMillivolts"])
+        let version = try values.decode(String.self, forKey: .version)
+        let signal = try values.decode(Int.self, forKey: .signalMillivolts)
+        guard version == "v1", signal >= 0 else {
+            throw DecodingError.dataCorruptedError(forKey: .signalMillivolts, in: values, debugDescription: "Invalid hardware signal response.")
+        }
+        self.version = version
+        self.signalMillivolts = signal
+    }
+}
+
 public struct BridgeCalibrationSignalResponse: Codable, Equatable, Sendable {
     public let version: String
     public let signalMillivolts: Int

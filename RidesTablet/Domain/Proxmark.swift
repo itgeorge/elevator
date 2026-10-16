@@ -53,6 +53,7 @@ public enum WriteOutcome: Equatable, Sendable {
 public protocol RideTokenDevice: Sendable {
     func scan() async -> ScanOutcome
     func measureCalibrationSignal() async -> CalibrationSignalOutcome
+    func measureSignal() async -> TuneOutcome
     func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome
     func reset(_ request: ResetMutationRequest) async -> ResetOutcome
 }
@@ -107,6 +108,12 @@ public protocol ProxmarkDevice: Sendable {
 
 public extension RideTokenDevice {
     func measureCalibrationSignal() async -> CalibrationSignalOutcome { .failure("Calibration signal measurement is unavailable.") }
+    func measureSignal() async -> TuneOutcome {
+        switch await measureCalibrationSignal() {
+        case .measured(let millivolts, _): return .measured(millivolts: millivolts)
+        case .failure(let error): return .failure(error)
+        }
+    }
 }
 
 public extension ProxmarkDevice {
@@ -200,7 +207,7 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
                 storedWrite = .success
             case .noChip:
                 storedDetect = .noChip
-                storedTune = .measured(millivolts: 0)
+                storedTune = .measured(millivolts: 18_000)
                 storedRead = .noChip
                 storedWrite = .success
             case .unknownFamily:
@@ -262,6 +269,14 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
             case .noChip: return .noChip
             case .failure(let error): return .failure(error)
             }
+        }
+    }
+
+    public func measureSignal() async -> TuneOutcome {
+        await Task.yield()
+        return withLock {
+            tuneCallCount += 1
+            return storedTune
         }
     }
 

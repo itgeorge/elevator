@@ -12,6 +12,7 @@ public sealed record Page0MirrorReadResponse(string Version, string Block5, stri
 public sealed record Page0ScanResponse(string Version, string Block4, string Block5, string Block6, int SignalMillivolts);
 public sealed record CalibrationSignalSample(int SignalMillivolts, bool ChipPresent);
 public sealed record CalibrationSignalResponse(string Version, int SignalMillivolts, bool ChipPresent);
+public sealed record HardwareSignalResponse(string Version, int SignalMillivolts);
 public sealed record Page0BlockReadResult(int Block, string Value);
 public sealed record Page0MissingBlocksResponse(string Version, IReadOnlyList<Page0BlockReadResult> Blocks);
 public sealed record Page0Blocks1To6Response(string Version, IReadOnlyList<Page0BlockReadResult> Blocks);
@@ -78,5 +79,7 @@ public interface IBridgePm3Device : IAsyncDisposable
     Task<Page0ScanReadResult> ScanPage0Async(CancellationToken ct = default);
     async Task<CalibrationSignalSample> MeasureCalibrationSignalAsync(CancellationToken ct = default) =>
         new((await ScanPage0Async(ct).ConfigureAwait(false)).SignalMillivolts, true);
+    async Task<int> MeasureSignalAsync(CancellationToken ct = default) =>
+        (await MeasureCalibrationSignalAsync(ct).ConfigureAwait(false)).SignalMillivolts;
     Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0MissingBlocksAsync(CancellationToken ct = default);
 }

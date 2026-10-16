@@ -91,6 +91,12 @@ The default state directory remains the platform ApplicationData location under 
 
 Everyday mode owns the bind and PM3 discovery settings even when conflicting bind, fixed-port, or auto-discovery configuration is present. Fake-pm3 mode owns the bind and disables PM3 USB discovery while still honoring durable path overrides. A configured PM3 client executable path may still be used to locate the discovery script in everyday mode only. Other settings retain their normal configuration behavior.
 
+## Read-only signal polling
+
+Authenticated `GET /api/v1/hardware/signal` returns `{ "version": "v1", "signalMillivolts": ... }` using an eight-sample LF tune, without T55 detection or block reads. It shares the hardware operation gate and adapter lock with scans and mutations, so tuning cannot interleave with a write. The iPad can use signal changes as hints and request a normal full scan to confirm a token.
+
+A physical token-present probe measured about **297 ms** for eight samples versus **1.91 s** for a full scan. See the [read-only benchmark receipt](../.docs/pm3-auto-scan-benchmark-2026-10-16.json). Client polling is targeted at 750 ms start-to-start; full confirmations naturally take longer and are never overlapped.
+
 ## Mutation performance
 
 The native mutation path detects once per exclusive transaction and reuses that detected session for preflight and verified writes. Native writes already verify their readback, so the bridge does not reread them. Other transports retain explicit readback unless they provide an equivalent verified-session contract. Session state is not reused between requests; failure recovery may reconnect/redetect.

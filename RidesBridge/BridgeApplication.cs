@@ -205,6 +205,24 @@ public static class BridgeApplication
             }
         });
 
+        app.MapGet("/api/v1/hardware/signal", async (
+            IBridgePm3Device device, BridgeOperationGate gate, BridgeOptions options, HttpContext context) =>
+        {
+            try
+            {
+                var signal = await gate.ExecuteAsync(operationCt => device.MeasureSignalAsync(operationCt),
+                    context.RequestAborted, waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                if (signal < 0)
+                    throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed signal response.");
+                return Results.Ok(new HardwareSignalResponse(BridgeOptions.ApiVersion, signal));
+            }
+            catch (BridgeHardwareException ex) { return HardwareError(ex.Error); }
+            catch (OperationCanceledException) { return Results.StatusCode(StatusCodes.Status499ClientClosedRequest); }
+            catch (IOException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (UnauthorizedAccessException) { return HardwareError(BridgeHardwareError.Unavailable); }
+        });
+
         app.MapGet("/api/v1/hardware/calibration/signal", async (
             IBridgePm3Device device, BridgeOperationGate gate, BridgeOptions options, HttpContext context) =>
         {

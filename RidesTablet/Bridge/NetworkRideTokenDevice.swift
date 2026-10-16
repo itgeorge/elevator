@@ -9,6 +9,13 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
         self.client = client
     }
 
+    public func measureSignal() async -> TuneOutcome {
+        do {
+            let signal = try await client.measureSignal()
+            return .measured(millivolts: signal.signalMillivolts)
+        } catch { return .failure(Self.describe(error, operation: "Signal measurement")) }
+    }
+
     public func measureCalibrationSignal() async -> CalibrationSignalOutcome {
         do {
             let sample = try await client.measureCalibrationSignal()

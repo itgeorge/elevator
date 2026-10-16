@@ -93,6 +93,18 @@ public sealed class FakePm3Device : IBridgePm3Device
         return (block5, block6);
     }
 
+    public Task<int> MeasureSignalAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            ThrowIfDisposed();
+            ThrowIfUnavailable();
+            if (_failTune) throw new BridgeHardwareException(BridgeHardwareError.TuneFailed, "Fake PM3 tune failed.");
+            return Task.FromResult(_noChip ? 18_000 : _signalMillivolts);
+        }
+    }
+
     public Task<CalibrationSignalSample> MeasureCalibrationSignalAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();

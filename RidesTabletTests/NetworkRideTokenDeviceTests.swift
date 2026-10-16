@@ -47,6 +47,28 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
         super.tearDown()
     }
 
+    func testMeasureSignalMapsSignalOnlyResponse() async throws {
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            XCTAssertEqual(request.url?.path, "/api/v1/hardware/signal")
+            XCTAssertEqual(request.httpMethod, "GET")
+            return self.json(request, #"{"version":"v1","signalMillivolts":18000}"#)
+        }
+
+        let outcome = await try makeDevice().measureSignal()
+
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/signal"])
+        XCTAssertEqual(outcome, .measured(millivolts: 18_000))
+    }
+
+    func testMeasureSignalRejectsInvalidVersionOrNegativeMeasurement() async throws {
+        for body in [#"{"version":"v2","signalMillivolts":10}"#, #"{"version":"v1","signalMillivolts":-1}"#] {
+            NetworkRideTokenDeviceURLProtocol.handler = { [self] request in self.json(request, body) }
+            guard case .failure = await try makeDevice().measureSignal() else {
+                return XCTFail("Expected malformed signal response to fail")
+            }
+        }
+    }
+
     func testKnownScanUsesPage0ScanOnly() async throws {
         NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
             XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/scan")

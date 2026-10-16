@@ -304,6 +304,12 @@ public final class BridgeClient: @unchecked Sendable {
         return response
     }
 
+    public func measureSignal() async throws -> BridgeHardwareSignalResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(path: "api/v1/hardware/signal", method: "GET", body: nil, requiresAuthentication: true)
+        return try decode(BridgeHardwareSignalResponse.self, data: data)
+    }
+
     public func measureCalibrationSignal() async throws -> BridgeCalibrationSignalResponse {
         guard hasCredential else { throw BridgeClientError.missingCredential }
         let data = try await send(path: "api/v1/hardware/calibration/signal", method: "GET", body: nil, requiresAuthentication: true)

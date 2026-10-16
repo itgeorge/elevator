@@ -14,6 +14,7 @@ internal interface IBridgePm3Session : IAsyncDisposable
     void InvalidateT55DetectCache();
     Task EnsureT55SessionActiveAsync(CancellationToken ct = default);
     Task StartLfTuneAsync(CancellationToken ct = default);
+    Task StartSignalTuneAsync(CancellationToken ct = default, int sampleCount = 8, TimeSpan? timeout = null) => StartLfTuneAsync(ct);
     Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default);
     Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default);
     Task WritePage0BlockAsync(uint block, Tokens.T55Block data, CancellationToken ct = default);
@@ -220,6 +221,25 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
                     return new CalibrationSignalSample(signal, false);
                 throw mapped;
             }
+        }
+        catch (BridgeHardwareException) { throw; }
+        catch (Exception ex) { throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false); }
+        finally { _operationLock.Release(); }
+    }
+
+    public async Task<int> MeasureSignalAsync(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await EnsureConnectedAsync(ct).ConfigureAwait(false);
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            await session.StartSignalTuneAsync(ct, sampleCount: 8, timeout: TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+            var signal = checked((int)await session.GetLfTuneLastMilliVoltsAsync(ct).ConfigureAwait(false));
+            if (signal < 0)
+                throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed signal response.");
+            return signal;
         }
         catch (BridgeHardwareException) { throw; }
         catch (Exception ex) { throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false); }
@@ -576,6 +596,9 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
         public Task EnsureT55SessionActiveAsync(CancellationToken ct = default) => _pm3.EnsureT55SessionActiveAsync(ct);
 
         public Task StartLfTuneAsync(CancellationToken ct = default) => _pm3.StartLfTuneAsync(ct);
+
+        public Task StartSignalTuneAsync(CancellationToken ct = default, int sampleCount = 8, TimeSpan? timeout = null) =>
+            _pm3.StartLfTuneAsync(ct, sampleCount, timeout ?? TimeSpan.FromSeconds(1));
 
         public Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default) => _pm3.GetLfTuneLastMilliVoltsAsync(ct);
 
