@@ -100,6 +100,7 @@ public final class RidesViewModel: ObservableObject {
     @Published public private(set) var isAutoScanning = false
     @Published public private(set) var isAutoScanCycleActive = false
     @Published public private(set) var isAutoDetecting = false
+    @Published public private(set) var isAutoSignalBlocked = false
     @Published public private(set) var autoScanStatus = ""
 
     public let configuration: RidesConfiguration
@@ -151,7 +152,7 @@ public final class RidesViewModel: ObservableObject {
 
     /// Poll cadence based on the latest confirmed presence read, not local token data.
     var currentAutoScanInterval: TimeInterval {
-        confirmedTokenPresence ? occupiedAutoScanInterval : autoScanInterval
+        isAutoSignalBlocked ? autoScanInterval : (confirmedTokenPresence ? occupiedAutoScanInterval : autoScanInterval)
     }
 
     public var isBusy: Bool {
@@ -172,6 +173,7 @@ public final class RidesViewModel: ObservableObject {
         return min(1, max(0, 0.1 + fraction * 0.8))
     }
     public var signalCalibrationReady: Bool { calibrationStep == .ready && noTokenSignalMillivolts != tokenSignalMillivolts }
+    public var canEnableAutoScanning: Bool { signalCalibrationReady && (!isBusy || isAutoScanning) }
     public var hasKnownToken: Bool { loadedToken != nil }
     public var hasRideChange: Bool { hasKnownToken && pendingRides != currentRides }
     public var canCharge: Bool { hasRideChange && canAdjust && !autoConfirmationIsStale }
@@ -211,7 +213,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func startAutoScanning() {
-        guard !isAutoScanning, !isBusy else { return }
+        guard canEnableAutoScanning, !isAutoScanning else { return }
         isAutoScanning = true
         cycleGeneration += 1
         let generation = cycleGeneration
@@ -250,6 +252,22 @@ public final class RidesViewModel: ObservableObject {
             lastTune = outcome
             lastSignalMillivolts = signal
             autoScanStatus = "Signal \(signal) mV"
+            let quality = signalQuality(signal)
+            if isAutoSignalBlocked ? quality < 0.20 : quality <= 0.15 {
+                isAutoSignalBlocked = true
+                isAutoDetecting = false
+                stableEdgeProbes = 0
+                autoConfirmationIsStale = true
+                autoScanStatus = "Weak signal — move token into calibrated range."
+                return
+            }
+            if isAutoSignalBlocked {
+                isAutoSignalBlocked = false
+                autoConfirmationIsStale = true
+                lastFullScanAt = nil
+                isAutoDetecting = true
+                autoScanStatus = "Signal recovered — confirming token."
+            }
             let initialScan = lastFullScanAt == nil
             let edge = isMeaningfulSignalEdge(signal)
             let retry = autoConfirmationIsStale
@@ -273,6 +291,12 @@ public final class RidesViewModel: ObservableObject {
         }
     }
 
+    private func signalQuality(_ signal: Int) -> Double {
+        guard let empty = noTokenSignalMillivolts, let present = tokenSignalMillivolts,
+              empty != present else { return 0 }
+        return Double(signal - empty) / Double(present - empty)
+    }
+
     private func isMeaningfulSignalEdge(_ signal: Int) -> Bool {
         guard let baseline = lastConfirmedSignal else { return false }
         let calibratedSpan = abs((tokenSignalMillivolts ?? 0) - (noTokenSignalMillivolts ?? 0))
@@ -294,7 +318,8 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func performAutoConfirmation(signal: Int, generation: Int) async {
-        let shouldShowDetecting = loadedToken == nil
+        guard signalQuality(signal) > 0.15 else { return }
+        let shouldShowDetecting = loadedToken == nil || autoConfirmationIsStale
         if shouldShowDetecting { isAutoDetecting = true }
         defer { if shouldShowDetecting { isAutoDetecting = false } }
         let worseningProbe = isMeaningfulSignalEdge(signal)
@@ -416,7 +441,7 @@ public final class RidesViewModel: ObservableObject {
                 tokenSignalMillivolts = signal
                 calibrationStep = .ready
             }
-            state = .detected
+            if loadedToken == nil { state = .detected }
             message = "Calibration sample recorded."
         }
     }
@@ -696,6 +721,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func resetForNewDetect() {
+        isAutoSignalBlocked = false
         autoConfirmationIsStale = false
         lastFullScanAt = nil
         lastConfirmedSignal = nil

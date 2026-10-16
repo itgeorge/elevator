@@ -311,7 +311,8 @@ private struct MainPanel: View {
 
     var body: some View {
         Group {
-            if case .known = model.state {
+            if case .known = model.state,
+               !model.isAutoSignalBlocked, !model.isAutoDetecting {
                 KnownControls(model: model)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .top)
@@ -358,10 +359,19 @@ private struct KnownControls: View {
 private struct StatusContent: View {
     @ObservedObject var model: RidesViewModel
 
-    private var isDetecting: Bool { model.isAutoDetecting && !model.hasKnownToken }
+    private var isDetecting: Bool { model.isAutoDetecting }
+    private var isSignalBlocked: Bool { model.isAutoSignalBlocked && !isDetecting }
 
-    private var statusTitle: String { isDetecting ? "Detecting…" : model.state.title }
-    private var statusMessage: String? { isDetecting ? "Reading token…" : model.message }
+    private var statusTitle: String {
+        if isDetecting { return "Detecting…" }
+        if isSignalBlocked { return "Signal too weak" }
+        return model.state.title
+    }
+    private var statusMessage: String? {
+        if isDetecting { return "Reading token…" }
+        if isSignalBlocked { return model.isAutoScanning ? "Reposition the token" : "Use Detect to confirm" }
+        return model.message
+    }
 
     var body: some View {
         VStack(spacing: 9) {
@@ -424,6 +434,7 @@ private struct StatusContent: View {
 
     private var icon: String {
         if isDetecting { return "hourglass" }
+        if isSignalBlocked { return "exclamationmark.triangle.fill" }
         switch model.state {
         case .known: return "checkmark.circle.fill"
         case .unknown: return "questionmark.circle.fill"
@@ -436,6 +447,7 @@ private struct StatusContent: View {
 
     private var iconColor: Color {
         if isDetecting { return .blue }
+        if isSignalBlocked { return .orange }
         switch model.state {
         case .known: return .green
         case .unknown, .noChip, .failed: return .orange
@@ -565,10 +577,11 @@ private struct DetectStrip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(model.isBusy && !model.isAutoScanning)
+        .disabled(model.isAutoScanning ? false : (!model.signalCalibrationReady || model.isBusy))
+        .opacity(!model.isAutoScanning && !model.signalCalibrationReady ? 0.55 : 1)
         .accessibilityLabel("Auto scan")
         .accessibilityValue(model.isAutoScanning ? "On" : "Off")
-        .accessibilityHint(model.isAutoScanning ? "Turns automatic scanning off" : "Turns automatic scanning on")
+        .accessibilityHint(model.isAutoScanning ? "Turns automatic scanning off" : (!model.signalCalibrationReady ? "Complete calibration to enable Auto" : "Turns automatic scanning on"))
         .accessibilityIdentifier("auto-scan-toggle")
     }
 
@@ -617,7 +630,7 @@ private struct SignalView: View {
                  ? model.autoScanStatus
                  : model.signalCalibrationReady
                     ? "Calibrated signal · reposition the token if weak."
-                    : "Calibrate empty, then with a token to set the signal scale.")
+                    : "Calibrate empty, then with a token before Auto is available.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(model.isAutoScanning ? 1 : 2)

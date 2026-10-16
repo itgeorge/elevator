@@ -7,6 +7,7 @@ public enum SimulatorScreenshotScene: String, Equatable, Sendable {
     case reset
     case unknown
     case noChip = "no-chip"
+    case calibrated
 
     public static func parse(_ rawValue: String?) -> Self? {
         guard let rawValue else { return nil }
@@ -204,6 +205,15 @@ struct RidesRootView: View {
                 "startedAt": ISO8601DateFormatter().string(from: started),
                 "hardwareWritesPerformed": false
             ]
+            guard model.signalCalibrationReady else {
+                receipt["skipped"] = true
+                receipt["reason"] = "Signal calibration is not ready; Auto smoke was not started."
+                if let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+                   let data = try? JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys]) {
+                    try? data.write(to: directory.appendingPathComponent("auto-scan-read-only-smoke.json"), options: .atomic)
+                }
+                return
+            }
             defer { model.stopAutoScanning() }
             model.toggleAutoScanning()
             let deadline = Date().addingTimeInterval(30)
@@ -287,6 +297,11 @@ struct RidesRootView: View {
         case .noChip:
             model.selectSimulation(.noChip)
             await model.detect()
+        case .calibrated:
+            model.selectSimulation(.noChip)
+            await model.performPrimaryAction()
+            model.selectSimulation(.goodToken)
+            await model.performPrimaryAction()
         }
     }
 #endif

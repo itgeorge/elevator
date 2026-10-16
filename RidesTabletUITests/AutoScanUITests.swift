@@ -8,7 +8,7 @@ final class AutoScanUITests: XCTestCase {
         app = XCUIApplication()
         if !name.contains("PhysicalReadOnly") {
             app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
-            app.launchEnvironment["RIDES_SCREENSHOT_SCENE"] = "history"
+            app.launchEnvironment["RIDES_SCREENSHOT_SCENE"] = name.contains("AutoPlacement") ? "calibrated" : "history"
         }
         app.launch()
     }
@@ -59,7 +59,7 @@ final class AutoScanUITests: XCTestCase {
         // setUp launches the history fixture for existing tests; relaunch cleanly
         // with a plain fake and delayed first scan for this transient-state smoke.
         app.terminate()
-        app.launchEnvironment.removeValue(forKey: "RIDES_SCREENSHOT_SCENE")
+        app.launchEnvironment["RIDES_SCREENSHOT_SCENE"] = "calibrated"
         app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
         app.launchEnvironment["RIDES_SIMULATOR_SCAN_DELAY_MS"] = "4000"
         app.launch()
@@ -80,7 +80,7 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue(autoToggle.waitForValue("Off"))
     }
 
-    func testAutoScanConfirmsRemovalAndNewPlacement() {
+    func testAutoScanWeakSignalThenConfirmsNewPlacement() {
         let autoToggle = app.buttons["auto-scan-toggle"]
         let currentRides = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
         let pending = app.descendants(matching: .any)["pending-rides-display"]
@@ -93,7 +93,11 @@ final class AutoScanUITests: XCTestCase {
 
         simulationMenu.tap()
         app.buttons["No chip"].tap()
-        XCTAssertTrue(currentRides.waitForNonExistence(timeout: 12), "Auto-scan should confirm token removal")
+        let status = app.descendants(matching: .any)["token-operation-status"]
+        let weakSignal = NSPredicate(format: "value CONTAINS %@", "Signal too weak")
+        let weakExpectation = XCTNSPredicateExpectation(predicate: weakSignal, object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [weakExpectation], timeout: 12), .completed,
+                       "Low signal is gated rather than treated as confirmed token removal")
         XCTAssertTrue(autoToggle.waitForValue("On"))
 
         simulationMenu.tap()
@@ -110,6 +114,33 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue(autoToggle.waitForValue("Off"))
     }
 
+    func testAutoUnavailableUntilBothCalibrationSteps() {
+        app.terminate()
+        app.launchEnvironment.removeValue(forKey: "RIDES_SCREENSHOT_SCENE")
+        app.launchEnvironment.removeValue(forKey: "RIDES_SIMULATOR_SCAN_DELAY_MS")
+        app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
+        app.launch()
+
+        let autoToggle = app.buttons["auto-scan-toggle"]
+        let simulationMenu = app.buttons["Simulation scenarios"]
+        let primary = app.buttons["detect-primary-action"]
+        XCTAssertTrue(autoToggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(autoToggle.isEnabled == false)
+        simulationMenu.tap()
+        app.buttons["No chip"].tap()
+        primary.tap()
+        XCTAssertTrue(autoToggle.isEnabled == false, "Empty-reader calibration alone must not enable Auto")
+        simulationMenu.tap()
+        app.buttons["Good token"].tap()
+        primary.tap()
+        XCTAssertTrue(autoToggle.waitForValue("Off"))
+        XCTAssertTrue(autoToggle.isEnabled)
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"))
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("Off"))
+    }
+
     func testPhysicalReadOnlyAutoScanPreservesPending() throws {
 #if targetEnvironment(simulator)
         throw XCTSkip("Physical reader smoke is intended for a paired iPad and bridge.")
@@ -120,6 +151,9 @@ final class AutoScanUITests: XCTestCase {
         let detect = app.buttons["detect-primary-action"]
 
         XCTAssertTrue(autoToggle.waitForExistence(timeout: 30), "Wait for saved pairing to reconnect")
+        guard autoToggle.isEnabled else {
+            throw XCTSkip("Physical Auto smoke requires both signal calibration steps.")
+        }
         autoToggle.tap()
         XCTAssertTrue(autoToggle.waitForValue("On", timeout: 30))
         XCTAssertTrue(currentRides.waitForExistence(timeout: 30), "Wait for a known token after auto-scan")
