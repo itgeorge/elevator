@@ -1,0 +1,24 @@
+{
+  "autoStayedEnabled": true,
+  "elapsedSeconds": 18.518887042999268,
+  "hardwareWritesPerformed": false,
+  "initialRides": 442,
+  "manualCurrentRides": 442,
+  "manualDetectStoppedAuto": true,
+  "manualPendingRides": 442,
+  "mode": "physical iPad model + live bridge/PM3; no UI automation",
+  "passed": true,
+  "pendingAfterAdjustment": 443,
+  "pendingAfterPolling": 443,
+  "pendingPreserved": true,
+  "signalMillivolts": 62811,
+  "startedAt": "2026-10-16T22:21:44Z",
+  "bridgeCompletedRequestCounts": {
+    "POST /api/v1/pair/proof -> 200": 1,
+    "GET /api/v1/pair/status -> 200": 1,
+    "GET /api/v1/hardware/signal -> 200": 5,
+    "GET /api/v1/hardware/page0/scan -> 200": 2
+  },
+  "stableTokenPeriodicReadRemoved": true,
+  "note": "The two full scans are initial confirmation and forced manual Detect; none occurred while the confirmed token remained stable for 12 seconds."
+}

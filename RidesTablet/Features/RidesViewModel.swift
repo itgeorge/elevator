@@ -99,6 +99,7 @@ public final class RidesViewModel: ObservableObject {
     @Published public private(set) var tokenSignalMillivolts: Int?
     @Published public private(set) var isAutoScanning = false
     @Published public private(set) var isAutoScanCycleActive = false
+    @Published public private(set) var isAutoDetecting = false
     @Published public private(set) var autoScanStatus = ""
 
     public let configuration: RidesConfiguration
@@ -115,6 +116,8 @@ public final class RidesViewModel: ObservableObject {
     private var cycleGeneration = 0
     private var lastFullScanAt: Date?
     private var lastConfirmedSignal: Int?
+    private var lastEmptySignal: Int?
+    private var lastPresentSignal: Int?
     private var lastConfirmedUnknownBlocks: [UInt32]?
     private var stableEdgeProbes = 0
     private var autoWasPausedForMutation = false
@@ -197,6 +200,7 @@ public final class RidesViewModel: ObservableObject {
 
     public func stopAutoScanning() {
         isAutoScanning = false
+        isAutoDetecting = false
         cycleGeneration += 1
         autoScanStatus = "Auto scan stopped."
         autoWasPausedForMutation = false
@@ -246,14 +250,24 @@ public final class RidesViewModel: ObservableObject {
             lastTune = outcome
             lastSignalMillivolts = signal
             autoScanStatus = "Signal \(signal) mV"
+            let initialScan = lastFullScanAt == nil
             let edge = isMeaningfulSignalEdge(signal)
-            stableEdgeProbes = edge ? stableEdgeProbes + 1 : 0
-            let periodic = lastFullScanAt.map { Date().timeIntervalSince($0) >= periodicConfirmInterval } ?? true
-            if stableEdgeProbes >= 2 || periodic {
+            let retry = autoConfirmationIsStale
+            stableEdgeProbes = (edge || retry || initialScan) ? stableEdgeProbes + 1 : 0
+            if loadedToken == nil && !confirmedTokenPresence && edge {
+                isAutoDetecting = true
+            } else if stableEdgeProbes == 0 && !retry {
+                isAutoDetecting = false
+            }
+            let periodicEmptyCheck = !confirmedTokenPresence && !initialScan
+                && lastFullScanAt.map { Date().timeIntervalSince($0) >= periodicConfirmInterval } == true
+            if initialScan || stableEdgeProbes >= 2 || periodicEmptyCheck {
                 stableEdgeProbes = 0
                 await performAutoConfirmation(signal: signal, generation: generation)
             }
         case .failure(let error):
+            stableEdgeProbes = 0
+            isAutoDetecting = false
             autoFailureCount += 1
             autoScanStatus = "Signal check failed: \(error). Retrying."
         }
@@ -263,10 +277,27 @@ public final class RidesViewModel: ObservableObject {
         guard let baseline = lastConfirmedSignal else { return false }
         let calibratedSpan = abs((tokenSignalMillivolts ?? 0) - (noTokenSignalMillivolts ?? 0))
         let threshold = max(1_000, calibratedSpan == 0 ? 1_500 : calibratedSpan * 15 / 100)
-        return abs(signal - baseline) >= threshold
+        let delta = signal - baseline
+        guard confirmedTokenPresence else { return abs(delta) >= threshold }
+        guard let direction = tokenSignalDirection else { return false }
+        return delta * direction <= -threshold
+    }
+
+    private var tokenSignalDirection: Int? {
+        if let empty = noTokenSignalMillivolts, let present = tokenSignalMillivolts, empty != present {
+            return present > empty ? 1 : -1
+        }
+        if let empty = lastEmptySignal, let present = lastPresentSignal, empty != present {
+            return present > empty ? 1 : -1
+        }
+        return -1 // Native readers typically report a lower raw value with a token present.
     }
 
     private func performAutoConfirmation(signal: Int, generation: Int) async {
+        let shouldShowDetecting = loadedToken == nil
+        if shouldShowDetecting { isAutoDetecting = true }
+        defer { if shouldShowDetecting { isAutoDetecting = false } }
+        let worseningProbe = isMeaningfulSignalEdge(signal)
         let result = await device.scan()
         guard isAutoScanning, generation == cycleGeneration else { return }
         lastFullScanAt = Date()
@@ -275,7 +306,8 @@ public final class RidesViewModel: ObservableObject {
             confirmedTokenPresence = true
             lastTune = .measured(millivolts: measuredSignal)
             lastSignalMillivolts = measuredSignal
-            lastConfirmedSignal = measuredSignal
+            lastConfirmedSignal = worseningProbe ? signal : measuredSignal
+            lastPresentSignal = measuredSignal
             lastConfirmedUnknownBlocks = nil
             autoConfirmationIsStale = false
             adoptConfirmed(token)
@@ -285,7 +317,8 @@ public final class RidesViewModel: ObservableObject {
             confirmedTokenPresence = true
             lastTune = .measured(millivolts: measuredSignal)
             lastSignalMillivolts = measuredSignal
-            lastConfirmedSignal = measuredSignal
+            lastConfirmedSignal = worseningProbe ? signal : measuredSignal
+            lastPresentSignal = measuredSignal
             autoConfirmationIsStale = false
             let sameUnknown = lastConfirmedUnknownBlocks == token.blocks
                 && loadedToken == nil
@@ -300,6 +333,7 @@ public final class RidesViewModel: ObservableObject {
         case .noChip:
             confirmedTokenPresence = false
             lastConfirmedSignal = signal
+            lastEmptySignal = signal
             lastConfirmedUnknownBlocks = nil
             autoConfirmationIsStale = false
             clearLoadedTokenForRefresh()
@@ -312,6 +346,7 @@ public final class RidesViewModel: ObservableObject {
             lastTune = .measured(millivolts: measuredSignal)
             lastSignalMillivolts = measuredSignal
             lastConfirmedSignal = measuredSignal
+            lastEmptySignal = measuredSignal
             lastConfirmedUnknownBlocks = nil
             autoConfirmationIsStale = false
             clearLoadedTokenForRefresh()
@@ -389,26 +424,40 @@ public final class RidesViewModel: ObservableObject {
     public func detect() async {
         await stopAndDrainAutoScanning()
         guard !isBusy else { return }
+        isAutoDetecting = true
+        defer { isAutoDetecting = false }
         resetForNewDetect()
         state = .working("Detecting, tuning and reading…")
         switch await device.scan() {
         case .known(let token, let signal):
             confirmedTokenPresence = true
+            lastFullScanAt = Date()
+            lastConfirmedSignal = signal
+            lastPresentSignal = signal
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             setKnown(token)
             message = "Token loaded."
         case .unknown(let token, let signal):
             confirmedTokenPresence = true
+            lastFullScanAt = Date()
+            lastConfirmedSignal = signal
+            lastPresentSignal = signal
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             logUnknown(token)
         case .noChip:
             confirmedTokenPresence = false
+            lastFullScanAt = Date()
+            lastConfirmedSignal = lastSignalMillivolts
+            lastEmptySignal = lastSignalMillivolts
             state = .noChip
             message = Self.noChipMessage
         case .noChipWithSignal(let signal):
             confirmedTokenPresence = false
+            lastFullScanAt = Date()
+            lastConfirmedSignal = signal
+            lastEmptySignal = signal
             lastTune = .measured(millivolts: signal)
             lastSignalMillivolts = signal
             state = .noChip
@@ -423,6 +472,7 @@ public final class RidesViewModel: ObservableObject {
     private func stopAndDrainAutoScanning() async {
         autoWasPausedForMutation = false
         isAutoScanning = false
+        isAutoDetecting = false
         cycleGeneration += 1
         autoScanTask?.cancel()
         let task = autoScanTask ?? drainingAutoScanTask
@@ -649,6 +699,8 @@ public final class RidesViewModel: ObservableObject {
         autoConfirmationIsStale = false
         lastFullScanAt = nil
         lastConfirmedSignal = nil
+        lastEmptySignal = nil
+        lastPresentSignal = nil
         stableEdgeProbes = 0
         currentRides = 0
         pendingRides = 0

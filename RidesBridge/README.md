@@ -95,7 +95,7 @@ Everyday mode owns the bind and PM3 discovery settings even when conflicting bin
 
 Authenticated `GET /api/v1/hardware/signal` returns `{ "version": "v1", "signalMillivolts": ... }` using an eight-sample LF tune, without T55 detection or block reads. It shares the hardware operation gate and adapter lock with scans and mutations, so tuning cannot interleave with a write. The iPad can use signal changes as hints and request a normal full scan to confirm a token.
 
-A physical token-present probe measured about **297 ms** for eight samples versus **1.91 s** for a full scan. See the [read-only benchmark receipt](../.docs/pm3-auto-scan-benchmark-2026-10-16.json). Client polling targets 750 ms start-to-start while empty/searching and 3 seconds while a token is confirmed present; full confirmations naturally take longer and are never overlapped.
+A physical token-present probe measured about **297 ms** for eight samples versus **1.91 s** for a full scan. See the [read-only benchmark receipt](../.docs/pm3-auto-scan-benchmark-2026-10-16.json). Client polling targets 750 ms start-to-start while empty/searching and 3 seconds while a token is confirmed present. Stable confirmed tokens use signal probes only; full reads occur on significant worsening quality, explicit Detect, or a post-write refresh. Full confirmations naturally take longer and are never overlapped.
 
 ## Mutation performance
 

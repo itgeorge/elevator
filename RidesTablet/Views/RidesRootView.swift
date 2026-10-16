@@ -246,11 +246,17 @@ struct RidesRootView: View {
             let suite = "RidesTablet.ScreenshotHistory"
             let defaults = UserDefaults(suiteName: suite)!
             defaults.removePersistentDomain(forName: suite)
-            ridesModel = RidesViewModel(device: FakeProxmark(), configuration: .load(),
+            ridesModel = RidesViewModel(device: FakeProxmark(scanDelay: simulatorScanDelay), configuration: .load(),
                                        chargeHistoryStore: UserDefaultsChargeHistoryStore(defaults: defaults))
         } else {
-            ridesModel = RidesViewModel(device: FakeProxmark(), configuration: .load())
+            ridesModel = RidesViewModel(device: FakeProxmark(scanDelay: simulatorScanDelay), configuration: .load())
         }
+    }
+
+    private var simulatorScanDelay: TimeInterval {
+        let rawValue = ProcessInfo.processInfo.environment["RIDES_SIMULATOR_SCAN_DELAY_MS"]
+        guard let milliseconds = rawValue.flatMap(Int.init) else { return 0 }
+        return Double(min(max(milliseconds, 0), 5_000)) / 1_000
     }
 
     private func applySimulatorScreenshotScene(_ scene: SimulatorScreenshotScene, to model: RidesViewModel) async {

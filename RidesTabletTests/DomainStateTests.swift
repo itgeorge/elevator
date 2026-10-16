@@ -3,6 +3,103 @@ import XCTest
 
 @MainActor
 final class DomainStateTests: XCTestCase {
+    func testManualKnownAndUnknownBaselinesDoNotPeriodicallyReread() async throws {
+        let knownFake = FakeProxmark()
+        let known = RidesViewModel(device: knownFake, autoScanInterval: 60, periodicConfirmInterval: 0)
+        await known.detect()
+        known.toggleAutoScanning()
+        await waitForAutoCycle(known, fake: knownFake)
+        for _ in 0..<8 { await known.runAutoScanCycleForTesting() }
+        XCTAssertEqual(knownFake.scanCallCount, 1, "Manual Detect establishes the known-token baseline for Auto")
+        known.stopAutoScanning()
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let unknownToken = UnknownToken(blocks: [0x00148040, 1, 2, 3, 4, 0xDEAD1234, 0xDEAD1234, 0])
+        let unknownFake = FakeProxmark(read: .unknown(unknownToken))
+        let unknown = RidesViewModel(
+            device: unknownFake,
+            dumpStore: UnknownDumpStore(directory: directory),
+            autoScanInterval: 60,
+            periodicConfirmInterval: 0
+        )
+        await unknown.detect()
+        unknown.toggleAutoScanning()
+        await waitForAutoCycle(unknown, fake: unknownFake)
+        for _ in 0..<8 { await unknown.runAutoScanCycleForTesting() }
+        XCTAssertEqual(unknownFake.scanCallCount, 1, "Stable unknown presence must remain tune-only")
+        unknown.stopAutoScanning()
+    }
+
+    func testKnownAutoConfirmationUsesWorseningProbeBaselineAndIgnoresImprovement() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 0)
+        await model.detect()
+        model.adjustRides(by: 20)
+        XCTAssertEqual(model.pendingRides, 93)
+
+        model.toggleAutoScanning()
+        await waitForAutoCycle(model, fake: fake)
+        fake.set(tune: .measured(millivolts: 3_000))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 1, "A single worsening probe is not enough")
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 2, "The second worsening probe confirms once")
+        XCTAssertEqual(model.pendingRides, 93, "A matching confirmation preserves pending rides")
+
+        for _ in 0..<5 { await model.runAutoScanCycleForTesting() }
+        XCTAssertEqual(fake.scanCallCount, 2, "The triggering 3000 mV probe becomes the new baseline")
+        fake.set(tune: .measured(millivolts: 420))
+        for _ in 0..<5 { await model.runAutoScanCycleForTesting() }
+        XCTAssertEqual(fake.scanCallCount, 2, "Improvement must not trigger a full read")
+        model.stopAutoScanning()
+    }
+
+    func testCalibratedOppositeSignalDirectionConfirmsWorseningOnly() async {
+        let fake = FakeProxmark(detect: .noChip, tune: .measured(millivolts: 1_000))
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 0)
+        await model.performPrimaryAction() // empty = 1000
+        fake.set(detect: .detected, tune: .measured(millivolts: 5_000))
+        await model.performPrimaryAction() // present = 5000 (raw increase means stronger)
+        XCTAssertEqual(model.calibrationStep, .ready)
+        await model.detect() // baseline = 5000
+
+        model.toggleAutoScanning()
+        await waitForAutoCycle(model, fake: fake)
+        fake.set(tune: .measured(millivolts: 2_000)) // worsening is a raw decrease for this calibration
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 1)
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 2)
+        for _ in 0..<5 { await model.runAutoScanCycleForTesting() }
+        XCTAssertEqual(fake.scanCallCount, 2, "The worse 2000 mV probe is the adopted baseline")
+        model.stopAutoScanning()
+    }
+
+    func testAutoDetectingIsPublishedDuringInitialDelayedScanAndClearsOnStop() async {
+        let fake = FakeProxmark(scanDelay: 0.2)
+        let model = RidesViewModel(device: fake, autoScanInterval: 60)
+        model.toggleAutoScanning()
+
+        let deadline = Date().addingTimeInterval(1.5)
+        while !model.isAutoDetecting && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(model.isAutoDetecting, "Initial automatic full read should expose Detecting…")
+        model.stopAutoScanning()
+        XCTAssertFalse(model.isAutoDetecting, "Stopping auto scan clears Detecting immediately")
+    }
+
+    private func waitForAutoCycle(_ model: RidesViewModel, fake: FakeProxmark) async {
+        let startingTuneCount = fake.tuneCallCount
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline {
+            if fake.tuneCallCount > startingTuneCount && !model.isAutoScanCycleActive { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for the automatic signal cycle")
+    }
+
     func testAutoScanCadenceStartsFastAndSlowsAfterKnownOrUnknownConfirmation() async throws {
         let fast: TimeInterval = 0.75
         let slow: TimeInterval = 3
@@ -39,7 +136,9 @@ final class DomainStateTests: XCTestCase {
         for _ in 0..<500 where model.currentAutoScanInterval == 0.2 { await Task.yield() }
         XCTAssertEqual(model.currentAutoScanInterval, 1.7)
 
-        fake.set(read: .noChip)
+        fake.apply(.noChip)
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(model.currentAutoScanInterval, 1.7, "One worsening probe is not enough to confirm removal")
         await model.runAutoScanCycleForTesting()
         for _ in 0..<500 where model.currentAutoScanInterval == 1.7 { await Task.yield() }
         XCTAssertEqual(model.currentAutoScanInterval, 0.2)
@@ -61,7 +160,7 @@ final class DomainStateTests: XCTestCase {
         await model.runAutoScanCycleForTesting()
         XCTAssertEqual(model.currentRides, 73)
         XCTAssertEqual(model.pendingRides, 93)
-        XCTAssertEqual(fake.scanCallCount, 2)
+        XCTAssertEqual(fake.scanCallCount, 1, "Stable known presence must not cause periodic full reads")
 
         model.stopAutoScanning()
         await model.detect()
@@ -79,7 +178,8 @@ final class DomainStateTests: XCTestCase {
         model.toggleAutoScanning()
         for _ in 0..<500 where fake.scanCallCount == 0 { await Task.yield() }
         while model.isAutoScanCycleActive { await Task.yield() }
-        await model.runAutoScanCycleForTesting()
+        for _ in 0..<5 { await model.runAutoScanCycleForTesting() }
+        XCTAssertEqual(fake.scanCallCount, 1, "Stable unknown presence must not cause periodic full reads")
 
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertEqual(files.count, 1)
@@ -114,13 +214,16 @@ final class DomainStateTests: XCTestCase {
         for _ in 0..<500 where fake.scanCallCount < 2 { await Task.yield() }
         while model.isAutoScanCycleActive { await Task.yield() }
 
-        fake.set(read: .failure("temporary read error"))
+        // Confirmations now require a worsening signal, not a periodic timer.
+        fake.set(tune: .measured(millivolts: 3_000), read: .failure("temporary read error"))
+        await model.runAutoScanCycleForTesting()
         await model.runAutoScanCycleForTesting()
         XCTAssertFalse(model.canCharge)
         XCTAssertEqual(model.pendingRides, 83)
         XCTAssertEqual(model.currentRides, 73)
 
         fake.set(read: .known(.sample(rideCount: 73)))
+        await model.runAutoScanCycleForTesting()
         await model.runAutoScanCycleForTesting()
         XCTAssertTrue(model.canCharge)
         XCTAssertEqual(model.pendingRides, 83)

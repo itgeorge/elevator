@@ -55,6 +55,31 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue((pending.value as? String)?.contains("Pending total \(currentValue!) rides") == true)
     }
 
+    func testAutoPlacementShowsDetectingUntilFullReadCompletes() {
+        // setUp launches the history fixture for existing tests; relaunch cleanly
+        // with a plain fake and delayed first scan for this transient-state smoke.
+        app.terminate()
+        app.launchEnvironment.removeValue(forKey: "RIDES_SCREENSHOT_SCENE")
+        app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
+        app.launchEnvironment["RIDES_SIMULATOR_SCAN_DELAY_MS"] = "4000"
+        app.launch()
+
+        let autoToggle = app.buttons["auto-scan-toggle"]
+        XCTAssertTrue(autoToggle.waitForExistence(timeout: 20))
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"))
+
+        let status = app.descendants(matching: .any)["token-operation-status"]
+        let detecting = NSPredicate(format: "value CONTAINS %@", "Detecting")
+        let detectingExpectation = XCTNSPredicateExpectation(predicate: detecting, object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [detectingExpectation], timeout: 10), .completed)
+
+        let currentRides = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
+        XCTAssertTrue(currentRides.waitForValue("73", timeout: 10))
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("Off"))
+    }
+
     func testAutoScanConfirmsRemovalAndNewPlacement() {
         let autoToggle = app.buttons["auto-scan-toggle"]
         let currentRides = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch

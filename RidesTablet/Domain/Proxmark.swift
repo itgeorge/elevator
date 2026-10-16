@@ -148,6 +148,7 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
     private var storedWrite: WriteOutcome
     private var storedOverwrite: OverwriteOutcome
     private var storedScenario: SimulationScenario
+    private let scanDelay: TimeInterval
     private(set) public var detectCallCount = 0
     private(set) public var tuneCallCount = 0
     private(set) public var readCallCount = 0
@@ -166,7 +167,8 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
         tune: TuneOutcome = .measured(millivolts: 420),
         read: ReadOutcome = .known(.sample()),
         write: WriteOutcome = .success,
-        overwrite: OverwriteOutcome = .success
+        overwrite: OverwriteOutcome = .success,
+        scanDelay: TimeInterval = 0
     ) {
         storedDetect = detect
         storedTune = tune
@@ -174,6 +176,7 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
         storedWrite = write
         storedOverwrite = overwrite
         storedScenario = .goodToken
+        self.scanDelay = max(0, scanDelay)
     }
 
     public var scenario: SimulationScenario {
@@ -297,6 +300,14 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
     public func scan() async -> ScanOutcome {
         await Task.yield()
         withLock { scanCallCount += 1 }
+        if scanDelay > 0 {
+            do {
+                try await Task.sleep(for: .seconds(scanDelay))
+            } catch {
+                return .failure("Scan cancelled.")
+            }
+            guard !Task.isCancelled else { return .failure("Scan cancelled.") }
+        }
         return await detectTuneRead()
     }
 

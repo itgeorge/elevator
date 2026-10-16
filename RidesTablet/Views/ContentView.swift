@@ -358,29 +358,34 @@ private struct KnownControls: View {
 private struct StatusContent: View {
     @ObservedObject var model: RidesViewModel
 
+    private var isDetecting: Bool { model.isAutoDetecting && !model.hasKnownToken }
+
+    private var statusTitle: String { isDetecting ? "Detecting…" : model.state.title }
+    private var statusMessage: String? { isDetecting ? "Reading token…" : model.message }
+
     var body: some View {
         VStack(spacing: 9) {
             Image(systemName: icon)
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(iconColor)
-            Text(model.state.title)
+            Text(statusTitle)
                 .font(.title3.bold())
                 .multilineTextAlignment(.center)
-            if let message = model.message {
+            if let message = statusMessage {
                 Text(message)
                     .font(.body.weight(.semibold))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if case .idle = model.state {
+            } else if !isDetecting, case .idle = model.state {
                 Text("No token is loaded yet.")
                     .foregroundStyle(.secondary)
             }
-            if case .working = model.state {
+            if isDetecting || isWorking {
                 ProgressView()
                     .controlSize(.regular)
-                    .accessibilityLabel("Operation in progress")
+                    .accessibilityLabel(isDetecting ? "Reading token" : "Operation in progress")
             }
-            if case .unknown(let token) = model.state {
+            if !isDetecting, case .unknown(let token) = model.state {
                 Text(token.reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -393,12 +398,12 @@ private struct StatusContent: View {
                         .textSelection(.enabled)
                 }
             }
-            if case .failed = model.state, let token = model.loadedToken {
+            if !isDetecting, case .failed = model.state, let token = model.loadedToken {
                 Text("Family: \(token.sequence.rawValue.capitalized)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if case .unknown = model.state {
+            if !isDetecting, case .unknown = model.state {
                 ResetButton(model: model)
                     .padding(.top, 3)
             }
@@ -408,10 +413,17 @@ private struct StatusContent: View {
         .multilineTextAlignment(.center)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Operation status")
-        .accessibilityValue([model.state.title, model.message].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityValue([statusTitle, statusMessage].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityIdentifier("token-operation-status")
+    }
+
+    private var isWorking: Bool {
+        if case .working = model.state { return true }
+        return false
     }
 
     private var icon: String {
+        if isDetecting { return "hourglass" }
         switch model.state {
         case .known: return "checkmark.circle.fill"
         case .unknown: return "questionmark.circle.fill"
@@ -423,6 +435,7 @@ private struct StatusContent: View {
     }
 
     private var iconColor: Color {
+        if isDetecting { return .blue }
         switch model.state {
         case .known: return .green
         case .unknown, .noChip, .failed: return .orange
@@ -437,11 +450,18 @@ private struct DetectStrip: View {
     @ObservedObject var model: RidesViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let layout: Layout
-    @State private var diodePulse = false
+
+    private var diodePhase: Int {
+        guard model.isAutoScanning else { return 0 }
+        return model.isAutoScanCycleActive ? 1 : 2
+    }
 
     private var diodeColor: Color {
-        guard model.isAutoScanning else { return .gray.opacity(0.65) }
-        return model.isAutoScanCycleActive ? .yellow : .green
+        switch diodePhase {
+        case 1: return .yellow
+        case 2: return .green
+        default: return .gray.opacity(0.65)
+        }
     }
 
     var body: some View {
@@ -474,10 +494,6 @@ private struct DetectStrip: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay { RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)) }
         .environment(\.colorScheme, .light)
-        .onAppear { updateDiodePulse() }
-        .onChange(of: model.isAutoScanning) { _, _ in updateDiodePulse() }
-        .onChange(of: model.isAutoScanCycleActive) { _, _ in updateDiodePulse() }
-        .onChange(of: reduceMotion) { _, _ in updateDiodePulse() }
     }
 
     private var controlGroup: some View {
@@ -525,14 +541,23 @@ private struct DetectStrip: View {
             model.toggleAutoScanning()
         } label: {
             HStack(spacing: 9) {
-                Circle()
-                    .strokeBorder(diodeColor, lineWidth: model.isAutoScanning ? 0 : 1.5)
-                    .background(Circle().fill(model.isAutoScanning ? diodeColor : .clear))
-                    .frame(width: 10, height: 10)
-                    .opacity(model.isAutoScanning && model.isAutoScanCycleActive && !reduceMotion && diodePulse ? 0.42 : 1)
-                    .accessibilityHidden(true)
+                ZStack {
+                    Circle()
+                        .fill(diodeColor.opacity(model.isAutoScanning ? (model.isAutoScanCycleActive ? 0.32 : 0.12) : 0))
+                        .frame(width: 23, height: 23)
+                        .blur(radius: 2)
+                        .scaleEffect(model.isAutoScanning && model.isAutoScanCycleActive && !reduceMotion ? 1 : 0.67)
+                    Circle()
+                        .strokeBorder(diodeColor, lineWidth: model.isAutoScanning ? 0 : 1.8)
+                        .background(Circle().fill(model.isAutoScanning ? diodeColor : .clear))
+                        .frame(width: 18, height: 18)
+                }
+                .frame(width: 27, height: 27)
+                .animation(reduceMotion ? .easeInOut(duration: 0.08) : .easeInOut(duration: 0.22), value: diodePhase)
+                .animation(reduceMotion ? .easeInOut(duration: 0.08) : .easeInOut(duration: 0.22), value: model.isAutoScanCycleActive)
+                .accessibilityHidden(true)
                 Text("Auto")
-                    .font(.headline)
+                    .font(.title2.bold())
                     .foregroundStyle(.blue)
                     .lineLimit(1)
             }
@@ -559,16 +584,6 @@ private struct DetectStrip: View {
         .padding(.horizontal, 14)
     }
 
-    private func updateDiodePulse() {
-        guard model.isAutoScanning, model.isAutoScanCycleActive, !reduceMotion else {
-            diodePulse = false
-            return
-        }
-        diodePulse = false
-        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-            diodePulse = true
-        }
-    }
 }
 
 private struct SignalView: View {
