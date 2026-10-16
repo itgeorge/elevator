@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct ContentView: View {
     @StateObject private var model: RidesViewModel
+    @Environment(\.scenePhase) private var scenePhase
     var onOpenConnection: (() -> Void)?
 
     init(onOpenConnection: (() -> Void)? = nil) {
@@ -57,14 +58,18 @@ struct ContentView: View {
         .sheet(isPresented: $model.isResetSheetPresented) {
             ResetSheet(model: model)
         }
+        .onDisappear { model.stopAutoScanning() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { model.stopAutoScanning() }
+        }
     }
 
     private var topBar: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Token rides")
                 .font(.system(size: 34, weight: .bold, design: .rounded))
-            Text(model.calibrationStep == .ready
-                 ? "Place one token on the reader, then tap Detect."
+            Text(model.calibrationStep == .ready || model.isAutoScanning || model.hasKnownToken
+                 ? "Place a token, then tap Detect or enable Auto."
                  : model.calibrationStep == .noToken
                     ? "Remove all tokens, then calibrate the empty reader."
                     : "Place one token on the reader, then finish calibration.")
@@ -430,34 +435,52 @@ private struct DetectStrip: View {
     enum Layout { case portrait, landscape }
 
     @ObservedObject var model: RidesViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let layout: Layout
+    @State private var pulse = false
+
+    private var autoActive: Bool { model.isAutoScanning }
+    private var pulseScale: CGFloat {
+        guard autoActive else { return 1 }
+        return pulse ? (model.isAutoScanCycleActive ? 1.075 : 1.035) : 1
+    }
 
     var body: some View {
         Group {
             if layout == .portrait {
                 HStack(spacing: 0) {
                     detectButton
+                    autoButton(compact: true)
+                        .frame(width: 108)
                     SignalView(model: model)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 12)
                 }
+                .frame(height: 92)
             } else {
                 VStack(spacing: 0) {
-                    detectButton
+                    HStack(spacing: 8) {
+                        detectButton.frame(height: 58)
+                        autoButton(compact: false).frame(width: 150, height: 58)
+                    }
+                    .padding(.horizontal, 10)
+                    statusLine
+                        .frame(height: 28)
                     SignalView(model: model)
-                        .padding(14)
-                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.white)
                 }
+                .frame(height: 184)
             }
         }
         .frame(maxWidth: .infinity, minHeight: layout == .portrait ? 92 : 184)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.black.opacity(0.08))
-        }
+        .overlay { RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)) }
         .environment(\.colorScheme, .light)
+        .onAppear { updatePulse() }
+        .onChange(of: autoActive) { _, _ in updatePulse() }
+        .onChange(of: model.isAutoScanCycleActive) { _, _ in updatePulse() }
     }
 
     private var detectButton: some View {
@@ -467,15 +490,77 @@ private struct DetectStrip: View {
             Label(model.isBusy ? "Working…" : model.primaryActionTitle, systemImage: model.isBusy ? "hourglass" : "dot.radiowaves.left.and.right")
                 .font(.title2.bold())
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: layout == .portrait ? 92 : 82)
-                .background(Color.blue)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy)
         .accessibilityLabel(model.primaryActionTitle)
+        .accessibilityIdentifier("detect-primary-action")
         .accessibilityHint(model.calibrationStep == .ready
                            ? "Detects, tunes, and reads the token in one step"
                            : "Measures reader signal and checks the expected token presence")
+    }
+
+    private func autoButton(compact: Bool) -> some View {
+        Button {
+            model.toggleAutoScanning()
+        } label: {
+            Group {
+                if compact {
+                    VStack(spacing: 3) {
+                        Label("Auto", systemImage: model.isAutoScanCycleActive ? "dot.radiowaves.left.and.right" : "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                        Text(shortStatus).font(.caption2).lineLimit(1).minimumScaleFactor(0.75)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: model.isAutoScanCycleActive ? "dot.radiowaves.left.and.right" : "arrow.triangle.2.circlepath")
+                            .symbolEffect(.pulse, isActive: model.isAutoScanCycleActive && !reduceMotion)
+                        Text(model.isAutoScanning ? "Auto · On" : "Auto · Off")
+                            .font(.headline)
+                    }
+                }
+            }
+            .foregroundStyle(autoActive ? Color.white : Color.blue)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(autoActive ? Color.blue : Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.blue.opacity(0.35)))
+            .scaleEffect(reduceMotion ? 1 : pulseScale)
+            .shadow(color: autoActive ? Color.blue.opacity(model.isAutoScanCycleActive ? 0.35 : 0.18) : .clear, radius: model.isAutoScanCycleActive ? 9 : 5)
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isBusy && !model.isAutoScanning)
+        .accessibilityLabel("Auto scan")
+        .accessibilityValue(model.isAutoScanning ? "On" : "Off")
+        .accessibilityHint(model.isAutoScanning ? "Turns automatic scanning off" : "Turns automatic scanning on")
+        .accessibilityIdentifier("auto-scan-toggle")
+    }
+
+    private var shortStatus: String {
+        if model.isAutoScanCycleActive { return "Scanning" }
+        return model.isAutoScanning ? "Enabled" : (model.isBusy ? "Unavailable" : "Off")
+    }
+
+    private var statusLine: some View {
+        HStack(spacing: 6) {
+            Image(systemName: model.isAutoScanCycleActive ? "dot.radiowaves.left.and.right" : "circle.dotted")
+                .foregroundStyle(model.isAutoScanCycleActive ? Color.blue : Color.secondary)
+            Text(model.autoScanStatus)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .accessibilityIdentifier("auto-scan-status")
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+    }
+
+    private func updatePulse() {
+        guard autoActive, !reduceMotion else { pulse = false; return }
+        withAnimation(.easeInOut(duration: model.isAutoScanCycleActive ? 0.55 : 1.15).repeatForever(autoreverses: true)) {
+            pulse = true
+        }
     }
 }
 
@@ -506,11 +591,14 @@ private struct SignalView: View {
                     }
             }
             .frame(height: 14)
-            Text(model.signalCalibrationReady
-                 ? "Calibrated signal · reposition the token if weak."
-                 : "Calibrate empty, then with a token to set the signal scale.")
+            Text(model.isAutoScanning
+                 ? model.autoScanStatus
+                 : model.signalCalibrationReady
+                    ? "Calibrated signal · reposition the token if weak."
+                    : "Calibrate empty, then with a token to set the signal scale.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .lineLimit(model.isAutoScanning ? 1 : 2)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Reader signal")
@@ -548,6 +636,7 @@ private struct CurrentRidesCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(showReadOnlyCaption ? "Current rides, read-only" : "Current rides")
         .accessibilityValue(model.hasKnownToken ? "\(model.currentRides)" : "Not loaded")
+        .accessibilityIdentifier("current-rides-display")
     }
 }
 

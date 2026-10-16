@@ -3,6 +3,148 @@ import XCTest
 
 @MainActor
 final class DomainStateTests: XCTestCase {
+    func testAutoScanWorksWithoutCalibrationAndPreservesPendingForSameSnapshot() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 0)
+        model.toggleAutoScanning()
+        for _ in 0..<100 where fake.scanCallCount == 0 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+        XCTAssertEqual(fake.scanCallCount, 1)
+        XCTAssertEqual(model.calibrationStep, .noToken)
+        XCTAssertEqual(model.loadedToken?.rideCount, 73)
+
+        model.adjustRides(by: 20)
+        XCTAssertEqual(model.pendingRides, 93)
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(model.currentRides, 73)
+        XCTAssertEqual(model.pendingRides, 93)
+        XCTAssertEqual(fake.scanCallCount, 2)
+
+        model.stopAutoScanning()
+        await model.detect()
+        XCTAssertFalse(model.isAutoScanning)
+        XCTAssertEqual(model.pendingRides, 73)
+    }
+
+    func testAutoConfirmationDeduplicatesRepeatedUnknownDump() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let unknown = UnknownToken(blocks: [0x00148040, 1, 2, 3, 4, 0xDEAD1234, 0xDEAD1234, 0])
+        let fake = FakeProxmark(read: .unknown(unknown))
+        let model = RidesViewModel(device: fake, dumpStore: UnknownDumpStore(directory: directory), autoScanInterval: 60, periodicConfirmInterval: 0)
+
+        model.toggleAutoScanning()
+        for _ in 0..<500 where fake.scanCallCount == 0 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+        await model.runAutoScanCycleForTesting()
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertEqual(files.count, 1)
+        guard case .unknown(let loaded) = model.state else { return XCTFail("Expected confirmed unknown state") }
+        XCTAssertEqual(loaded.blocks, unknown.blocks)
+        model.stopAutoScanning()
+        await model.detect()
+    }
+
+    func testConfirmedNoChipClearsLoadedTokenAndUsesSignalAsBaseline() async {
+        let fake = FakeProxmark(detect: .noChip, tune: .measured(millivolts: 420))
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 60)
+        model.toggleAutoScanning()
+        for _ in 0..<500 where fake.scanCallCount == 0 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+        XCTAssertNil(model.loadedToken)
+        XCTAssertEqual(model.state, .noChip)
+        let scansAfterNoChip = fake.scanCallCount
+
+        fake.set(detect: .detected)
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, scansAfterNoChip, "Stable signal at the no-chip baseline should not trigger repeated confirms")
+        model.stopAutoScanning()
+    }
+
+    func testFailedAutoConfirmationBlocksChargeUntilSameSnapshotIsConfirmed() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 0)
+        await model.detect()
+        model.adjustRides(by: 10)
+        model.toggleAutoScanning()
+        for _ in 0..<500 where fake.scanCallCount < 2 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+
+        fake.set(read: .failure("temporary read error"))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertFalse(model.canCharge)
+        XCTAssertEqual(model.pendingRides, 83)
+        XCTAssertEqual(model.currentRides, 73)
+
+        fake.set(read: .known(.sample(rideCount: 73)))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertTrue(model.canCharge)
+        XCTAssertEqual(model.pendingRides, 83)
+        model.stopAutoScanning()
+    }
+
+    func testExplicitStopDuringChargePreventsAutoResumeButKeepsPostWriteRead() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 60)
+        await model.detect()
+        model.toggleAutoScanning()
+        for _ in 0..<500 where fake.scanCallCount < 2 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+        model.adjustRides(by: 10)
+        let scansBeforeCharge = fake.scanCallCount
+
+        let chargeTask = Task { await model.charge() }
+        while !model.isBusy { await Task.yield() }
+        model.stopAutoScanning()
+        await chargeTask.value
+
+        XCTAssertFalse(model.isAutoScanning)
+        XCTAssertEqual(fake.scanCallCount, scansBeforeCharge + 1, "Auto-enabled writes still get exactly one immediate confirmation read")
+        XCTAssertEqual(model.currentRides, 83)
+    }
+
+    func testAutoResetPerformsImmediatePostWriteFullRead() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 60)
+        await model.detect()
+        model.toggleAutoScanning()
+        for _ in 0..<500 where fake.scanCallCount < 2 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+        let readsBeforeReset = fake.readCallCount
+
+        model.openReset()
+        model.selectedResetSequence = .neptune
+        await model.confirmReset()
+
+        XCTAssertEqual(fake.readCallCount, readsBeforeReset + 1)
+        XCTAssertEqual(model.loadedToken?.sequence, .neptune)
+        XCTAssertTrue(model.isAutoScanning)
+        model.stopAutoScanning()
+    }
+
+    func testManualPrimaryWhileAutoLoadedRunsDetectAndStopsAuto() async {
+        let fake = FakeProxmark()
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, periodicConfirmInterval: 60)
+        XCTAssertEqual(model.primaryActionTitle, "Calibrate: NO token")
+        model.toggleAutoScanning()
+        for _ in 0..<500 where fake.scanCallCount == 0 { await Task.yield() }
+        while model.isAutoScanCycleActive { await Task.yield() }
+        XCTAssertEqual(model.primaryActionTitle, "Detect")
+        XCTAssertEqual(model.loadedToken?.rideCount, 73)
+
+        model.adjustRides(by: 10)
+        let scansBeforeManualAction = fake.scanCallCount
+        await model.performPrimaryAction()
+
+        XCTAssertFalse(model.isAutoScanning)
+        XCTAssertEqual(fake.scanCallCount, scansBeforeManualAction + 1)
+        XCTAssertEqual(model.calibrationStep, .noToken)
+        XCTAssertEqual(model.primaryActionTitle, "Detect")
+        XCTAssertEqual(model.currentRides, 73)
+        XCTAssertEqual(model.pendingRides, 73)
+    }
+
     func testReadKnownTokenPublishesKnownStateIncludingBlock4() async {
         let token = Token.sample(rideCount: 73, sequence: .neptune)
         let model = RidesViewModel(device: FakeProxmark(read: .known(token)))

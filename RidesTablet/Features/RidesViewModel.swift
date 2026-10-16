@@ -97,24 +97,45 @@ public final class RidesViewModel: ObservableObject {
     @Published public private(set) var calibrationStep: CalibrationStep = .noToken
     @Published public private(set) var noTokenSignalMillivolts: Int?
     @Published public private(set) var tokenSignalMillivolts: Int?
+    @Published public private(set) var isAutoScanning = false
+    @Published public private(set) var isAutoScanCycleActive = false
+    @Published public private(set) var autoScanStatus = ""
 
     public let configuration: RidesConfiguration
     private let device: any RideTokenDevice
     private let legacyDevice: (any ProxmarkDevice)?
     private let dumpStore: UnknownDumpStore
     private let chargeHistoryStore: any ChargeHistoryStore
+    private let autoScanInterval: TimeInterval
+    private let periodicConfirmInterval: TimeInterval
+    private var autoScanTask: Task<Void, Never>?
+    private var drainingAutoScanTask: Task<Void, Never>?
+    private var cycleGeneration = 0
+    private var lastFullScanAt: Date?
+    private var lastConfirmedSignal: Int?
+    private var lastConfirmedUnknownBlocks: [UInt32]?
+    private var stableEdgeProbes = 0
+    private var autoWasPausedForMutation = false
+    private var mutationNeedsPostWriteRefresh = false
+    private var mutationInProgress = false
+    private var autoFailureCount = 0
+    private var autoConfirmationIsStale = false
 
     public init(
         device: any RideTokenDevice = FakeProxmark(),
         configuration: RidesConfiguration = .prototype,
         dumpStore: UnknownDumpStore = UnknownDumpStore(),
-        chargeHistoryStore: any ChargeHistoryStore = UserDefaultsChargeHistoryStore()
+        chargeHistoryStore: any ChargeHistoryStore = UserDefaultsChargeHistoryStore(),
+        autoScanInterval: TimeInterval = 0.75,
+        periodicConfirmInterval: TimeInterval = 8
     ) {
         self.device = device
         self.legacyDevice = device as? any ProxmarkDevice
         self.configuration = configuration
         self.dumpStore = dumpStore
         self.chargeHistoryStore = chargeHistoryStore
+        self.autoScanInterval = max(0, autoScanInterval)
+        self.periodicConfirmInterval = max(0, periodicConfirmInterval)
         self.completedCharges = chargeHistoryStore.load()
         if let fake = device as? FakeProxmark {
             simulationScenario = fake.scenario
@@ -122,13 +143,15 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public var isBusy: Bool {
+        if mutationInProgress { return true }
         if case .working = state { return true }
         return false
     }
 
     public var usesSimulationScenarios: Bool { device is FakeProxmark }
     public var primaryActionTitle: String {
-        switch calibrationStep { case .noToken: "Calibrate: NO token"; case .placeToken: "Calibrate: PLACE token"; case .ready: "Detect token" }
+        if isAutoScanning || hasKnownToken || calibrationStep == .ready { return "Detect" }
+        return switch calibrationStep { case .noToken: "Calibrate: NO token"; case .placeToken: "Calibrate: PLACE token"; case .ready: "Detect" }
     }
     public var signalNormalizedFraction: Double? {
         guard let low = noTokenSignalMillivolts, let high = tokenSignalMillivolts, high != low,
@@ -139,7 +162,7 @@ public final class RidesViewModel: ObservableObject {
     public var signalCalibrationReady: Bool { calibrationStep == .ready && noTokenSignalMillivolts != tokenSignalMillivolts }
     public var hasKnownToken: Bool { loadedToken != nil }
     public var hasRideChange: Bool { hasKnownToken && pendingRides != currentRides }
-    public var canCharge: Bool { hasRideChange && canAdjust }
+    public var canCharge: Bool { hasRideChange && canAdjust && !autoConfirmationIsStale }
     public var canAdjust: Bool {
         guard hasKnownToken, !isBusy else { return false }
         if case .known = state { return true }
@@ -159,9 +182,171 @@ public final class RidesViewModel: ObservableObject {
         return Token.hex(loadedToken.block4)
     }
 
+    public func toggleAutoScanning() {
+        if isAutoScanning { stopAutoScanning() } else { startAutoScanning() }
+    }
+
+    public func stopAutoScanning() {
+        isAutoScanning = false
+        cycleGeneration += 1
+        autoScanStatus = "Auto scan stopped."
+        autoWasPausedForMutation = false
+        autoScanTask?.cancel()
+        let task = autoScanTask
+        drainingAutoScanTask = task
+        Task { await task?.value }
+    }
+
+    private func startAutoScanning() {
+        guard !isAutoScanning, !isBusy else { return }
+        isAutoScanning = true
+        cycleGeneration += 1
+        let generation = cycleGeneration
+        autoScanStatus = "Auto scan active."
+        let previousTask = drainingAutoScanTask
+        drainingAutoScanTask = nil
+        autoScanTask = Task { [weak self] in
+            await previousTask?.value
+            while !Task.isCancelled {
+                let delay: TimeInterval? = await {
+                    guard let self, self.isAutoScanning, self.cycleGeneration == generation else { return nil }
+                    let started = Date()
+                    await self.runAutoScanCycle(generation: generation)
+                    guard !Task.isCancelled, self.isAutoScanning, self.cycleGeneration == generation else { return nil }
+                    let elapsed = Date().timeIntervalSince(started)
+                    return max(0, self.autoScanInterval * pow(2.0, Double(min(self.autoFailureCount, 4))) - elapsed)
+                }()
+                guard let delay else { break }
+                if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+            }
+        }
+    }
+
+    /// One deterministic polling iteration; useful for tests and never overlaps another cycle.
+    public func runAutoScanCycleForTesting() async { await runAutoScanCycle(generation: cycleGeneration) }
+
+    private func runAutoScanCycle(generation: Int) async {
+        guard isAutoScanning, generation == cycleGeneration, !isAutoScanCycleActive, !isBusy else { return }
+        isAutoScanCycleActive = true
+        defer { isAutoScanCycleActive = false }
+        let outcome = await device.measureSignal()
+        guard isAutoScanning, generation == cycleGeneration else { return }
+        switch outcome {
+        case .measured(let signal):
+            autoFailureCount = 0
+            lastTune = outcome
+            lastSignalMillivolts = signal
+            autoScanStatus = "Signal \(signal) mV"
+            let edge = isMeaningfulSignalEdge(signal)
+            stableEdgeProbes = edge ? stableEdgeProbes + 1 : 0
+            let periodic = lastFullScanAt.map { Date().timeIntervalSince($0) >= periodicConfirmInterval } ?? true
+            if stableEdgeProbes >= 2 || periodic {
+                stableEdgeProbes = 0
+                await performAutoConfirmation(signal: signal, generation: generation)
+            }
+        case .failure(let error):
+            autoFailureCount += 1
+            autoScanStatus = "Signal check failed: \(error). Retrying."
+        }
+    }
+
+    private func isMeaningfulSignalEdge(_ signal: Int) -> Bool {
+        guard let baseline = lastConfirmedSignal else { return false }
+        let calibratedSpan = abs((tokenSignalMillivolts ?? 0) - (noTokenSignalMillivolts ?? 0))
+        let threshold = max(1_000, calibratedSpan == 0 ? 1_500 : calibratedSpan * 15 / 100)
+        return abs(signal - baseline) >= threshold
+    }
+
+    private func performAutoConfirmation(signal: Int, generation: Int) async {
+        let result = await device.scan()
+        guard isAutoScanning, generation == cycleGeneration else { return }
+        lastFullScanAt = Date()
+        switch result {
+        case .known(let token, let measuredSignal):
+            lastTune = .measured(millivolts: measuredSignal)
+            lastSignalMillivolts = measuredSignal
+            lastConfirmedSignal = measuredSignal
+            lastConfirmedUnknownBlocks = nil
+            autoConfirmationIsStale = false
+            adoptConfirmed(token)
+            autoFailureCount = 0
+            autoScanStatus = "Token confirmed."
+        case .unknown(let token, let measuredSignal):
+            lastTune = .measured(millivolts: measuredSignal)
+            lastSignalMillivolts = measuredSignal
+            lastConfirmedSignal = measuredSignal
+            autoConfirmationIsStale = false
+            let sameUnknown = lastConfirmedUnknownBlocks == token.blocks
+                && loadedToken == nil
+                && ({ if case .unknown(let old) = state { return old.blocks == token.blocks }; return false }())
+            if !sameUnknown {
+                lastConfirmedUnknownBlocks = token.blocks
+                loadedToken = nil
+                clearLoadedTokenForRefresh()
+                logUnknown(token)
+            }
+            autoScanStatus = "Unknown token confirmed."
+        case .noChip:
+            lastConfirmedSignal = signal
+            lastConfirmedUnknownBlocks = nil
+            autoConfirmationIsStale = false
+            clearLoadedTokenForRefresh()
+            loadedToken = nil
+            state = .noChip
+            message = Self.noChipMessage
+            autoScanStatus = "No token confirmed."
+        case .noChipWithSignal(let measuredSignal):
+            lastTune = .measured(millivolts: measuredSignal)
+            lastSignalMillivolts = measuredSignal
+            lastConfirmedSignal = measuredSignal
+            lastConfirmedUnknownBlocks = nil
+            autoConfirmationIsStale = false
+            clearLoadedTokenForRefresh()
+            loadedToken = nil
+            state = .noChip
+            message = Self.noChipMessage
+            autoScanStatus = "No token confirmed."
+        case .failure(let error):
+            autoFailureCount += 1
+            autoConfirmationIsStale = true
+            autoScanStatus = "Confirmation failed: \(error). Retrying."
+        }
+    }
+
+    private func adoptConfirmed(_ token: Token) {
+        if let old = loadedToken, old.block4 == token.block4, old.block5 == token.block5,
+           old.block6 == token.block6, old.sequence == token.sequence, old.rideCount == token.rideCount {
+            return
+        }
+        setKnown(token)
+        message = "Token loaded."
+    }
+
+    private func pauseAutoScanningForMutation() async {
+        autoWasPausedForMutation = isAutoScanning
+        mutationNeedsPostWriteRefresh = isAutoScanning
+        guard isAutoScanning else { return }
+        isAutoScanning = false
+        cycleGeneration += 1
+        autoScanTask?.cancel()
+        let task = autoScanTask ?? drainingAutoScanTask
+        autoScanTask = nil
+        drainingAutoScanTask = nil
+        await task?.value
+    }
+
+    private func resumeAutoScanningAfterMutation() {
+        let shouldResume = autoWasPausedForMutation
+        autoWasPausedForMutation = false
+        mutationNeedsPostWriteRefresh = false
+        if shouldResume { startAutoScanning() }
+    }
+
     public func performPrimaryAction() async {
+        let shouldForceScan = isAutoScanning || hasKnownToken
+        await stopAndDrainAutoScanning()
         guard !isBusy else { return }
-        if calibrationStep == .ready { await detect(); return }
+        if calibrationStep == .ready || shouldForceScan { await detect(); return }
         state = .working(calibrationStep == .noToken ? "Measuring without token…" : "Measuring with token…")
         message = nil
         switch await device.measureCalibrationSignal() {
@@ -189,6 +374,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func detect() async {
+        await stopAndDrainAutoScanning()
         guard !isBusy else { return }
         resetForNewDetect()
         state = .working("Detecting, tuning and reading…")
@@ -217,6 +403,18 @@ public final class RidesViewModel: ObservableObject {
     }
 
     // Kept as small compatibility actions for domain tests and future hardware screens.
+    private func stopAndDrainAutoScanning() async {
+        autoWasPausedForMutation = false
+        isAutoScanning = false
+        cycleGeneration += 1
+        autoScanTask?.cancel()
+        let task = autoScanTask ?? drainingAutoScanTask
+        autoScanTask = nil
+        drainingAutoScanTask = nil
+        await task?.value
+        autoScanStatus = "Auto scan stopped."
+    }
+
     public func tune() async {
         guard !isBusy else { return }
         guard let legacyDevice else {
@@ -295,7 +493,14 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func charge() async {
-        guard canCharge, let token = loadedToken else { return }
+        guard canCharge else { return }
+        mutationInProgress = true
+        await pauseAutoScanningForMutation()
+        guard hasRideChange, let token = loadedToken else {
+            mutationInProgress = false
+            resumeAutoScanningAfterMutation()
+            return
+        }
         let chargedAt = Date()
         let initialRides = currentRides
         let desiredRides = pendingRides
@@ -323,6 +528,7 @@ public final class RidesViewModel: ObservableObject {
             currentRides = desiredRides
             state = .known(updated)
             message = "Charge successful."
+            if mutationNeedsPostWriteRefresh { await refreshAfterMutation() }
         case .failure(let error):
             state = .failed(error)
             message = error
@@ -331,6 +537,8 @@ public final class RidesViewModel: ObservableObject {
             state = .failed(error)
             message = error
         }
+        mutationInProgress = false
+        resumeAutoScanningAfterMutation()
     }
 
     public func openReset() {
@@ -344,7 +552,14 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func confirmReset() async {
-        guard canConfirmReset, let sequence = selectedResetSequence else { return }
+        guard canConfirmReset else { return }
+        mutationInProgress = true
+        await pauseAutoScanningForMutation()
+        guard let sequence = selectedResetSequence else {
+            mutationInProgress = false
+            resumeAutoScanningAfterMutation()
+            return
+        }
         state = .working("Resetting…")
         message = nil
         switch await device.reset(ResetMutationRequest(sequence: sequence)) {
@@ -355,6 +570,7 @@ public final class RidesViewModel: ObservableObject {
             state = .known(token)
             message = "Reset successful."
             isResetSheetPresented = false
+            if mutationNeedsPostWriteRefresh { await refreshAfterMutation() }
         case .failure(let error):
             state = .failed(error)
             message = error
@@ -363,6 +579,31 @@ public final class RidesViewModel: ObservableObject {
             state = .failed(error)
             message = error
             isResetSheetPresented = false
+        }
+        mutationInProgress = false
+        resumeAutoScanningAfterMutation()
+    }
+
+    private func refreshAfterMutation() async {
+        defer { lastFullScanAt = Date() }
+        switch await device.scan() {
+        case .known(let token, let signal):
+            lastTune = .measured(millivolts: signal)
+            lastSignalMillivolts = signal
+            adoptConfirmed(token)
+        case .unknown(let token, let signal):
+            lastTune = .measured(millivolts: signal)
+            lastSignalMillivolts = signal
+            clearLoadedTokenForRefresh()
+            logUnknown(token)
+        case .noChip, .noChipWithSignal:
+            clearLoadedTokenForRefresh()
+            loadedToken = nil
+            state = .noChip
+            message = Self.noChipMessage
+        case .failure(let error):
+            // The mutation already succeeded; retain its authoritative local result and surface refresh trouble.
+            autoScanStatus = "Post-write confirmation failed: \(error). Retrying."
         }
     }
 
@@ -381,6 +622,10 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func resetForNewDetect() {
+        autoConfirmationIsStale = false
+        lastFullScanAt = nil
+        lastConfirmedSignal = nil
+        stableEdgeProbes = 0
         currentRides = 0
         pendingRides = 0
         loadedToken = nil
@@ -397,6 +642,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func setKnown(_ token: Token) {
+        autoConfirmationIsStale = false
         loadedToken = token
         currentRides = min(token.rideCount, configuration.maxRides)
         pendingRides = currentRides

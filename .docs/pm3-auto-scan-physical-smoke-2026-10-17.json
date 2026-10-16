@@ -1,0 +1,28 @@
+{
+  "autoStayedEnabled": true,
+  "elapsedSeconds": 17.040923953056335,
+  "hardwareWritesPerformed": false,
+  "initialRides": 250,
+  "manualCurrentRides": 250,
+  "manualDetectStoppedAuto": true,
+  "manualPendingRides": 250,
+  "mode": "physical iPad model + live bridge/PM3; no UI automation",
+  "passed": true,
+  "pendingAfterAdjustment": 251,
+  "pendingAfterPolling": 251,
+  "pendingPreserved": true,
+  "signalMillivolts": 62897,
+  "startedAt": "2026-10-16T21:08:29Z",
+  "bridgeCompletedRequestCounts": {
+    "GET /api/v1/health -> 200": 1,
+    "GET /api/v1/hardware/signal -> 200": 15,
+    "POST /api/v1/pair/proof -> 200": 1,
+    "GET /api/v1/pair/status -> 200": 1,
+    "GET /api/v1/hardware/page0/scan -> 200": 3
+  },
+  "physicalUIAutomation": "XCTest runner timed out enabling automation; this receipt validates the real app model and network path, not physical UI taps.",
+  "remainingManualChecks": [
+    "Physical token removal/replacement and rapid swap behavior",
+    "Operator review of pulse style and portrait/landscape layout"
+  ]
+}

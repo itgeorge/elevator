@@ -24,6 +24,9 @@ struct RidesRootView: View {
     @State private var ridesModel: RidesViewModel?
     @State private var isDiagnosticsPresented = false
     @State private var usesFakeReader = false
+#if DEBUG
+    @State private var didStartReadOnlyAutoSmoke = false
+#endif
     private let launchConfiguration: BridgeConnectionLaunchConfiguration
 
     init(launchConfiguration: BridgeConnectionLaunchConfiguration = .processEnvironment) {
@@ -91,6 +94,9 @@ struct RidesRootView: View {
         }
         .onChange(of: connection.state) { _, _ in
             refreshOperatorWorkflow()
+#if DEBUG
+            startReadOnlyAutoSmokeIfRequested()
+#endif
         }
         .onChange(of: connection.isPaired) { _, _ in
             refreshOperatorWorkflow()
@@ -185,6 +191,55 @@ struct RidesRootView: View {
     }
 
 #if DEBUG
+    /// Opt-in device smoke. This path never calls charge/reset or any write API.
+    private func startReadOnlyAutoSmokeIfRequested() {
+        guard ProcessInfo.processInfo.environment["RIDES_AUTO_SCAN_READ_ONLY_SMOKE"] == "1",
+              !didStartReadOnlyAutoSmoke, !usesFakeReader,
+              connection.isReadyForOperatorWorkflow, let model = ridesModel else { return }
+        didStartReadOnlyAutoSmoke = true
+        Task { @MainActor in
+            let started = Date()
+            var receipt: [String: Any] = [
+                "mode": "physical iPad model + live bridge/PM3; no UI automation",
+                "startedAt": ISO8601DateFormatter().string(from: started),
+                "hardwareWritesPerformed": false
+            ]
+            defer { model.stopAutoScanning() }
+            model.toggleAutoScanning()
+            let deadline = Date().addingTimeInterval(30)
+            while model.loadedToken == nil && Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if model.loadedToken != nil {
+                receipt["initialRides"] = model.currentRides
+                model.adjustRides(by: model.currentRides < model.configuration.maxRides ? 1 : -1)
+                let pending = model.pendingRides
+                receipt["pendingAfterAdjustment"] = pending
+                try? await Task.sleep(for: .seconds(12))
+                receipt["autoStayedEnabled"] = model.isAutoScanning
+                receipt["pendingAfterPolling"] = model.pendingRides
+                receipt["pendingPreserved"] = model.pendingRides == pending
+                if let signal = model.lastSignalMillivolts { receipt["signalMillivolts"] = signal }
+                await model.detect()
+                receipt["manualDetectStoppedAuto"] = !model.isAutoScanning
+                receipt["manualCurrentRides"] = model.currentRides
+                receipt["manualPendingRides"] = model.pendingRides
+                receipt["passed"] = receipt["pendingPreserved"] as? Bool == true
+                    && receipt["autoStayedEnabled"] as? Bool == true
+                    && !model.isAutoScanning && model.loadedToken != nil
+            } else {
+                receipt["passed"] = false
+                receipt["error"] = "No known token was confirmed within 30 seconds."
+                receipt["status"] = model.autoScanStatus
+            }
+            receipt["elapsedSeconds"] = Date().timeIntervalSince(started)
+            if let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+               let data = try? JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: directory.appendingPathComponent("auto-scan-read-only-smoke.json"), options: .atomic)
+            }
+        }
+    }
+
     private func bootstrapSimulatorFakeReader() {
         usesFakeReader = true
         if launchConfiguration.screenshotScene != nil {

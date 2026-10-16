@@ -8,12 +8,18 @@
       <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A60000000000000000000002" BuildableName="RidesTabletTests.xctest" BlueprintName="RidesTabletTests" ReferencedContainer="container:RidesTablet.xcodeproj"/>
       </BuildActionEntry>
+      <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="C60000000000000000000001" BuildableName="RidesTabletUITests.xctest" BlueprintName="RidesTabletUITests" ReferencedContainer="container:RidesTablet.xcodeproj"/>
+      </BuildActionEntry>
     </BuildActionEntries>
   </BuildAction>
   <TestAction buildConfiguration="Debug" shouldUseLaunchSchemeArgsEnv="YES">
     <Testables>
       <TestableReference skipped="NO">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A60000000000000000000002" BuildableName="RidesTabletTests.xctest" BlueprintName="RidesTabletTests" ReferencedContainer="container:RidesTablet.xcodeproj"/>
+      </TestableReference>
+      <TestableReference skipped="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="C60000000000000000000001" BuildableName="RidesTabletUITests.xctest" BlueprintName="RidesTabletUITests" ReferencedContainer="container:RidesTablet.xcodeproj"/>
       </TestableReference>
     </Testables>
   </TestAction>

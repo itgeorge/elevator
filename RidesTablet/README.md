@@ -15,6 +15,18 @@ Portrait uses the seamless calibration/Detect and signal strip, centered Current
 
 Connection diagnostics (Bonjour browse, manual URL, block-5 connectivity probe) live in the settings sheet and do not duplicate Concept A business logic.
 
+## Automatic scanning
+
+The reader strip now has separate **Detect** and **Auto** controls. Auto toggles read-only polling on/off; its blue background pulses while enabled, with stronger cycle feedback. Reduce Motion is respected. Pressing Detect stops/drains Auto and performs a single manual scan (or the initial calibration step if no token has yet been loaded and calibration has not been completed).
+
+Signal probes target **750 ms start-to-start**, never overlapping. Actual PM3 eight-sample probes measured about **297 ms**; full token-confirmation scans take about **1.9 seconds**, so an initial scan, two consistent signal-edge hints, or the eight-second fallback triggers full reads instead of reading all blocks every cycle. Calibration is an optional meter reference for Auto, not an acceptance gate.
+
+Repeated reads of the same unchanged block-4 / mirror snapshot preserve pending edits. Changed snapshots replace the loaded count; read-confirmed absence clears it. Repeated identical unknown snapshots do not repeatedly overwrite their dump. A failed full confirmation disables charging until a fresh confirmation succeeds.
+
+If Auto was enabled, Charge/Reset pauses and drains polling, performs the explicit mutation, refreshes with a full read after success, and resumes. No write is ever automatically retried. Auto stops when the screen disappears or the app leaves the active state; turn it on again after returning.
+
+See [implementation, test receipts and remaining physical checks](../.docs/auto-detect-prototype-2026-10-17.md). The shared Xcode scheme includes simulator UI smoke tests. The opt-in physical UI test skips on Simulator and requires working iPad UI automation; ordinary simulator tests use only FakeProxmark, never PM3.
+
 ## Screenshots (Concept A, iPad Air 4 simulator)
 
 The images below were captured on the **RidesTablet iPad Air 4** simulator using the DEBUG `FakeProxmark` path (`RIDES_SIMULATOR_FAKE_READER=1`). They show current Concept A operator UI, not the older diagnostic-only root or physical PM3 hardware.

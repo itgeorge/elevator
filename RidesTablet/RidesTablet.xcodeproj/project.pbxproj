@@ -55,6 +55,7 @@
 		B10000000000000000000016 /* Page0ResetPlanningWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000016 /* Page0ResetPlanningWorkflowTests.swift */; };
 		B10000000000000000000017 /* Page0ResetWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000017 /* Page0ResetWorkflowTests.swift */; };
 		B10000000000000000000010 /* BridgePairingPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000010 /* BridgePairingPayloadTests.swift */; };
+		C10000000000000000000001 /* AutoScanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* AutoScanUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -109,32 +110,37 @@
 		B20000000000000000000015 /* IdentityProfileFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProfileFixtureTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000016 /* Page0ResetPlanningWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Page0ResetPlanningWorkflowTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000017 /* Page0ResetWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Page0ResetWorkflowTests.swift; sourceTree = "<group>"; };
+		C20000000000000000000001 /* AutoScanUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoScanUITests.swift; sourceTree = "<group>"; };
+		A30000000000000000000003 /* RidesTabletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RidesTabletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A40000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		B40000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		C40000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A50000000000000000000001 = {isa = PBXGroup; children = (A50000000000000000000002, A50000000000000000000003, A50000000000000000000004, A50000000000000000000005, A50000000000000000000006, A50000000000000000000007, A50000000000000000000008, A50000000000000000000009); sourceTree = "<group>"; };
+		A50000000000000000000001 = {isa = PBXGroup; children = (A50000000000000000000002, A50000000000000000000003, A50000000000000000000004, A50000000000000000000005, A50000000000000000000006, A50000000000000000000007, A50000000000000000000008, A50000000000000000000009, A50000000000000000000010); sourceTree = "<group>"; };
 		A50000000000000000000002 /* App */ = {isa = PBXGroup; children = (A20000000000000000000001); path = App; sourceTree = "<group>"; };
 		A50000000000000000000003 /* Domain */ = {isa = PBXGroup; children = (A20000000000000000000003, A20000000000000000000004, A20000000000000000000005, A20000000000000000000006, A20000000000000000000007, A20000000000000000000008); path = Domain; sourceTree = "<group>"; };
 		A50000000000000000000004 /* Features */ = {isa = PBXGroup; children = (A20000000000000000000009); path = Features; sourceTree = "<group>"; };
 		A50000000000000000000005 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000010, A20000000000000000000016); path = Resources; sourceTree = "<group>"; };
 		A50000000000000000000006 /* Views */ = {isa = PBXGroup; children = (A20000000000000000000002, A20000000000000000000015, A20000000000000000000029); path = Views; sourceTree = "<group>"; };
 		A50000000000000000000007 /* RidesTabletTests */ = {isa = PBXGroup; children = (B20000000000000000000001, B20000000000000000000002, B20000000000000000000003, B20000000000000000000004, B20000000000000000000005, B20000000000000000000006, B20000000000000000000008, B20000000000000000000009, B20000000000000000000010, B20000000000000000000011, B20000000000000000000012, B20000000000000000000013, B20000000000000000000014, B20000000000000000000015, B20000000000000000000016, B20000000000000000000017, B20000000000000000000018, B20000000000000000000019, B20000000000000000000020, B20000000000000000000021); path = ../RidesTabletTests; sourceTree = "<group>"; };
-		A50000000000000000000008 /* Products */ = {isa = PBXGroup; children = (A30000000000000000000001, A30000000000000000000002); name = Products; sourceTree = "<group>"; };
+		A50000000000000000000008 /* Products */ = {isa = PBXGroup; children = (A30000000000000000000001, A30000000000000000000002, A30000000000000000000003); name = Products; sourceTree = "<group>"; };
 		A50000000000000000000009 /* Bridge */ = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013, A20000000000000000000014, A20000000000000000000018, A20000000000000000000019, A20000000000000000000020, A20000000000000000000021, A20000000000000000000022, A20000000000000000000023, A20000000000000000000024, A20000000000000000000025, A20000000000000000000026, A20000000000000000000027, A20000000000000000000028, A20000000000000000000030); path = Bridge; sourceTree = "<group>"; };
+		A50000000000000000000010 /* RidesTabletUITests */ = {isa = PBXGroup; children = (C20000000000000000000001); path = ../RidesTabletUITests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		A60000000000000000000001 /* RidesTablet */ = {isa = PBXNativeTarget; buildConfigurationList = A70000000000000000000001; buildPhases = (A80000000000000000000001, A40000000000000000000001, A90000000000000000000001); buildRules = (); dependencies = (); name = RidesTablet; productName = RidesTablet; productReference = A30000000000000000000001; productType = "com.apple.product-type.application"; };
 		A60000000000000000000002 /* RidesTabletTests */ = {isa = PBXNativeTarget; buildConfigurationList = A70000000000000000000002; buildPhases = (A80000000000000000000002, B40000000000000000000001); buildRules = (); dependencies = (A61000000000000000000001); name = RidesTabletTests; productName = RidesTabletTests; productReference = A30000000000000000000002; productType = "com.apple.product-type.bundle.unit-test"; };
+		C60000000000000000000001 /* RidesTabletUITests */ = {isa = PBXNativeTarget; buildConfigurationList = C70000000000000000000001; buildPhases = (C80000000000000000000001, C40000000000000000000001); buildRules = (); dependencies = (C61000000000000000000001); name = RidesTabletUITests; productName = RidesTabletUITests; productReference = A30000000000000000000003; productType = "com.apple.product-type.bundle.ui-testing"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		A00000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = { LastUpgradeCheck = 2630; ORGANIZATIONNAME = Prototype; TargetAttributes = { A60000000000000000000001 = { CreatedOnToolsVersion = 26.3; }; A60000000000000000000002 = { CreatedOnToolsVersion = 26.3; TestTargetID = A60000000000000000000001; }; }; }; buildConfigurationList = A70000000000000000000000; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A50000000000000000000001; productRefGroup = A50000000000000000000008; projectDirPath = ""; projectRoot = ""; targets = (A60000000000000000000001, A60000000000000000000002); };
+		A00000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = { LastUpgradeCheck = 2630; ORGANIZATIONNAME = Prototype; TargetAttributes = { A60000000000000000000001 = { CreatedOnToolsVersion = 26.3; }; A60000000000000000000002 = { CreatedOnToolsVersion = 26.3; TestTargetID = A60000000000000000000001; }; C60000000000000000000001 = { CreatedOnToolsVersion = 26.3; TestTargetID = A60000000000000000000001; }; }; }; buildConfigurationList = A70000000000000000000000; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A50000000000000000000001; productRefGroup = A50000000000000000000008; projectDirPath = ""; projectRoot = ""; targets = (A60000000000000000000001, A60000000000000000000002, C60000000000000000000001); };
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -144,14 +150,17 @@
 /* Begin PBXSourcesBuildPhase section */
 		A80000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A10000000000000000000009, A10000000000000000000011, A10000000000000000000012, A10000000000000000000013, A10000000000000000000014, A10000000000000000000015, A10000000000000000000017, A10000000000000000000018, A10000000000000000000019, A10000000000000000000020, A10000000000000000000021, A10000000000000000000022, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000027, A10000000000000000000028, A10000000000000000000029, A10000000000000000000030); runOnlyForDeploymentPostprocessing = 0; };
 		A80000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005, B10000000000000000000006, B10000000000000000000008, B10000000000000000000009, B10000000000000000000010, B10000000000000000000011, B10000000000000000000012, B10000000000000000000013, B10000000000000000000014, B10000000000000000000015, B10000000000000000000016, B10000000000000000000017, B10000000000000000000018, B10000000000000000000019, B10000000000000000000020, B10000000000000000000021); runOnlyForDeploymentPostprocessing = 0; };
+		C80000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (C10000000000000000000001); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		A61000000000000000000001 = {isa = PBXTargetDependency; target = A60000000000000000000001; targetProxy = A62000000000000000000001; };
+		C61000000000000000000001 = {isa = PBXTargetDependency; target = A60000000000000000000001; targetProxy = C62000000000000000000001; };
 /* End PBXTargetDependency section */
 
 /* Begin PBXContainerItemProxy section */
 		A62000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A00000000000000000000001; proxyType = 1; remoteGlobalIDString = A60000000000000000000001; remoteInfo = RidesTablet; };
+		C62000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A00000000000000000000001; proxyType = 1; remoteGlobalIDString = A60000000000000000000001; remoteInfo = RidesTablet; };
 /* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
@@ -161,12 +170,15 @@
 		A71000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTabletTests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RidesTablet.app/RidesTablet"; }; name = Release; };
 		A71000000000000000000005 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
 		A71000000000000000000006 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+		C71000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTabletUITests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; TEST_TARGET_NAME = RidesTablet; }; name = Debug; };
+		C71000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.RidesTabletUITests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; TEST_TARGET_NAME = RidesTablet; }; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
 		A70000000000000000000000 /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000005, A71000000000000000000006); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A70000000000000000000001 /* Build configuration list for RidesTablet */ = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000001, A71000000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A70000000000000000000002 /* Build configuration list for RidesTabletTests */ = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000003, A71000000000000000000004); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		C70000000000000000000001 /* Build configuration list for RidesTabletUITests */ = {isa = XCConfigurationList; buildConfigurations = (C71000000000000000000001, C71000000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = A00000000000000000000001 /* Project object */;
