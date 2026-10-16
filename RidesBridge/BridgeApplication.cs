@@ -37,7 +37,8 @@ public static class BridgeApplication
         services.AddSingleton<Page0ConditionalWriter>(serviceProvider =>
             new Page0ConditionalWriter(
                 serviceProvider.GetRequiredService<IBridgePm3Device>(),
-                serviceProvider.GetRequiredService<BridgeOptions>().HardwareRecoveryTimeout));
+                serviceProvider.GetRequiredService<BridgeOptions>().HardwareRecoveryTimeout,
+                serviceProvider.GetService<ILogger<Page0ConditionalWriter>>()));
         services.AddSingleton<BridgeLifecycleService>(serviceProvider =>
         {
             // Resolve identity before the device so an invalid persistent identity cannot

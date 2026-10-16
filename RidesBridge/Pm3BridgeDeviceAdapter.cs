@@ -17,9 +17,19 @@ internal interface IBridgePm3Session : IAsyncDisposable
     Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default);
     Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default);
     Task WritePage0BlockAsync(uint block, Tokens.T55Block data, CancellationToken ct = default);
+    Task<string> ReadDetectedPage0BlockAsync(uint block, CancellationToken ct = default) => ReadPage0BlockAsync(block, ct);
+    async Task<string> WriteDetectedPage0BlockVerifiedAsync(uint block, Tokens.T55Block data, CancellationToken ct = default)
+    {
+        await WritePage0BlockAsync(block, data, ct).ConfigureAwait(false);
+        var actual = await ReadPage0BlockAsync(block, ct).ConfigureAwait(false);
+        var expected = data.ToHex().ToUpperInvariant();
+        if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+            throw new Pm3CommandException($"Write verification failed for block {block}.");
+        return expected;
+    }
 }
 
-public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
+public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSessionProvider
 {
     private readonly BridgeOptions _bridgeOptions;
     private readonly Func<BridgeOptions, IBridgePm3Session> _sessionFactory;
@@ -96,6 +106,34 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
     public Task WritePage0Block5Async(string value, CancellationToken ct = default) => WritePage0BlockAsync(5, value, ct);
 
     public Task WritePage0Block6Async(string value, CancellationToken ct = default) => WritePage0BlockAsync(6, value, ct);
+
+    public async Task<IPage0MutationSession> OpenMutationSessionAsync(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        var ownershipTransferred = false;
+        try
+        {
+            ThrowIfDisposed();
+            await EnsureConnectedAsync(ct).ConfigureAwait(false);
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            session.InvalidateT55DetectCache();
+            await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            var scope = new Page0MutationSession(this, session);
+            ownershipTransferred = true;
+            return scope;
+        }
+        catch (Exception ex)
+        {
+            if (ex is OperationCanceledException || ex is TimeoutException || ex is Pm3TimeoutException)
+                await DiscardSessionAfterFailureAsync().ConfigureAwait(false);
+            if (ex is BridgeHardwareException) throw;
+            throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!ownershipTransferred) _operationLock.Release();
+        }
+    }
 
     public Task<string> ReadPage0Block1To6Async(int block, CancellationToken ct = default)
     {
@@ -447,6 +485,70 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
     private static bool IsBlockHex(string? value) => value is not null && value.Length == 8
         && value.All(Uri.IsHexDigit);
 
+    private sealed class Page0MutationSession : IPage0MutationSession
+    {
+        private readonly Pm3BridgeDeviceAdapter _owner;
+        private IBridgePm3Session _session;
+        private bool _detected = true;
+        private int _disposed;
+
+        public Page0MutationSession(Pm3BridgeDeviceAdapter owner, IBridgePm3Session session)
+        {
+            _owner = owner;
+            _session = session;
+        }
+
+        public Task<string> ReadBlockAsync(int block, CancellationToken ct = default) => ExecuteAsync(block, null, ct);
+
+        public Task<string> WriteVerifiedBlockAsync(int block, string value, CancellationToken ct = default)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (!IsBlockHex(value)) throw new ArgumentException("Writes require exactly 8 hexadecimal characters.", nameof(value));
+            return ExecuteAsync(block, Tokens.T55Block.FromHex(value), ct);
+        }
+
+        private async Task<string> ExecuteAsync(int block, Tokens.T55Block? write, CancellationToken ct)
+        {
+            if (block is < 1 or > 6) throw new ArgumentOutOfRangeException(nameof(block), "Only page-0 blocks 1 through 6 are allowed.");
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            try
+            {
+                _owner.ThrowIfDisposed();
+                if (!_detected)
+                {
+                    await _owner.EnsureConnectedAsync(ct).ConfigureAwait(false);
+                    _session = _owner._session ?? throw BridgeHardwareException.Unavailable();
+                    _session.InvalidateT55DetectCache();
+                    await _session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+                    _detected = true;
+                }
+                var result = write is null
+                    ? await _session.ReadDetectedPage0BlockAsync((uint)block, ct).ConfigureAwait(false)
+                    : await _session.WriteDetectedPage0BlockVerifiedAsync((uint)block, write.Value, ct).ConfigureAwait(false);
+                if (!IsBlockHex(result)) throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
+                return result.ToUpperInvariant();
+            }
+            catch (Exception ex)
+            {
+                _detected = false;
+                if (ex is OperationCanceledException or TimeoutException or Pm3TimeoutException)
+                    await _owner.DiscardSessionAfterFailureAsync().ConfigureAwait(false);
+                if (ex is BridgeHardwareException) throw;
+                throw await _owner.MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                (_owner._session ?? _session).InvalidateT55DetectCache();
+                _owner._operationLock.Release();
+            }
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class Pm3BridgePm3Session : IBridgePm3Session
     {
         private readonly Pm3 _pm3;
@@ -480,6 +582,10 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device
         public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default) => _pm3.ReadPage0BlockAsync(block, ct);
 
         public Task WritePage0BlockAsync(uint block, Tokens.T55Block data, CancellationToken ct = default) => _pm3.WritePage0BlockAsync(block, data, ct);
+
+        public Task<string> ReadDetectedPage0BlockAsync(uint block, CancellationToken ct = default) => _pm3.ReadDetectedPage0BlockAsync(block, ct);
+
+        public Task<string> WriteDetectedPage0BlockVerifiedAsync(uint block, Tokens.T55Block data, CancellationToken ct = default) => _pm3.WriteDetectedPage0BlockVerifiedAsync(block, data, ct);
 
         public ValueTask DisposeAsync() => _pm3.DisposeAsync();
     }

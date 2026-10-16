@@ -13,6 +13,7 @@ namespace Pm3UsbApi;
 public sealed class Pm3 : IAsyncDisposable
 {
     private readonly Pm3Session _session;
+    private readonly Pm3ExecutorKind _executorKind;
     private CommandResult? _lastTuneResult;
 
     /// <summary>
@@ -29,6 +30,14 @@ public sealed class Pm3 : IAsyncDisposable
             _ => new Pm3ProcessExecutor(opts),
         };
         _session = new Pm3Session(executor, opts);
+        _executorKind = opts.ExecutorKind;
+    }
+
+    internal Pm3(Pm3Session session, Pm3ExecutorKind executorKind)
+    {
+        Pm3DiagnosticLog.EnsureInitialized();
+        _session = session ?? throw new ArgumentNullException(nameof(session));
+        _executorKind = executorKind;
     }
 
     /// <summary>
@@ -92,6 +101,41 @@ public sealed class Pm3 : IAsyncDisposable
         if (!parsed.Success || parsed.HexData is null)
             throw new Pm3CommandException($"Failed to read block {block}.", result);
         return parsed.HexData;
+    }
+
+    /// <summary>
+    /// Reads/writes within a caller-managed, already-detected native mutation session.
+    /// Deliberately bypasses T55 detect chaining; callers must hold exclusive ownership and
+    /// freshly detect before using these methods.
+    /// </summary>
+    internal async Task<string> ReadDetectedPage0BlockAsync(uint block, CancellationToken ct = default)
+    {
+        EnsureDetectedNativeSession(block);
+
+        var result = await _session.ExecuteAsync([new T55ReadBlockCommand(block)], null, ct).ConfigureAwait(false);
+        var parsed = BlockReadParser.Parse(result, (int)block);
+        if (result.HasErrors || !parsed.Success || parsed.HexData is null)
+            throw new Pm3CommandException($"Failed to read block {block}.", result);
+        return parsed.HexData.ToUpperInvariant();
+    }
+
+    internal async Task<string> WriteDetectedPage0BlockVerifiedAsync(uint block, T55Block data, CancellationToken ct = default)
+    {
+        EnsureDetectedNativeSession(block);
+        var expected = data.ToHex().ToUpperInvariant();
+        var write = await _session.ExecuteAsync([new T55WriteBlockCommand(block, data)], null, ct).ConfigureAwait(false);
+        if (write.HasErrors || write.ExitCode != 0)
+            throw new Pm3CommandException($"Failed to write block {block}. {write.ErrorSummary ?? $"exit={write.ExitCode}"}", write);
+        // Native T55 service.WriteBlock includes read-back verification. A clean successful
+        // native write result is that verification; do not issue a duplicate read command.
+        return expected;
+    }
+
+    private void EnsureDetectedNativeSession(uint block)
+    {
+        if (block is < 1 or > 6) throw new ArgumentOutOfRangeException(nameof(block));
+        if (_executorKind != Pm3ExecutorKind.Native)
+            throw new InvalidOperationException("Detected-session fast operations require the native executor.");
     }
 
     /// <summary>

@@ -91,6 +91,12 @@ The default state directory remains the platform ApplicationData location under 
 
 Everyday mode owns the bind and PM3 discovery settings even when conflicting bind, fixed-port, or auto-discovery configuration is present. Fake-pm3 mode owns the bind and disables PM3 USB discovery while still honoring durable path overrides. A configured PM3 client executable path may still be used to locate the discovery script in everyday mode only. Other settings retain their normal configuration behavior.
 
+## Mutation performance
+
+The native mutation path detects once per exclusive transaction and reuses that detected session for preflight and verified writes. Native writes already verify their readback, so the bridge does not reread them. Other transports retain explicit readback unless they provide an equivalent verified-session contract. Session state is not reused between requests; failure recovery may reconnect/redetect.
+
+Stage timings are printed for session open, preflight, write/verify, recovery, and total outcome. No iPad update is needed: the HTTP mutation contract is unchanged. See [implementation and future auto-detection notes](../.docs/pm3-mutation-speedup-2026-10-16.md).
+
 ## Tests
 
 Focused non-hardware tests cover process-level help/error behavior, strict launch parsing, port gaps/exhaustion/range boundaries, real IPv4 socket cleanup, configuration precedence, and propagation of the selected port into Bonjour. The everyday and fake-pm3 process smoke tests start no PM3 connection. Run them with:

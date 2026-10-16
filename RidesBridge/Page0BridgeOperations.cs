@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 
 namespace RidesBridge;
 
@@ -87,11 +89,16 @@ public sealed class Page0ConditionalWriter
 {
     private readonly IBridgePm3Device _device;
     private readonly TimeSpan _recoveryTimeout;
+    private readonly ILogger<Page0ConditionalWriter>? _logger;
 
-    public Page0ConditionalWriter(IBridgePm3Device device, TimeSpan? recoveryTimeout = null)
+    public Page0ConditionalWriter(
+        IBridgePm3Device device,
+        TimeSpan? recoveryTimeout = null,
+        ILogger<Page0ConditionalWriter>? logger = null)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _recoveryTimeout = recoveryTimeout ?? TimeSpan.FromSeconds(5);
+        _logger = logger;
         if (_recoveryTimeout <= TimeSpan.Zero || _recoveryTimeout == Timeout.InfiniteTimeSpan)
             throw new ArgumentOutOfRangeException(nameof(recoveryTimeout), "Recovery timeout must be finite and greater than zero.");
     }
@@ -105,61 +112,102 @@ public sealed class Page0ConditionalWriter
         if (!Page0MutationValidator.TryValidate(request, out var validated, out var error))
             throw new Page0MutationValidationException(error!);
 
-        var ordered = validated.OrderBy(m => m.Block).ToArray();
-        var states = ordered.Select(m => new MutationState(m)).ToArray();
+        var total = Stopwatch.StartNew();
+        var outcome = "failed";
         var changed = new List<MutationState>();
-
-        // Read every target before deciding whether a write is allowed. In particular, do not
-        // return on the first conflict: callers receive the complete observed target set.
-        foreach (var state in states)
-            state.Actual = await ReadAsync(state.Mutation.Block, ct).ConfigureAwait(false);
-
-        if (states.Any(s => s.Actual != s.Mutation.Expected && s.Actual != s.Mutation.Desired))
+        try
         {
-            foreach (var state in states)
-                state.Status = "conflict";
-            return CreateResponse("conflict", states, "notNeeded", []);
+            var openTimer = Stopwatch.StartNew();
+            var session = _device is IPage0MutationSessionProvider provider
+                ? await provider.OpenMutationSessionAsync(ct).ConfigureAwait(false)
+                : new ReadbackPage0MutationSession(_device);
+            openTimer.Stop();
+            _logger?.LogInformation("Page-0 mutation session opened in {ElapsedMs}ms; optimized={Optimized}",
+                openTimer.Elapsed.TotalMilliseconds, _device is IPage0MutationSessionProvider);
+            await using (session.ConfigureAwait(false))
+            {
+                var ordered = validated.OrderBy(m => m.Block).ToArray();
+                var states = ordered.Select(m => new MutationState(m)).ToArray();
+                var preflightTimer = Stopwatch.StartNew();
+                // Read every target exactly once before deciding whether a write is allowed.
+                foreach (var state in states)
+                    state.Actual = await ReadAsync(session, state.Mutation.Block, ct).ConfigureAwait(false);
+                preflightTimer.Stop();
+                _logger?.LogInformation("Page-0 preflight completed in {ElapsedMs}ms for {TargetCount} targets",
+                    preflightTimer.Elapsed.TotalMilliseconds, states.Length);
+
+                if (states.Any(s => s.Actual != s.Mutation.Expected && s.Actual != s.Mutation.Desired))
+                {
+                    foreach (var state in states) state.Status = "conflict";
+                    outcome = "conflict";
+                    return CreateResponse("conflict", states, "notNeeded", []);
+                }
+
+                foreach (var state in states.Where(s => s.Actual == s.Mutation.Desired))
+                    state.Status = "alreadyApplied";
+                if (states.All(s => s.Actual == s.Mutation.Desired))
+                {
+                    outcome = "alreadyApplied";
+                    return CreateResponse("alreadyApplied", states, "notNeeded", []);
+                }
+
+                var mutationStarted = false;
+                var writeTimer = Stopwatch.StartNew();
+                foreach (var state in states.Where(s => s.Actual == s.Mutation.Expected))
+                {
+                    mutationStarted = true;
+                    try
+                    {
+                        // Include the target before issuing the command: it may apply even if
+                        // its response is lost, and recovery can then safely restore expected.
+                        changed.Add(state);
+                        state.Actual = null;
+                        var actual = await session.WriteVerifiedBlockAsync(
+                            state.Mutation.Block, state.Mutation.Desired, ct).ConfigureAwait(false);
+                        state.Actual = NormalizeActual(actual);
+                        if (state.Actual != state.Mutation.Desired)
+                            throw new VerificationFailureException();
+                        state.Status = "written";
+                    }
+                    catch (OperationCanceledException) when (mutationStarted)
+                    {
+                        state.Status = "verifyFailed";
+                        writeTimer.Stop();
+                        _logger?.LogInformation("Page-0 write/verify stage ended in {ElapsedMs}ms for {WriteCount} writes",
+                            writeTimer.Elapsed.TotalMilliseconds, changed.Count);
+                        var failed = await FailureAsync(session, states, changed).ConfigureAwait(false);
+                        outcome = failed.Status;
+                        return failed;
+                    }
+                    catch (Exception ex) when (IsDeviceFailure(ex))
+                    {
+                        state.Status = "verifyFailed";
+                        writeTimer.Stop();
+                        _logger?.LogInformation("Page-0 write/verify stage ended in {ElapsedMs}ms for {WriteCount} writes",
+                            writeTimer.Elapsed.TotalMilliseconds, changed.Count);
+                        var failed = await FailureAsync(session, states, changed).ConfigureAwait(false);
+                        outcome = failed.Status;
+                        return failed;
+                    }
+                }
+
+                writeTimer.Stop();
+                _logger?.LogInformation("Page-0 write/verify stage completed in {ElapsedMs}ms for {WriteCount} writes",
+                    writeTimer.Elapsed.TotalMilliseconds, changed.Count);
+                outcome = "written";
+                return CreateResponse("written", states, "notNeeded", []);
+            }
         }
-
-        foreach (var state in states.Where(s => s.Actual == s.Mutation.Desired))
-            state.Status = "alreadyApplied";
-
-        if (states.All(s => s.Actual == s.Mutation.Desired))
-            return CreateResponse("alreadyApplied", states, "notNeeded", []);
-
-        var mutationStarted = false;
-        foreach (var state in states.Where(s => s.Actual == s.Mutation.Expected))
+        finally
         {
-            mutationStarted = true;
-            try
-            {
-                // A write can apply at the tag and then lose its response. The preflight proved
-                // the expected value was present, so it is safe to include this target before the
-                // command starts; recovery may restore expected whether or not PM3 reports success.
-                changed.Add(state);
-                state.Actual = null;
-                await WriteAsync(state.Mutation.Block, state.Mutation.Desired, ct).ConfigureAwait(false);
-                state.Actual = await ReadAsync(state.Mutation.Block, ct).ConfigureAwait(false);
-                if (state.Actual != state.Mutation.Desired)
-                    throw new VerificationFailureException();
-                state.Status = "written";
-            }
-            catch (OperationCanceledException) when (mutationStarted)
-            {
-                state.Status = "verifyFailed";
-                return await FailureAsync(states, changed).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (IsDeviceFailure(ex))
-            {
-                state.Status = "verifyFailed";
-                return await FailureAsync(states, changed).ConfigureAwait(false);
-            }
+            total.Stop();
+            _logger?.LogInformation("Page-0 mutation completed with outcome {Outcome} in {ElapsedMs}ms; targetCount={TargetCount} writeCount={WriteCount}",
+                outcome, total.Elapsed.TotalMilliseconds, validated.Count, changed.Count);
         }
-
-        return CreateResponse("written", states, "notNeeded", []);
     }
 
     private async Task<Page0MutationResponse> FailureAsync(
+        IPage0MutationSession session,
         IReadOnlyList<MutationState> states,
         IReadOnlyList<MutationState> changed)
     {
@@ -168,6 +216,7 @@ public sealed class Page0ConditionalWriter
         // Recovery nevertheless has its own finite server-owned budget.
         using var recoveryCts = new CancellationTokenSource(_recoveryTimeout);
         var recoveryCt = recoveryCts.Token;
+        var recoveryTimer = Stopwatch.StartNew();
         var rollback = new List<Page0RollbackResult>(changed.Count);
         foreach (var state in changed.Reverse())
         {
@@ -176,8 +225,8 @@ public sealed class Page0ConditionalWriter
             state.Actual = null;
             try
             {
-                await WriteAsync(state.Mutation.Block, state.Mutation.Expected, recoveryCt).ConfigureAwait(false);
-                actual = await ReadAsync(state.Mutation.Block, recoveryCt).ConfigureAwait(false);
+                actual = NormalizeActual(await session.WriteVerifiedBlockAsync(
+                    state.Mutation.Block, state.Mutation.Expected, recoveryCt).ConfigureAwait(false));
                 state.Actual = actual;
                 succeeded = actual == state.Mutation.Expected;
             }
@@ -197,22 +246,29 @@ public sealed class Page0ConditionalWriter
         foreach (var state in states.Where(s => s.Status == "pending"))
             state.Status = "notAttempted";
 
+        recoveryTimer.Stop();
+        _logger?.LogInformation("Page-0 recovery completed in {ElapsedMs}ms for {RecoveryCount} recovery writes",
+            recoveryTimer.Elapsed.TotalMilliseconds, rollback.Count);
         var rollbackStatus = changed.Count == 0
             ? "notNeeded"
             : rollback.All(r => r.Succeeded) ? "rollbackSucceeded" : "rollbackIncomplete";
         return CreateResponse("verifyFailed", states, rollbackStatus, rollback);
     }
 
-    private async Task<string> ReadAsync(int block, CancellationToken ct)
+    private static async Task<string> ReadAsync(IPage0MutationSession session, int block, CancellationToken ct)
     {
-        var value = await _device.ReadPage0Block1To6Async(block, ct).ConfigureAwait(false);
+        var value = await session.ReadBlockAsync(block, ct).ConfigureAwait(false);
         if (!Page0MutationValidator.TryNormalizeBlockHex(value, out var normalized))
             throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
         return normalized;
     }
 
-    private Task WriteAsync(int block, string value, CancellationToken ct) =>
-        _device.WritePage0Block1To6Async(block, value, ct);
+    private static string NormalizeActual(string? value)
+    {
+        if (!Page0MutationValidator.TryNormalizeBlockHex(value, out var normalized))
+            throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
+        return normalized;
+    }
 
     private static bool IsDeviceFailure(Exception ex) => ex is BridgeHardwareException
         or IOException
