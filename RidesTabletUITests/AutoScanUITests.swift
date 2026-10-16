@@ -30,6 +30,31 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue(auto.waitForValue("On"))
     }
 
+    func testRestartCalibrationStopsAutoAndClearsLoadedTokenWithoutRemovingHistory() {
+        let autoToggle = app.buttons["auto-scan-toggle"]
+        let restart = app.buttons["restart-calibration"]
+        let primary = app.buttons["detect-primary-action"]
+        let pending = app.descendants(matching: .any)["pending-rides-display"]
+        let historyTotal = app.staticTexts["TOTAL · 3 charges"]
+
+        XCTAssertTrue(autoToggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(restart.waitForExistence(timeout: 10))
+        XCTAssertTrue(pending.waitForValue("Increase of 33 rides. Pending total 169 rides", timeout: 10))
+        XCTAssertTrue(historyTotal.exists)
+
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"))
+        restart.tap()
+
+        XCTAssertTrue(autoToggle.waitForValue("Off"))
+        XCTAssertFalse(autoToggle.isEnabled)
+        XCTAssertEqual(primary.label, "Calibrate: NO token")
+        let status = app.descendants(matching: .any)["token-operation-status"]
+        XCTAssertTrue((status.value as? String)?.contains("Remove all tokens, then calibrate") == true)
+        XCTAssertFalse(pending.exists)
+        XCTAssertTrue(historyTotal.exists, "Restarting calibration must retain completed-charge history")
+    }
+
     func testAutoScanLeavesPendingRidesAloneAndManualDetectStopsIt() {
         let autoToggle = app.buttons["auto-scan-toggle"]
         let pending = app.descendants(matching: .any)["pending-rides-display"]
@@ -100,8 +125,14 @@ final class AutoScanUITests: XCTestCase {
                        "Low signal is gated rather than treated as confirmed token removal")
         XCTAssertTrue(autoToggle.waitForValue("On"))
 
+        // Pause the fake's 10 Hz updates while changing its debug-only menu fixture.
+        // Continuous weak-to-good recovery is covered by the model tests.
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("Off"))
         simulationMenu.tap()
         app.buttons["Good token"].tap()
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"))
         XCTAssertTrue(currentRides.waitForValue("73", timeout: 12), "Auto-scan should confirm the newly placed token")
         XCTAssertTrue((pending.value as? String)?.contains("Pending total 73 rides") == true)
 
@@ -135,6 +166,8 @@ final class AutoScanUITests: XCTestCase {
         primary.tap()
         XCTAssertTrue(autoToggle.waitForValue("Off"))
         XCTAssertTrue(autoToggle.isEnabled)
+        let status = app.descendants(matching: .any)["token-operation-status"]
+        XCTAssertTrue((status.value as? String)?.contains("Calibration complete") == true)
         autoToggle.tap()
         XCTAssertTrue(autoToggle.waitForValue("On"))
         autoToggle.tap()

@@ -312,7 +312,7 @@ private struct MainPanel: View {
     var body: some View {
         Group {
             if case .known = model.state,
-               !model.isAutoSignalBlocked, !model.isAutoDetecting {
+               !model.isAutoSignalBlocked, !model.isAutoDetecting, !model.isAutoSettling {
                 KnownControls(model: model)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .top)
@@ -361,15 +361,18 @@ private struct StatusContent: View {
 
     private var isDetecting: Bool { model.isAutoDetecting }
     private var isSignalBlocked: Bool { model.isAutoSignalBlocked && !isDetecting }
+    private var isSettling: Bool { model.isAutoSettling && !isDetecting && !isSignalBlocked }
 
     private var statusTitle: String {
         if isDetecting { return "Detecting…" }
         if isSignalBlocked { return "Signal too weak" }
+        if isSettling { return "Hold token steady" }
         return model.state.title
     }
     private var statusMessage: String? {
         if isDetecting { return "Reading token…" }
         if isSignalBlocked { return model.isAutoScanning ? "Reposition the token" : "Use Detect to confirm" }
+        if isSettling { return "Waiting for signal to settle…" }
         return model.message
     }
 
@@ -484,6 +487,8 @@ private struct DetectStrip: View {
                     SignalView(model: model)
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 12)
+                    restartCalibrationDivider
+                    restartCalibrationButton
                 }
                 .frame(height: 92)
             } else {
@@ -493,10 +498,15 @@ private struct DetectStrip: View {
                         .padding(.horizontal, 10)
                     statusLine
                         .frame(height: 28)
-                    SignalView(model: model)
-                        .padding(.horizontal, 14)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.white)
+                    HStack(spacing: 0) {
+                        SignalView(model: model)
+                            .padding(.horizontal, 14)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        restartCalibrationDivider
+                        restartCalibrationButton
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
                 }
                 .frame(height: 184)
             }
@@ -583,6 +593,32 @@ private struct DetectStrip: View {
         .accessibilityValue(model.isAutoScanning ? "On" : "Off")
         .accessibilityHint(model.isAutoScanning ? "Turns automatic scanning off" : (!model.signalCalibrationReady ? "Complete calibration to enable Auto" : "Turns automatic scanning on"))
         .accessibilityIdentifier("auto-scan-toggle")
+    }
+
+    private var restartCalibrationDivider: some View {
+        Rectangle()
+            .fill(Color.gray.opacity(0.35))
+            .frame(width: 1)
+            .padding(.vertical, 12)
+            .accessibilityHidden(true)
+    }
+
+    private var restartCalibrationButton: some View {
+        Button {
+            Task { await model.restartCalibration() }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.blue)
+                .frame(width: 48)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isBusy)
+        .accessibilityLabel("Restart calibration")
+        .accessibilityHint("Stops Auto and clears the loaded token view without writing to the token")
+        .accessibilityIdentifier("restart-calibration")
     }
 
     private var statusLine: some View {
