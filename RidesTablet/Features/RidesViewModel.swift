@@ -300,7 +300,7 @@ public final class RidesViewModel: ObservableObject {
                 isAutoSettling = true
                 autoScanStatus = "Waiting for signal to settle."
                 let spread = (settleProbeMaximum ?? signal) - (settleProbeMinimum ?? signal)
-                let settled = settleProbeCount >= 5 && Double(spread) / Double(max(1, calibrationSpan)) <= 0.05
+                let settled = settleProbeCount >= 3 && Double(spread) / Double(max(1, calibrationSpan)) <= 0.10
                 let deadlineReached = settleDeadline.map { now() >= $0 } == true
                 let retryDue = lastUnconfirmedAttemptAt.map { now().timeIntervalSince($0) >= periodicConfirmInterval } == true
                 let attemptDue = lastUnconfirmedAttemptAt == nil || retryDue
