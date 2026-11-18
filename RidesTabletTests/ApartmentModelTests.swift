@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import RidesTablet
 
@@ -157,6 +158,28 @@ final class ApartmentModelTests: XCTestCase {
             let encoded = ApartmentBlockCodec.encode(secret: secret, block3: block3, apartment: apartment)
             XCTAssertEqual(ApartmentBlockCodec.decode(secret: secret, block3: block3, block4: encoded)?.apartment, apartment)
         }
+    }
+
+    func testSecretFingerprintIsStableAndHashesExactUTF8Bytes() {
+        let value = " secret with spaces "
+        let store = ApartmentSecretStore(secret: value)
+        let independentlyComputed = SHA256.hash(data: Data(value.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+
+        XCTAssertEqual(store.sha256Fingerprint, String(independentlyComputed.prefix(16)))
+        XCTAssertEqual(store.sha256Fingerprint?.count, 16)
+        XCTAssertEqual(store.sha256Fingerprint, ApartmentSecretStore(secret: value).sha256Fingerprint)
+        XCTAssertNotEqual(store.sha256Fingerprint, ApartmentSecretStore(secret: value.trimmingCharacters(in: .whitespaces)).sha256Fingerprint)
+    }
+
+    func testSecretFingerprintClearsWithSecret() {
+        let store = ApartmentSecretStore()
+        XCTAssertNil(store.sha256Fingerprint)
+        store.setSecret("\tsecret\n")
+        XCTAssertNotNil(store.sha256Fingerprint)
+        store.clear()
+        XCTAssertNil(store.secret)
+        XCTAssertNil(store.sha256Fingerprint)
     }
 
     func testSecretIsMemoryOnlyAndPreservesExactEnteredBytes() {

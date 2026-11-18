@@ -159,32 +159,47 @@ public struct BridgeConnectionView: View {
         NavigationStack {
             Form {
                 Section("Apartment secret") {
-                    SecureField("Apartment secret", text: $apartmentSecret)
-                        .textContentType(.none)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("Confirm apartment secret", text: $apartmentSecretConfirmation)
-                        .textContentType(.none)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    if apartmentSecretMismatch {
-                        Text("Secrets must match and cannot be empty.").foregroundStyle(.red)
-                    }
-                    Button("Save secret") {
-                        guard !apartmentSecret.isEmpty, apartmentSecret == apartmentSecretConfirmation else {
-                            apartmentSecretMismatch = true
-                            return
+                    if let fingerprint = apartmentSecretStore.sha256Fingerprint {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("SHA-256 (first 16 hex characters)")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                                Text(fingerprint)
+                                    .font(.system(.body, design: .monospaced))
+                                    .accessibilityIdentifier("apartmentSecretFingerprint")
+                                    .accessibilityLabel("SHA-256 fingerprint, first 16 hexadecimal characters")
+                            }
+                            Spacer(minLength: 12)
+                            Button("Clear", role: .destructive) {
+                                apartmentSecretStore.clear()
+                                clearApartmentSecretDrafts()
+                            }
+                            .accessibilityIdentifier("clearApartmentSecretButton")
                         }
-                        apartmentSecretStore.setSecret(apartmentSecret)
-                        apartmentSecret = ""
-                        apartmentSecretConfirmation = ""
-                        apartmentSecretMismatch = false
-                    }
-                    .disabled(apartmentSecret.isEmpty || apartmentSecretConfirmation.isEmpty)
-                    if apartmentSecretStore.secret != nil {
-                        Button("Clear saved secret", role: .destructive) {
-                            apartmentSecretStore.clear()
+                    } else {
+                        SecureField("Apartment secret", text: $apartmentSecret)
+                            .textContentType(.none)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("apartmentSecretField")
+                        SecureField("Confirm apartment secret", text: $apartmentSecretConfirmation)
+                            .textContentType(.none)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("confirmApartmentSecretField")
+                        if apartmentSecretMismatch {
+                            Text("Secrets must match and cannot be empty.").foregroundStyle(.red)
                         }
+                        Button("Save secret") {
+                            guard !apartmentSecret.isEmpty, apartmentSecret == apartmentSecretConfirmation else {
+                                apartmentSecretMismatch = true
+                                return
+                            }
+                            apartmentSecretStore.setSecret(apartmentSecret)
+                            clearApartmentSecretDrafts()
+                        }
+                        .accessibilityIdentifier("saveApartmentSecretButton")
+                        .disabled(apartmentSecret.isEmpty || apartmentSecretConfirmation.isEmpty)
                     }
                     Text("Stored in memory only on this iPad; it is not persisted.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -323,6 +338,7 @@ public struct BridgeConnectionView: View {
             }
         }
         .onDisappear {
+            clearApartmentSecretDrafts()
             model.stopBonjourBrowse()
         }
         .task {
@@ -345,6 +361,12 @@ public struct BridgeConnectionView: View {
             }
 #endif
         }
+    }
+
+    private func clearApartmentSecretDrafts() {
+        apartmentSecret = ""
+        apartmentSecretConfirmation = ""
+        apartmentSecretMismatch = false
     }
 
     private func handleScannedPairingPayload(_ payload: String) {
