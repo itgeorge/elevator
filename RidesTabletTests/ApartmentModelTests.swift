@@ -135,6 +135,44 @@ final class ApartmentModelTests: XCTestCase {
         }
     }
 
+    func testSecretIsMemoryOnlyAndPreservesExactEnteredBytes() {
+        let store = ApartmentSecretStore()
+        XCTAssertNil(store.secret)
+        store.setSecret(" secret with spaces ")
+        XCTAssertEqual(store.secret, " secret with spaces ")
+        XCTAssertNil(ApartmentSecretStore().secret)
+        store.clear()
+        XCTAssertNil(store.secret)
+    }
+
+    func testApartmentPromptRestoresAutoAfterCancelSkipAndSave() async throws {
+        for action in ["cancel", "skip", "save"] {
+            let context = try await makeModel(secret: secret)
+            defer { try? FileManager.default.removeItem(at: context.directory) }
+            let model = context.model
+            await model.restartCalibration()
+            context.fake.set(detect: .noChip, tune: .measured(millivolts: 18_000))
+            await model.performPrimaryAction()
+            context.fake.set(detect: .detected, tune: .measured(millivolts: 420))
+            await model.performPrimaryAction()
+            await model.detect()
+            model.adjustRides(by: 10)
+            model.toggleAutoScanning()
+            XCTAssertTrue(model.isAutoScanning)
+            await model.requestCharge()
+            XCTAssertFalse(model.isAutoScanning)
+            switch action {
+            case "skip": await model.skipApartmentEntry()
+            case "save":
+                model.apartmentInput = "42"
+                await model.saveApartmentEntry()
+            default: await model.cancelApartmentEntry()
+            }
+            XCTAssertTrue(model.isAutoScanning, action)
+            model.stopAutoScanning()
+        }
+    }
+
     private func makeModel(secret: String?, apartment: UInt8? = nil, rides: UInt = 73) async throws -> Context {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentModelTests-\(UUID().uuidString)")
         let sessionStore = FileChargeSessionStore(directory: directory)
