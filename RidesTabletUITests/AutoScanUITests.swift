@@ -394,6 +394,19 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue(autoToggle.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["detect-primary-action"].exists)
 
+        let historyViewport = app.scrollViews["completed-charge-history-scroll"]
+        let eurHeader = app.staticTexts["history-column-5"]
+        let eurCells = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "charge-eur-"))
+        XCTAssertTrue(historyViewport.waitForExistence(timeout: 5))
+        XCTAssertTrue(eurHeader.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(eurCells.count, 0)
+        for cell in [eurHeader] + (0..<eurCells.count).map({ eurCells.element(boundBy: $0) }) {
+            XCTAssertGreaterThanOrEqual(cell.frame.minX, historyViewport.frame.minX - 1,
+                                        "EUR cell starts outside the history viewport: \(cell.frame)")
+            XCTAssertLessThanOrEqual(cell.frame.maxX, historyViewport.frame.maxX + 1,
+                                     "EUR cell is clipped by the history viewport: \(cell.frame) vs \(historyViewport.frame)")
+        }
+
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Auto-scan history landscape"
         attachment.lifetime = .keepAlways

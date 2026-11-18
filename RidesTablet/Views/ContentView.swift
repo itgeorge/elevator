@@ -106,12 +106,12 @@ private struct OneScreenLayout: View {
                     DetectStrip(model: model, layout: .landscape)
                     ChargeHistoryView(model: model, maxRowsHeight: 130)
                 }
-                .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
+                .frame(minWidth: 466, idealWidth: 466, maxWidth: 480)
 
                 MainPanel(model: model)
                     .frame(minWidth: 540, maxWidth: .infinity)
             }
-            .frame(minWidth: 940, maxWidth: .infinity, alignment: .top)
+            .frame(minWidth: 1024, maxWidth: .infinity, alignment: .top)
 
             VStack(spacing: 14) {
                 DetectStrip(model: model, layout: .portrait)
@@ -228,6 +228,7 @@ private struct ChargeHistoryView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
         .environment(\.colorScheme, .light)
         .accessibilityLabel("Completed charge history, newest first")
+        .accessibilityIdentifier("completed-charge-history-scroll")
         .fullScreenCover(isPresented: $showNewSessionConfirmation) {
             OpaqueConfirmationModal(
                 title: "Start a new charge session?",
@@ -271,7 +272,9 @@ private struct ChargeHistoryView: View {
     }
 
     private func column(_ title: String, _ index: Int, alignment: Alignment) -> some View {
-        Text(title).frame(width: widths[index], alignment: alignment)
+        Text(title)
+            .frame(width: widths[index], alignment: alignment)
+            .accessibilityIdentifier("history-column-\(index)")
     }
 
     private func chargeRow(_ charge: CompletedCharge) -> some View {
@@ -306,6 +309,7 @@ private struct ChargeHistoryView: View {
                 .frame(width: widths[4], alignment: .trailing)
             Text(Self.euroFormatter.string(from: charge.amountEUR as NSDecimalNumber) ?? "0.00")
                 .frame(width: widths[5], alignment: .trailing)
+                .accessibilityIdentifier("charge-eur-\(charge.id.uuidString)")
         }
         .font(.body.monospacedDigit())
         .lineLimit(1)
@@ -329,13 +333,13 @@ private struct BottomChargeAction: View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 18) {
                 Color.clear
-                    .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
+                    .frame(minWidth: 466, idealWidth: 466, maxWidth: 480)
                     .accessibilityHidden(true)
 
                 ChargeButton(model: model, showsReset: false)
                     .frame(minWidth: 540, maxWidth: .infinity)
             }
-            .frame(minWidth: 940, maxWidth: .infinity, alignment: .top)
+            .frame(minWidth: 1024, maxWidth: .infinity, alignment: .top)
 
             ChargeButton(model: model, showsReset: false)
         }
