@@ -1,8 +1,11 @@
 import XCTest
 
 final class PhysicalRidesUITests: XCTestCase {
+    private let requiredPhysicalSecret = "rides-ui-followup-test-2026-11-19"
     private var secret: String {
-        ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_SECRET"] ?? "rides-ui-e2e-test-2026"
+        ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_SECRET"]
+            ?? ProcessInfo.processInfo.environment["TEST_RUNNER_RIDES_UI_PHYSICAL_SECRET"]
+            ?? ""
     }
     private let bridgeAddress = "192.168.0.163"
     private var app = XCUIApplication()
@@ -17,6 +20,7 @@ final class PhysicalRidesUITests: XCTestCase {
         let runnerOptIn = ProcessInfo.processInfo.environment["TEST_RUNNER_RIDES_UI_PHYSICAL_TEST"]
             ?? ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_TEST"]
         guard runnerOptIn == "1" else { throw XCTSkip("Set TEST_RUNNER_RIDES_UI_PHYSICAL_TEST=1 to opt in.") }
+        XCTAssertTrue(secret == requiredPhysicalSecret, "Set the fresh physical-test secret through the test-runner environment.")
 
         launchPhysicalApp()
         let current = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
@@ -66,12 +70,16 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(adjust.waitForExistence(timeout: 10))
         XCTAssertTrue(charge.waitForExistence(timeout: 10))
 
-        // Cancel: no hardware or session change.
+        // Open the first charge popup after the app is already landscape. Cancel remains
+        // before any token write, so layout/hit-target failures are safe to stop on.
+        setOrientation(.landscapeLeft, landscape: true)
         adjust.tap()
         charge.tap()
         XCTAssertTrue(apartmentInput.waitForExistence(timeout: 15), "Secret did not produce the missing-apartment prompt")
-        attach(app, name: "apartment-cancel-prompt")
+        attach(app, name: "physical-charge-landscape-first-open")
+        assertApartmentPopupFits(footerIdentifiers: ["apartment-cancel", "apartment-skip", "apartment-save"])
         app.buttons["apartment-cancel"].tap()
+        setOrientation(.portrait, landscape: false)
         XCTAssertEqual(rideValue(current), initial, "Apartment Cancel must leave rides unchanged")
         XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists, "Cancel must not create a completed charge")
         attach(app, name: "after-apartment-cancel")
@@ -96,16 +104,21 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(apartmentButton.waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["TOTAL · 2 charges"].exists)
 
-        // Edit existing 42 to 43 with a pending ride; only apartment data may change.
+        // Edit existing 42 to 43 with a pending ride; open the edit popup only after
+        // switching to landscape to exercise the same first-open orientation case.
         adjust.tap()
+        setOrientation(.landscapeLeft, landscape: true)
         apartmentButton.tap()
         XCTAssertTrue(apartmentInput.waitForExistence(timeout: 10))
+        attach(app, name: "physical-edit-landscape-first-open")
+        assertApartmentPopupFits(footerIdentifiers: ["apartment-cancel", "apartment-save"])
         app.buttons["clear-apartment-number"].tap()
         app.buttons["apartment-key-4"].tap()
         app.buttons["apartment-key-3"].tap()
         attach(app, name: "apartment-edit-before-save")
         app.buttons["apartment-save"].tap()
         XCTAssertTrue(waitForRideValue(current, initial + delta * 2, timeout: 20), "Apartment-only edit changed current rides")
+        setOrientation(.portrait, landscape: false)
         XCTAssertTrue(app.staticTexts["TOTAL · 2 charges"].exists, "Apartment-only edit added a charge")
         apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch
         XCTAssertTrue(apartmentButton.waitForExistence(timeout: 20))
@@ -215,6 +228,27 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Charge token"].waitForExistence(timeout: 15))
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["new-charge-session"])
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed, "Apartment snapshot refresh did not finish")
+    }
+
+    private func setOrientation(_ orientation: UIDeviceOrientation, landscape: Bool) {
+        XCUIDevice.shared.orientation = orientation
+        let predicate = NSPredicate { _, _ in
+            landscape ? self.app.frame.width > self.app.frame.height : self.app.frame.height > self.app.frame.width
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 15), .completed,
+                       landscape ? "App did not enter landscape" : "App did not enter portrait")
+    }
+
+    private func assertApartmentPopupFits(footerIdentifiers: [String], file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(app.frame.width > app.frame.height, "Popup screenshot must be landscape", file: file, line: line)
+        let identifiers = (0...9).map { "apartment-key-\($0)" } + footerIdentifiers
+        for identifier in identifiers {
+            let button = app.buttons[identifier]
+            XCTAssertTrue(button.waitForExistence(timeout: 5), "Missing popup target: \(identifier)", file: file, line: line)
+            XCTAssertTrue(app.frame.contains(button.frame), "Popup target falls outside app bounds: \(identifier)", file: file, line: line)
+            XCTAssertTrue(button.isHittable, "Popup target is not hittable: \(identifier)", file: file, line: line)
+        }
     }
 
     private func enterApartment(_ number: Int) {
