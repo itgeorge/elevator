@@ -233,7 +233,7 @@ final class PhysicalRidesUITests: XCTestCase {
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
