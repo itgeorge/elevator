@@ -18,11 +18,19 @@ struct ApartmentEntrySheet: View {
                 }
                 .accessibilityLabel("Cancel apartment entry")
             }
-            Text(model.apartmentInput.isEmpty ? "Enter 0–255" : model.apartmentInput)
+            Text(model.apartmentInput)
                 .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityIdentifier("apartment-number-input")
+                .accessibilityLabel("Apartment number input")
+                .accessibilityValue(model.apartmentInput.isEmpty ? "Empty" : model.apartmentInput)
+            if !model.apartmentInput.isEmpty && UInt8(model.apartmentInput) == nil {
+                Text("Apartment must be between 0 and 255.")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("apartment-validation-error")
+            }
             VStack(spacing: 4) {
                 ForEach(digits, id: \.self) { row in
                     HStack(spacing: 8) { ForEach(row, id: \.self) { digit in key(digit) } }
@@ -54,8 +62,7 @@ struct ApartmentEntrySheet: View {
     private func key(_ digit: String) -> some View {
         Button {
             guard model.apartmentInput.count < 3 else { return }
-            let next = model.apartmentInput + digit
-            if let value = Int(next), value <= 255 { model.apartmentInput = next }
+            model.apartmentInput += digit
         } label: {
             Text(digit).font(.title3.weight(.medium)).frame(maxWidth: .infinity, minHeight: 42)
         }
