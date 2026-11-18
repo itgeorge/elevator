@@ -35,7 +35,7 @@ public final class FileChargeSessionStore {
             self.directory = directory
         } else {
             let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-                ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
+                ?? fileManager.temporaryDirectory.appendingPathComponent("Application Support", isDirectory: true)
             self.directory = base.appendingPathComponent("RidesTablet/ChargeSessions", isDirectory: true)
         }
         self.pointerURL = self.directory.appendingPathComponent("active-session.json")

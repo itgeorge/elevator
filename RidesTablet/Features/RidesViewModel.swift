@@ -160,7 +160,7 @@ public final class RidesViewModel: ObservableObject {
         occupiedAutoScanInterval: TimeInterval = 3,
         periodicConfirmInterval: TimeInterval = 5,
         now: @escaping () -> Date = Date.init,
-        apartmentSecretStore: ApartmentSecretStore = .shared
+        apartmentSecretStore: ApartmentSecretStore? = nil
     ) {
         self.device = device
         self.legacyDevice = device as? any ProxmarkDevice
@@ -172,6 +172,7 @@ public final class RidesViewModel: ObservableObject {
         self.occupiedAutoScanInterval = max(0, occupiedAutoScanInterval)
         self.periodicConfirmInterval = max(0, periodicConfirmInterval)
         self.now = now
+        let apartmentSecretStore = apartmentSecretStore ?? .shared
         self.apartmentSecretStore = apartmentSecretStore
         self.completedCharges = chargeHistoryStore?.load() ?? []
         if let store = self.chargeSessionStore {
@@ -641,6 +642,7 @@ public final class RidesViewModel: ObservableObject {
         tokenSignalMillivolts = nil
         calibrationStep = .noToken
         loadedToken = nil
+        apartmentNumber = nil
         currentRides = 0
         pendingRides = 0
         lastSignalMillivolts = nil
@@ -924,6 +926,7 @@ public final class RidesViewModel: ObservableObject {
             loadedToken = token
             currentRides = min(token.rideCount, configuration.maxRides)
             pendingRides = currentRides
+            updateApartment(secret: apartmentSecretStore.secret)
             state = .known(token)
             message = "Reset successful."
             isResetSheetPresented = false
@@ -995,6 +998,7 @@ public final class RidesViewModel: ObservableObject {
         currentRides = 0
         pendingRides = 0
         loadedToken = nil
+        apartmentNumber = nil
         lastTune = nil
         lastSignalMillivolts = nil
         lastDumpURL = nil
@@ -1003,6 +1007,7 @@ public final class RidesViewModel: ObservableObject {
 
     private func clearLoadedTokenForRefresh() {
         loadedToken = nil
+        apartmentNumber = nil
         currentRides = 0
         pendingRides = 0
     }
