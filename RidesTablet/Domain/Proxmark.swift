@@ -1,6 +1,12 @@
 import Foundation
 
 /// Hardware-neutral operator outcomes for Concept A Detect.
+public enum TokenPresenceOutcome: Equatable, Sendable {
+    case present
+    case absent
+    case failure(String)
+}
+
 public enum ScanOutcome: Equatable, Sendable {
     case known(Token, signalMillivolts: Int)
     case unknown(UnknownToken, signalMillivolts: Int)
@@ -61,6 +67,7 @@ public enum WriteOutcome: Equatable, Sendable {
 /// bearer tokens, URLSession details, or PM3 command names to the view model.
 public protocol RideTokenDevice: Sendable {
     func scan() async -> ScanOutcome
+    func measureTokenPresence() async -> TokenPresenceOutcome
     func scanForApartmentSnapshot() async -> ScanOutcome
     func measureCalibrationSignal() async -> CalibrationSignalOutcome
     func measureSignal() async -> TuneOutcome
@@ -118,6 +125,7 @@ public protocol ProxmarkDevice: Sendable {
 }
 
 public extension RideTokenDevice {
+    func measureTokenPresence() async -> TokenPresenceOutcome { .failure("Token presence measurement is unavailable.") }
     func scanForApartmentSnapshot() async -> ScanOutcome { await scan() }
     func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome { .failure("Apartment writing is unavailable for this reader.") }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome { .failure("Calibration signal measurement is unavailable.") }
@@ -307,6 +315,17 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
             let present: Bool
             if case .detected = storedDetect { present = true } else { present = false }
             return .measured(millivolts: signal, chipPresent: present)
+        }
+    }
+
+    public func measureTokenPresence() async -> TokenPresenceOutcome {
+        await Task.yield()
+        return withLock {
+            switch storedDetect {
+            case .detected: return .present
+            case .noChip: return .absent
+            case .failure(let error): return .failure(error)
+            }
         }
     }
 

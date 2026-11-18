@@ -146,6 +146,21 @@ final class ApartmentModelTests: XCTestCase {
         model.stopAutoScanning()
     }
 
+    func testExplicitAbsentPresenceBeforeSaveInvalidatesPopupAndPreventsWrite() async throws {
+        let context = try await makeModel(secret: secret, apartment: 17)
+        defer { try? FileManager.default.removeItem(at: context.directory) }
+        await context.model.editApartment()
+        context.model.apartmentInput = "18"
+        context.fake.set(detect: .noChip)
+        for _ in 0..<100 where context.model.isApartmentSheetPresented { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(context.model.isApartmentSheetPresented)
+        await context.model.saveApartmentEntry()
+        XCTAssertEqual(context.fake.writeCallCount, 0)
+        XCTAssertNil(context.model.loadedToken)
+        XCTAssertTrue(context.model.completedCharges.isEmpty)
+    }
+
     func testEditingPrefilledApartmentSavesOnlyApartmentAndPreservesPendingRides() async throws {
         let context = try await makeModel(secret: secret, apartment: 17)
         defer { try? FileManager.default.removeItem(at: context.directory) }
@@ -310,6 +325,7 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
     init(token: Token) { self.token = token }
 
     func scan() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
+    func measureTokenPresence() async -> TokenPresenceOutcome { .present }
     func scanForApartmentSnapshot() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome {
         calibrationSamples += 1

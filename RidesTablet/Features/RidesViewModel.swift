@@ -167,6 +167,11 @@ public final class RidesViewModel: ObservableObject {
     private var mutationInProgress = false
     private var autoFailureCount = 0
     private var autoConfirmationIsStale = false
+    private var apartmentPopupGeneration = 0
+    private var apartmentPresenceTask: Task<Void, Never>?
+    private var apartmentPresenceVerdict: TokenPresenceOutcome?
+    private var apartmentPopupSnapshot: Token?
+    private var apartmentPopupWriteClaimed = false
 
     public init(
         device: any RideTokenDevice = FakeProxmark(),
@@ -334,6 +339,7 @@ public final class RidesViewModel: ObservableObject {
             editingApartment = false
             apartmentInput = ""
             isApartmentSheetPresented = true
+            startApartmentPresenceWatch()
             await pauseAutoScanningForMutation()
             return
         }
@@ -347,18 +353,21 @@ public final class RidesViewModel: ObservableObject {
         editingApartment = true
         apartmentInput = apartmentNumber.map(String.init) ?? ""
         isApartmentSheetPresented = true
+        startApartmentPresenceWatch()
         await pauseAutoScanningForMutation()
     }
 
     public func cancelApartmentEntry() async {
-        guard isApartmentSheetPresented, !mutationInProgress else { return }
+        guard isApartmentSheetPresented, !mutationInProgress, !apartmentPopupWriteClaimed else { return }
         isApartmentSheetPresented = false
+        await stopApartmentPresenceWatch(invalidate: false)
         resumeAutoScanningAfterMutation()
     }
 
     public func skipApartmentEntry() async {
-        guard isApartmentSheetPresented, !mutationInProgress, !editingApartment else { return }
+        guard isApartmentSheetPresented, !mutationInProgress, !apartmentPopupWriteClaimed, !editingApartment else { return }
         isApartmentSheetPresented = false
+        await stopApartmentPresenceWatch(invalidate: false)
         await charge()
     }
 
@@ -369,13 +378,85 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func saveApartmentEntry() async {
-        guard isApartmentSheetPresented, !mutationInProgress, canSaveApartment, apartmentSnapshotReady,
+        guard isApartmentSheetPresented, !mutationInProgress, !apartmentPopupWriteClaimed, canSaveApartment, apartmentSnapshotReady,
               let token = loadedToken, let secret = apartmentSecretStore.secret,
               let apartment = UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-        // Claim mutation ownership before closing the sheet/draining Auto so repeat taps cannot race.
+        apartmentPopupWriteClaimed = true
         mutationInProgress = true
         isApartmentSheetPresented = false
+        await stopApartmentPresenceWatch(invalidate: false)
+        guard apartmentPresenceVerdict == .present, apartmentSnapshotReady,
+              let current = loadedToken, sameApartmentSnapshot(token, current),
+              apartmentPopupSnapshot.map({ sameApartmentSnapshot($0, current) }) == true else {
+            mutationInProgress = false
+            clearLoadedTokenForRefresh()
+            state = .failed("Token presence or snapshot could not be confirmed. Tap Detect before continuing.")
+            resumeAutoScanningAfterMutation()
+            apartmentPopupWriteClaimed = false
+            return
+        }
         await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment, alreadyClaimed: true)
+        apartmentPopupWriteClaimed = false
+    }
+
+    private func sameApartmentSnapshot(_ lhs: Token, _ rhs: Token) -> Bool {
+        lhs.block3 == rhs.block3 && lhs.block4 == rhs.block4 && lhs.block5 == rhs.block5 && lhs.block6 == rhs.block6
+    }
+
+    private func startApartmentPresenceWatch() {
+        apartmentPopupGeneration += 1
+        let generation = apartmentPopupGeneration
+        apartmentPopupSnapshot = loadedToken
+        apartmentPresenceVerdict = nil
+        apartmentPresenceTask?.cancel()
+        apartmentPresenceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.isApartmentSheetPresented, self.apartmentPopupGeneration == generation else { return }
+                let outcome = await self.device.measureTokenPresence()
+                guard !Task.isCancelled, self.apartmentPopupGeneration == generation,
+                      self.isApartmentSheetPresented || self.apartmentPopupWriteClaimed else { return }
+                self.apartmentPresenceVerdict = outcome
+                switch outcome {
+                case .present: break
+                case .absent:
+                    await self.abortApartmentPopup(generation: generation, message: Self.noChipMessage)
+                    return
+                case .failure(let error):
+                    if self.apartmentPopupWriteClaimed {
+                        await self.abortApartmentPopup(generation: generation, message: "Token presence could not be confirmed: \\(error)")
+                        return
+                    }
+                }
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            }
+        }
+    }
+
+    private func abortApartmentPopup(generation: Int, message: String) async {
+        guard apartmentPopupGeneration == generation else { return }
+        apartmentPopupGeneration += 1
+        apartmentPresenceTask = nil
+        isApartmentSheetPresented = false
+        editingApartment = false
+        apartmentSnapshotReady = false
+        apartmentNumber = nil
+        apartmentInput = ""
+        clearLoadedTokenForRefresh()
+        state = .noChip
+        self.message = message
+        // A charge popup is aborted, never translated into Skip/charge.
+        autoWasPausedForMutation = false
+        mutationNeedsPostWriteRefresh = false
+        isAutoScanning = false
+        autoScanTask?.cancel()
+        autoScanTask = nil
+    }
+
+    private func stopApartmentPresenceWatch(invalidate: Bool) async {
+        if invalidate { apartmentPopupGeneration += 1 }
+        let task = apartmentPresenceTask
+        apartmentPresenceTask = nil
+        await task?.value
     }
 
     private func apartmentSecretDidChange(_ secret: String?) async {
@@ -429,6 +510,7 @@ public final class RidesViewModel: ObservableObject {
     private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool, alreadyClaimed: Bool = false) async {
         if !alreadyClaimed { mutationInProgress = true }
         await pauseAutoScanningForMutation()
+        if !includeCharge { mutationNeedsPostWriteRefresh = false }
         let aptBlock = ApartmentBlockCodec.encode(secret: secret, block3: token.blocks[3], apartment: apartment)
         let desired = includeCharge ? pendingRides : nil
         let chargeAt = Date(), initial = currentRides
@@ -447,7 +529,7 @@ public final class RidesViewModel: ObservableObject {
                 currentRides = pendingRides
             }
             state = .known(updated); message = includeCharge ? "Charge successful." : "Apartment saved."
-            if mutationNeedsPostWriteRefresh { await refreshAfterMutation() }
+            if mutationNeedsPostWriteRefresh && includeCharge { await refreshAfterMutation() }
         case .failure(let error): state = .failed(error); message = error
         case .requiresRefresh(let error): clearLoadedTokenForRefresh(); state = .failed(error); message = error
         }
