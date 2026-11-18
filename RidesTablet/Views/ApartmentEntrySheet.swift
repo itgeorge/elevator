@@ -48,6 +48,7 @@ struct ApartmentEntrySheet: View {
         .padding(22)
         .presentationDetents([.height(520), .medium])
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled()
     }
 
     private func key(_ digit: String) -> some View {
