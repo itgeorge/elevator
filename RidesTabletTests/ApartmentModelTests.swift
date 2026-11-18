@@ -72,6 +72,16 @@ final class ApartmentModelTests: XCTestCase {
         XCTAssertNil(context.model.apartmentNumber)
     }
 
+    func testNormalChargeStoresKnownApartmentSnapshot() async throws {
+        let context = try await makeModel(secret: secret, apartment: 17)
+        defer { try? FileManager.default.removeItem(at: context.directory) }
+        context.model.adjustRides(by: 10)
+        await context.model.requestCharge()
+        XCTAssertFalse(context.model.isApartmentSheetPresented)
+        XCTAssertEqual(context.model.completedCharges.first?.apartmentNumber, 17)
+        XCTAssertEqual(context.fake.writeRideMirrorsCallCount, 1)
+    }
+
     func testSavingApartmentAndChargeUsesOnePhysicalWriteAndOneHistoryEntry() async throws {
         let context = try await makeModel(secret: secret)
         defer { try? FileManager.default.removeItem(at: context.directory) }
@@ -90,6 +100,47 @@ final class ApartmentModelTests: XCTestCase {
         XCTAssertEqual(ApartmentBlockCodec.decode(secret: secret,
                                                    block3: try XCTUnwrap(context.model.loadedToken).blocks[3],
                                                    block4: try XCTUnwrap(context.model.loadedToken).block4)?.apartment, 42)
+    }
+
+    func testHeldApartmentSaveDismissesAndBlocksDuplicateActions() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentHeldWrite-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let token = Token.sample(rideCount: 73)
+        let device = HeldApartmentWriteDevice(token: token)
+        let model = RidesViewModel(device: device, sessionStore: FileChargeSessionStore(directory: directory),
+                                   apartmentSecretStore: ApartmentSecretStore(secret: secret))
+        await model.detect()
+        model.adjustRides(by: 10)
+        model.toggleAutoScanning()
+        XCTAssertTrue(model.isAutoScanning)
+        await model.requestCharge()
+        model.apartmentInput = "42"
+
+        let saveTask = Task { await model.saveApartmentEntry() }
+        await device.waitUntilWriteStarts()
+        XCTAssertFalse(model.isApartmentSheetPresented)
+        XCTAssertTrue(model.isBusy)
+        XCTAssertFalse(model.isAutoScanning)
+
+        await model.saveApartmentEntry()
+        await model.dismissApartmentEntry()
+        await model.cancelApartmentEntry()
+        let writesWhileHeld = await device.writeCount
+        XCTAssertEqual(writesWhileHeld, 1)
+        XCTAssertFalse(model.isAutoScanning)
+        XCTAssertTrue(model.completedCharges.isEmpty)
+
+        await device.completeWrite()
+        await saveTask.value
+        XCTAssertTrue(model.isAutoScanning)
+        XCTAssertFalse(model.isBusy)
+        XCTAssertEqual(model.completedCharges.count, 1)
+        XCTAssertEqual(model.completedCharges.first?.apartmentNumber, 42)
+        XCTAssertEqual(model.activeChargeSession?.charges.count, 1)
+        XCTAssertEqual(try XCTUnwrap(model.loadedToken).rideCount, model.currentRides)
+        let finalWrites = await device.writeCount
+        XCTAssertEqual(finalWrites, 1)
+        model.stopAutoScanning()
     }
 
     func testEditingPrefilledApartmentSavesOnlyApartmentAndPreservesPendingRides() async throws {
@@ -242,5 +293,40 @@ final class ApartmentModelTests: XCTestCase {
         let sessionStore: FileChargeSessionStore
         let secretStore: ApartmentSecretStore
         let directory: URL
+    }
+}
+
+private actor HeldApartmentWriteDevice: RideTokenDevice {
+    private let token: Token
+    private var writeContinuation: CheckedContinuation<WriteOutcome, Never>?
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var didStart = false
+    private(set) var writeCount = 0
+
+    init(token: Token) { self.token = token }
+
+    func scan() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
+    func scanForApartmentSnapshot() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
+    func measureCalibrationSignal() async -> CalibrationSignalOutcome { .measured(millivolts: 420, chipPresent: true) }
+    func measureSignal() async -> TuneOutcome { .measured(millivolts: 420) }
+    func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome { .failure("Unexpected ride-only write") }
+    func reset(_ request: ResetMutationRequest) async -> ResetOutcome { .failure("Unexpected reset") }
+
+    func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome {
+        writeCount += 1
+        didStart = true
+        startedContinuation?.resume()
+        startedContinuation = nil
+        return await withCheckedContinuation { writeContinuation = $0 }
+    }
+
+    func waitUntilWriteStarts() async {
+        if didStart { return }
+        await withCheckedContinuation { startedContinuation = $0 }
+    }
+
+    func completeWrite() {
+        writeContinuation?.resume(returning: .success)
+        writeContinuation = nil
     }
 }
