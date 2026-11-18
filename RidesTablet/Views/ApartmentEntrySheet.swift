@@ -103,7 +103,6 @@ struct ApartmentEntrySheet: View {
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
                 .environment(\.colorScheme, .light)
                 .padding(16)
-                .accessibilityIdentifier("apartment-entry-modal")
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
