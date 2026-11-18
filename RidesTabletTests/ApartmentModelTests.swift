@@ -146,8 +146,28 @@ final class ApartmentModelTests: XCTestCase {
         model.stopAutoScanning()
     }
 
+    func testLateOldPresenceGenerationCannotInvalidateFreshPopup() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentGeneration-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let device = HeldApartmentWriteDevice(token: .sample(rideCount: 73), holdPresence: true)
+        let model = RidesViewModel(device: device, sessionStore: FileChargeSessionStore(directory: directory), apartmentSecretStore: ApartmentSecretStore(secret: secret))
+        await model.performPrimaryAction(); await model.performPrimaryAction(); await model.detect()
+        await model.editApartment()
+        await device.waitUntilPresenceStarts()
+        model.stopAutoScanning() // Invalidates the old generation without awaiting its native probe.
+        await model.detect()
+        await model.editApartment()
+        let presenceCalls = await device.waitForPresenceCalls(2)
+        XCTAssertEqual(presenceCalls, 2)
+        XCTAssertTrue(model.isApartmentSheetPresented)
+        await device.completePresence(.absent)
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertTrue(model.isApartmentSheetPresented, "Late absence from the prior popup must not touch the fresh generation")
+        await model.cancelApartmentEntry()
+    }
+
     func testAbsentPresenceArrivingWhileSaveIsDrainingPreventsWrite() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentHeldPresence-\\(UUID().uuidString)")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentHeldPresence-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
         let device = HeldApartmentWriteDevice(token: .sample(rideCount: 73), holdPresence: true)
         let model = RidesViewModel(device: device, sessionStore: FileChargeSessionStore(directory: directory), apartmentSecretStore: ApartmentSecretStore(secret: secret))
@@ -212,6 +232,33 @@ final class ApartmentModelTests: XCTestCase {
         backgroundContext.model.stopAutoScanning()
         XCTAssertFalse(backgroundContext.model.isApartmentSheetPresented)
         XCTAssertNil(backgroundContext.model.loadedToken)
+    }
+
+    func testApartmentOnlyAutoOnAndOffNeverPostscan() async throws {
+        for autoEnabled in [false, true] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentAuto-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let secretStore = ApartmentSecretStore(secret: secret)
+            var blocks = Token.sample(rideCount: 73).blocks
+            blocks[4] = ApartmentBlockCodec.encode(secret: secret, block3: blocks[3], apartment: 17)
+            let token = Token(blocks: blocks, rideCount: 73, sequence: .mercury)
+            let fake = FakeProxmark(detect: .noChip, tune: .measured(millivolts: 18_000), read: .known(token))
+            let model = RidesViewModel(device: fake, sessionStore: FileChargeSessionStore(directory: directory), autoScanInterval: 60, apartmentSecretStore: secretStore)
+            await model.performPrimaryAction()
+            fake.set(detect: .detected, tune: .measured(millivolts: 420))
+            await model.performPrimaryAction()
+            await model.detect()
+            if autoEnabled { model.toggleAutoScanning() }
+            let scansBeforeEdit = fake.scanCallCount
+            await model.editApartment()
+            model.apartmentInput = "18"
+            await model.saveApartmentEntry()
+            XCTAssertEqual(fake.scanCallCount, scansBeforeEdit, "Apartment-only save must not force a post-write scan; Auto: \(autoEnabled)")
+            XCTAssertEqual(model.isAutoScanning, autoEnabled)
+            XCTAssertEqual(model.pendingRides, model.currentRides)
+            XCTAssertTrue(model.completedCharges.isEmpty)
+            if autoEnabled { model.stopAutoScanning() }
+        }
     }
 
     func testEditingPrefilledApartmentSavesOnlyApartmentAndPreservesPendingRides() async throws {
@@ -377,13 +424,16 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
     private var presenceContinuation: CheckedContinuation<TokenPresenceOutcome, Never>?
     private var presenceStartedContinuation: CheckedContinuation<Void, Never>?
     private var presenceStarted = false
+    private var presenceCallCount = 0
+    private var heldPresenceReleased = false
     private(set) var writeCount = 0
 
     init(token: Token, holdPresence: Bool = false) { self.token = token; self.holdPresence = holdPresence }
 
     func scan() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func measureTokenPresence() async -> TokenPresenceOutcome {
-        guard holdPresence else { return .present }
+        presenceCallCount += 1
+        guard holdPresence, !heldPresenceReleased else { return .present }
         presenceStarted = true
         presenceStartedContinuation?.resume(); presenceStartedContinuation = nil
         return await withCheckedContinuation { presenceContinuation = $0 }
@@ -392,7 +442,15 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
         if presenceStarted { return }
         await withCheckedContinuation { presenceStartedContinuation = $0 }
     }
-    func completePresence(_ outcome: TokenPresenceOutcome) { presenceContinuation?.resume(returning: outcome); presenceContinuation = nil }
+    func waitForPresenceCalls(_ count: Int) async -> Int {
+        for _ in 0..<10_000 where presenceCallCount < count { await Task.yield() }
+        return presenceCallCount
+    }
+    func completePresence(_ outcome: TokenPresenceOutcome) {
+        heldPresenceReleased = true
+        presenceContinuation?.resume(returning: outcome)
+        presenceContinuation = nil
+    }
     func scanForApartmentSnapshot() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome {
         calibrationSamples += 1
