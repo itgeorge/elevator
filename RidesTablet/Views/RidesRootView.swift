@@ -192,7 +192,16 @@ struct RidesRootView: View {
             return
         }
         if ridesModel == nil || force {
-            ridesModel = RidesViewModel(device: device, configuration: .load())
+            let model = RidesViewModel(device: device, configuration: .load())
+            ridesModel = model
+#if DEBUG
+            Task { @MainActor in
+                await RidesUIPhysicalAcceptanceCoordinator.bootstrap(model: model)
+                if let client = connection.physicalAcceptanceClient() {
+                    await RidesUIPhysicalAcceptanceCoordinator.run(model: model, client: client)
+                }
+            }
+#endif
         }
     }
 

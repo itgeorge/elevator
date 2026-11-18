@@ -227,6 +227,14 @@ public final class BridgeConnectionModel: ObservableObject {
         return NetworkRideTokenDevice(client: client)
     }
 
+#if DEBUG
+    /// Available only to an explicitly opted-in physical acceptance run.
+    func physicalAcceptanceClient() -> BridgeClient? {
+        guard ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_ACCEPTANCE"] == "1" else { return nil }
+        return client
+    }
+#endif
+
     /// Forget is available for either the live bearer or a credential that is still in storage,
     /// including while Bonjour is relocating the live client.
     public var hasPairingToForget: Bool {
