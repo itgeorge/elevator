@@ -219,11 +219,13 @@ final class AutoScanUITests: XCTestCase {
     }
 
     func testApartmentSessionsAndConfirmationScreenshots() {
-        launchScene("apartment-history")
+        launchScene("apartment-history", orientation: .portrait)
         attachScreenshot("main-apt-history-portrait")
-        XCUIDevice.shared.orientation = .landscapeLeft
+        launchScene("apartment-history", orientation: .landscapeLeft)
+        XCTAssertTrue(waitForLandscapeLayout())
         attachScreenshot("main-apt-history-landscape")
-        XCUIDevice.shared.orientation = .portrait
+        launchScene("apartment-history", orientation: .portrait)
+        XCTAssertTrue(waitForPortraitLayout())
 
         let load = app.buttons["load-charge-session"]
         XCTAssertTrue(load.waitForExistence(timeout: 15))
@@ -254,11 +256,18 @@ final class AutoScanUITests: XCTestCase {
     }
 
     func testApartmentChargeAndEditKeypadScreenshotsAndSave() {
-        launchScene("apartment-charge")
+        launchScene("apartment-charge", orientation: .portrait)
         let chargeInput = app.staticTexts["apartment-number-input"]
         XCTAssertTrue(chargeInput.waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["Skip"].exists)
-        attachScreenshot("apartment-charge-keypad-skip")
+        attachScreenshot("apartment-charge-keypad-skip-portrait")
+        launchScene("apartment-charge", orientation: .landscapeLeft)
+        let landscapeChargeInput = app.staticTexts["apartment-number-input"]
+        XCTAssertTrue(landscapeChargeInput.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLandscapeLayout())
+        attachScreenshot("apartment-charge-keypad-skip-landscape")
+        launchScene("apartment-charge", orientation: .portrait)
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 10))
         for digit in ["5", "2"] { app.buttons["apartment-key-\(digit)"].tap() }
         app.buttons["Save"].tap()
 
@@ -267,7 +276,13 @@ final class AutoScanUITests: XCTestCase {
         apartment.tap()
         XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Skip"].exists)
-        attachScreenshot("apartment-edit-keypad-no-skip")
+        attachScreenshot("apartment-edit-keypad-no-skip-portrait")
+        launchScene("apartment-edit", orientation: .landscapeLeft)
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLandscapeLayout())
+        XCTAssertFalse(app.buttons["Skip"].exists)
+        attachScreenshot("apartment-edit-keypad-no-skip-landscape")
+        XCUIDevice.shared.orientation = .portrait
         app.buttons["Cancel"].tap()
 
         attachScreenshot("apartment-after-save")
@@ -288,11 +303,33 @@ final class AutoScanUITests: XCTestCase {
         attachScreenshot("connection-apartment-secret-settings")
     }
 
-    private func launchScene(_ scene: String) {
+    private func launchScene(_ scene: String, orientation: UIDeviceOrientation = .portrait) {
         app.terminate()
+        XCUIDevice.shared.orientation = orientation
+        Thread.sleep(forTimeInterval: 0.5)
         app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
         app.launchEnvironment["RIDES_SCREENSHOT_SCENE"] = scene
         app.launch()
+    }
+
+    private func waitForLandscapeLayout(timeout: TimeInterval = 8) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let frame = app.windows.firstMatch.frame
+            if frame.width > frame.height { return true }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return false
+    }
+
+    private func waitForPortraitLayout(timeout: TimeInterval = 8) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let frame = app.windows.firstMatch.frame
+            if frame.height > frame.width { return true }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return false
     }
 
     private func attachScreenshot(_ name: String) {
