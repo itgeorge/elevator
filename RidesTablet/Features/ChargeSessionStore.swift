@@ -6,6 +6,10 @@ public struct ChargeSession: Codable, Equatable, Identifiable, Sendable {
     public var updatedAt: Date
     public var charges: [CompletedCharge]
 
+    /// True first-charge time, or the provisional creation time while this session is empty.
+    /// `createdAt` remains unchanged on disk for backward compatibility; start time is derived.
+    public var startedAt: Date { charges.map(\.timestamp).min() ?? createdAt }
+
     public init(id: UUID = UUID(), createdAt: Date = Date(), updatedAt: Date? = nil, charges: [CompletedCharge] = []) {
         self.id = id
         self.createdAt = createdAt
@@ -78,7 +82,7 @@ public final class FileChargeSessionStore {
             }
         }
         return sessions.sorted {
-            if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+            if $0.startedAt != $1.startedAt { return $0.startedAt > $1.startedAt }
             return $0.id.uuidString > $1.id.uuidString
         }
     }

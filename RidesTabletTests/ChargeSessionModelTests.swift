@@ -8,13 +8,17 @@ final class ChargeSessionModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = FileChargeSessionStore(directory: directory)
         let model = RidesViewModel(device: FakeProxmark(), sessionStore: store)
+        XCTAssertFalse(model.canStartNewSession)
         await model.detect()
+        XCTAssertFalse(model.canStartNewSession)
         model.adjustRides(by: 10)
         await model.charge()
         let originalSession = try XCTUnwrap(model.activeChargeSession)
         let token = model.loadedToken
+        XCTAssertTrue(model.canStartNewSession)
 
         model.startNewChargeSession()
+        XCTAssertFalse(model.canStartNewSession)
 
         XCTAssertTrue(model.completedCharges.isEmpty)
         XCTAssertNotEqual(model.activeChargeSession?.id, originalSession.id)

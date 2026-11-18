@@ -10,8 +10,12 @@ public struct CompletedCharge: Codable, Equatable, Identifiable, Sendable {
     public let addedRides: Int
     public let totalRides: UInt
     public let amountEUR: Decimal
+    /// Apartment recorded from the charge-time token snapshot; nil means unknown or unavailable.
+    public let apartmentNumber: UInt8?
 
-    public init(timestamp: Date, sequence: RideSequence, initialRides: UInt, addedRides: Int, totalRides: UInt, amountEUR: Decimal) {
+    private enum CodingKeys: String, CodingKey { case id, timestamp, sequence, initialRides, addedRides, totalRides, amountEUR, apartmentNumber }
+
+    public init(timestamp: Date, sequence: RideSequence, initialRides: UInt, addedRides: Int, totalRides: UInt, amountEUR: Decimal, apartmentNumber: UInt8? = nil) {
         self.id = UUID()
         self.timestamp = timestamp
         self.sequence = sequence
@@ -19,6 +23,19 @@ public struct CompletedCharge: Codable, Equatable, Identifiable, Sendable {
         self.addedRides = addedRides
         self.totalRides = totalRides
         self.amountEUR = amountEUR
+        self.apartmentNumber = apartmentNumber
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        timestamp = try values.decode(Date.self, forKey: .timestamp)
+        sequence = try values.decode(RideSequence.self, forKey: .sequence)
+        initialRides = try values.decode(UInt.self, forKey: .initialRides)
+        addedRides = try values.decode(Int.self, forKey: .addedRides)
+        totalRides = try values.decode(UInt.self, forKey: .totalRides)
+        amountEUR = try values.decode(Decimal.self, forKey: .amountEUR)
+        apartmentNumber = try values.decodeIfPresent(UInt8.self, forKey: .apartmentNumber)
     }
 }
 
@@ -205,8 +222,12 @@ public final class RidesViewModel: ObservableObject {
         catch { sessionError = "Could not list charge sessions: \(error.localizedDescription)" }
     }
 
+    public var canStartNewSession: Bool {
+        chargeSessionStore != nil && activeChargeSession != nil && !completedCharges.isEmpty && !isBusy
+    }
+
     public func startNewChargeSession() {
-        guard !isBusy, let store = chargeSessionStore else { return }
+        guard canStartNewSession, let store = chargeSessionStore else { return }
         do {
             try persistActiveSession()
             let session = try store.createSession()
@@ -329,12 +350,32 @@ public final class RidesViewModel: ObservableObject {
         await pauseAutoScanningForMutation()
     }
 
-    public func cancelApartmentEntry() async { isApartmentSheetPresented = false; resumeAutoScanningAfterMutation() }
-    public func skipApartmentEntry() async { isApartmentSheetPresented = false; await charge() }
+    public func cancelApartmentEntry() async {
+        guard isApartmentSheetPresented, !mutationInProgress else { return }
+        isApartmentSheetPresented = false
+        resumeAutoScanningAfterMutation()
+    }
+
+    public func skipApartmentEntry() async {
+        guard isApartmentSheetPresented, !mutationInProgress, !editingApartment else { return }
+        isApartmentSheetPresented = false
+        await charge()
+    }
+
+    /// Routes an interactive/outside dismissal through the same Cancel (edit) or Skip (charge) behavior.
+    public func dismissApartmentEntry() async {
+        guard isApartmentSheetPresented, !mutationInProgress else { return }
+        if editingApartment { await cancelApartmentEntry() } else { await skipApartmentEntry() }
+    }
+
     public func saveApartmentEntry() async {
-        guard canSaveApartment, apartmentSnapshotReady, let token = loadedToken, let secret = apartmentSecretStore.secret,
+        guard isApartmentSheetPresented, !mutationInProgress, canSaveApartment, apartmentSnapshotReady,
+              let token = loadedToken, let secret = apartmentSecretStore.secret,
               let apartment = UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-        await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment)
+        // Claim mutation ownership before closing the sheet/draining Auto so repeat taps cannot race.
+        mutationInProgress = true
+        isApartmentSheetPresented = false
+        await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment, alreadyClaimed: true)
     }
 
     private func apartmentSecretDidChange(_ secret: String?) async {
@@ -385,8 +426,8 @@ public final class RidesViewModel: ObservableObject {
     }
 
 
-    private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool) async {
-        mutationInProgress = true
+    private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool, alreadyClaimed: Bool = false) async {
+        if !alreadyClaimed { mutationInProgress = true }
         await pauseAutoScanningForMutation()
         let aptBlock = ApartmentBlockCodec.encode(secret: secret, block3: token.blocks[3], apartment: apartment)
         let desired = includeCharge ? pendingRides : nil
@@ -401,7 +442,7 @@ public final class RidesViewModel: ObservableObject {
             loadedToken = updated; apartmentNumber = apartment; isApartmentSheetPresented = false
             if includeCharge {
                 let delta = Int(pendingRides) - Int(initial)
-                completedCharges.insert(CompletedCharge(timestamp: chargeAt, sequence: token.sequence, initialRides: initial, addedRides: delta, totalRides: pendingRides, amountEUR: Decimal(delta) * configuration.pricePerRideEUR), at: 0)
+                completedCharges.insert(CompletedCharge(timestamp: chargeAt, sequence: token.sequence, initialRides: initial, addedRides: delta, totalRides: pendingRides, amountEUR: Decimal(delta) * configuration.pricePerRideEUR, apartmentNumber: apartment), at: 0)
                 saveCompletedCharges()
                 currentRides = pendingRides
             }
@@ -912,7 +953,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func charge() async {
-        guard canCharge, apartmentSecretStore.secret == nil || apartmentSnapshotReady else { return }
+        guard !mutationInProgress, canCharge, apartmentSecretStore.secret == nil || apartmentSnapshotReady else { return }
         mutationInProgress = true
         await pauseAutoScanningForMutation()
         guard hasRideChange, let token = loadedToken else {
@@ -938,7 +979,8 @@ public final class RidesViewModel: ObservableObject {
                 initialRides: initialRides,
                 addedRides: addedRides,
                 totalRides: desiredRides,
-                amountEUR: amountEUR
+                amountEUR: amountEUR,
+                apartmentNumber: apartmentNumber
             )
             completedCharges.insert(charge, at: 0)
             saveCompletedCharges()

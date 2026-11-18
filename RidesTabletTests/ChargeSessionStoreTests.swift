@@ -72,6 +72,27 @@ final class ChargeSessionStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), Data("not json".utf8))
     }
 
+    func testStartedAtUsesEarliestChargeAndSortingUsesActualStart() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let old = ChargeSession(createdAt: Date(timeIntervalSince1970: 300), charges: [
+            makeCharge(at: Date(timeIntervalSince1970: 250)), makeCharge(at: Date(timeIntervalSince1970: 100))
+        ])
+        let newer = ChargeSession(createdAt: Date(timeIntervalSince1970: 200), charges: [makeCharge(at: Date(timeIntervalSince1970: 220))])
+        try store.save(old); try store.save(newer)
+        XCTAssertEqual(old.startedAt, Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(try store.listSessions().map(\.id), [newer.id, old.id])
+    }
+
+    func testLegacyChargeJSONWithoutApartmentDecodesAsNil() throws {
+        let charge = makeCharge(at: Date(timeIntervalSince1970: 123))
+        let encoded = try JSONEncoder().encode(charge)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "apartmentNumber")
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+        XCTAssertNil(try JSONDecoder().decode(CompletedCharge.self, from: legacy).apartmentNumber)
+    }
+
     func testMissingRequestedSessionThrows() throws {
         let (store, directory) = makeStore()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -84,8 +105,8 @@ final class ChargeSessionStoreTests: XCTestCase {
         return (FileChargeSessionStore(directory: directory), directory)
     }
 
-    private func makeCharge(rides: Int, amount: Decimal) -> CompletedCharge {
-        CompletedCharge(timestamp: Date(), sequence: .mercury, initialRides: 0,
+    private func makeCharge(rides: Int = 10, amount: Decimal = Decimal(string: "0.30")!, at: Date = Date()) -> CompletedCharge {
+        CompletedCharge(timestamp: at, sequence: .mercury, initialRides: 0,
                         addedRides: rides, totalRides: UInt(rides), amountEUR: amount)
     }
 }

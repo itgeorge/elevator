@@ -32,6 +32,28 @@ final class ApartmentModelTests: XCTestCase {
         XCTAssertTrue(context.model.completedCharges.isEmpty)
     }
 
+    func testOutsideDismissCancelsEditAndSkipsChargeExactlyOnce() async throws {
+        let edit = try await makeModel(secret: secret, apartment: 17)
+        defer { try? FileManager.default.removeItem(at: edit.directory) }
+        edit.model.adjustRides(by: 10)
+        let pending = edit.model.pendingRides
+        await edit.model.editApartment()
+        await edit.model.dismissApartmentEntry()
+        await edit.model.dismissApartmentEntry()
+        XCTAssertEqual(edit.model.pendingRides, pending)
+        XCTAssertTrue(edit.model.completedCharges.isEmpty)
+        XCTAssertEqual(edit.fake.writeCallCount, 0)
+
+        let charge = try await makeModel(secret: secret)
+        defer { try? FileManager.default.removeItem(at: charge.directory) }
+        charge.model.adjustRides(by: 10)
+        await charge.model.requestCharge()
+        await charge.model.dismissApartmentEntry()
+        await charge.model.dismissApartmentEntry()
+        XCTAssertEqual(charge.fake.writeRideMirrorsCallCount, 1)
+        XCTAssertEqual(charge.model.completedCharges.count, 1)
+    }
+
     func testSkippingApartmentPerformsOneChargeAndPersistsOneHistoryEntry() async throws {
         let context = try await makeModel(secret: secret)
         defer { try? FileManager.default.removeItem(at: context.directory) }
@@ -43,6 +65,7 @@ final class ApartmentModelTests: XCTestCase {
         XCTAssertEqual(context.fake.writeCallCount, 1)
         XCTAssertEqual(context.fake.lastWrittenToken?.rideCount, context.model.currentRides)
         XCTAssertEqual(context.model.completedCharges.count, 1)
+        XCTAssertNil(context.model.completedCharges.first?.apartmentNumber)
         XCTAssertEqual(try XCTUnwrap(context.model.activeChargeSession).charges.count, 1)
         XCTAssertEqual(try context.sessionStore.loadActiveSession().charges.count, 1)
         XCTAssertNil(context.model.apartmentNumber)
@@ -60,6 +83,7 @@ final class ApartmentModelTests: XCTestCase {
         XCTAssertEqual(context.fake.writeRideMirrorsCallCount, 0)
         XCTAssertEqual(context.fake.lastWrittenToken?.rideCount, context.model.currentRides)
         XCTAssertEqual(context.model.apartmentNumber, 42)
+        XCTAssertEqual(context.model.completedCharges.first?.apartmentNumber, 42)
         XCTAssertEqual(context.model.completedCharges.count, 1)
         XCTAssertEqual(try context.sessionStore.loadActiveSession().charges.count, 1)
         XCTAssertEqual(ApartmentBlockCodec.decode(secret: secret,
