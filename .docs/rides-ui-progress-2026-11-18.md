@@ -10,4 +10,5 @@
 - Normal Debug app build succeeded, installed, and launched on the iPad with `--terminate-existing` and no test environment. Build log: `/tmp/rides-ui-final-normal-build.log`. Bridge server left running. App is expected to require calibration and secret reentry.
 - Mac test-client credential was revoked and removed locally; iPad credential was not revoked. No credentials or raw token backup committed.
 - Compact evidence receipt: `.docs/rides-ui-e2e-2026-11-18.json`; see it and README for screenshot links/provenance.
-- Simulator final 269-unit + 13-UI suite remains owned by the separate simulator agent; its result is intentionally not claimed here.
+- Final simulator suite completed: 269 unit + 13 UI tests, 0 failures, 2 expected physical-only UI skips. Log: `/tmp/rides-ui-final-simulator/combined-tests-final.log`; result bundle: `/tmp/rides-ui-visual-build/Logs/Test/Test-RidesTablet-2026.11.18_21-51-48-+0200.xcresult`.
+- Reviewed the simulator apartment keypad evidence: empty input has no placeholder; invalid 256 shows the small red 0–255 range error, Save disabled, and full footer visible. Images are committed alongside physical screenshots. Fixture fix `2d16850` integrated as `bd006f7` is DEBUG fake-reader-only, with no runtime app changes.

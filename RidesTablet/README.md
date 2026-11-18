@@ -68,7 +68,7 @@ SIMCTL_CHILD_RIDES_SCREENSHOT_SCENE=known \
 
 ## Physical iPad evidence (18 Nov 2026)
 
-The real-device PM3/bridge acceptance run, decoded final token read, copied session-file proof, and provenance are recorded in [the physical E2E receipt](../.docs/rides-ui-e2e-2026-11-18.json). Selected un-cropped XCTest attachments are in [`Screenshots/ui-2026-11-18`](Screenshots/ui-2026-11-18); the landscape capture is losslessly rotated to upright native 2360×1640 orientation (raw export retained outside the repository). This evidence is from an iPad Air 4 with the physical bridge/PM3, not the simulator fixture path.
+The real-device PM3/bridge acceptance run, decoded final token read, copied session-file proof, and provenance are recorded in [the physical E2E receipt](../.docs/rides-ui-e2e-2026-11-18.json). Selected un-cropped XCTest attachments are in [`Screenshots/ui-2026-11-18`](Screenshots/ui-2026-11-18); the landscape capture is losslessly rotated to upright native 2360×1640 orientation (raw export retained outside the repository). This evidence is from an iPad Air 4 with the physical bridge/PM3, not the simulator fixture path. Final simulator validation also passed (269 unit + 13 UI tests, 0 failures, 2 expected physical-only skips); the empty apartment input and invalid-256 states are shown in [`simulator-apartment-empty-input.png`](Screenshots/ui-2026-11-18/simulator-apartment-empty-input.png) and [`simulator-apartment-invalid-256.png`](Screenshots/ui-2026-11-18/simulator-apartment-invalid-256.png). Full results are in the receipt above.
 
 ## Simulation scenarios (DEBUG fake reader only)
 

@@ -44,7 +44,9 @@
       "physical-secret-fields.png",
       "physical-session-picker.png",
       "physical-reopened-active-session.png",
-      "physical-calibration-confirmation.png"
+      "physical-calibration-confirmation.png",
+      "simulator-apartment-empty-input.png",
+      "simulator-apartment-invalid-256.png"
     ]
   },
   "normalDebugDeployment": {
@@ -54,7 +56,18 @@
     "installedAndLaunched": true,
     "launch": "devicectl --terminate-existing, no test launch environment",
     "server": "left running",
-    "simulatorFinalSuite": "not claimed; separate simulator agent owns that run"
+    "simulatorFinalSuite": {
+      "result": "passed",
+      "unitTests": 269,
+      "uiTests": 13,
+      "failures": 0,
+      "expectedUISkips": 2,
+      "physicalOnlySkips": "read-only physical reader smoke and physical writes; expected on simulator",
+      "log": "/tmp/rides-ui-final-simulator/combined-tests-final.log",
+      "resultBundle": "/tmp/rides-ui-visual-build/Logs/Test/Test-RidesTablet-2026.11.18_21-51-48-+0200.xcresult",
+      "screenshotReview": "empty input has no placeholder; 256 shows small red 0–255 range error, Save disabled, full footer visible",
+      "fixtureFix": "2d16850 integrated as bd006f7; DEBUG fake-reader fixture only, no runtime app change"
+    }
   },
   "credentialCleanup": "Mac test client revoke and local credential removal performed after verification"
 }
