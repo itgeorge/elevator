@@ -9,9 +9,9 @@ struct ApartmentEntrySheet: View {
     private let digits = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]]
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 9) {
             HStack {
-                Text("Apartment #").font(.title2.bold())
+                Text("Apartment #").font(.title3.bold())
                 Spacer()
                 Button { Task { await model.cancelApartmentEntry() } } label: {
                     Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(.secondary)
@@ -19,34 +19,34 @@ struct ApartmentEntrySheet: View {
                 .accessibilityLabel("Cancel apartment entry")
             }
             Text(model.apartmentInput.isEmpty ? "Enter 0–255" : model.apartmentInput)
-                .font(.system(size: 42, weight: .semibold, design: .rounded).monospacedDigit())
-                .frame(maxWidth: .infinity, minHeight: 58)
+                .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
+                .frame(maxWidth: .infinity, minHeight: 48)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityIdentifier("apartment-number-input")
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 ForEach(digits, id: \.self) { row in
                     HStack(spacing: 8) { ForEach(row, id: \.self) { digit in key(digit) } }
                 }
                 HStack(spacing: 8) {
-                    Color.clear.frame(maxWidth: .infinity, minHeight: 54)
+                    Color.clear.frame(maxWidth: .infinity, minHeight: 42)
                     key("0")
                     Button { if !model.apartmentInput.isEmpty { model.apartmentInput.removeLast() } } label: {
-                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: 54)
+                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: 42)
                     }.buttonStyle(.bordered).accessibilityLabel("Backspace")
                 }
             }
             HStack {
-                Button("Cancel") { Task { await model.cancelApartmentEntry() } }.buttonStyle(.bordered)
+                Button("Cancel") { Task { await model.cancelApartmentEntry() } }.buttonStyle(.bordered).frame(minHeight: 40)
                 Spacer()
                 if allowsSkip {
-                    Button("Skip") { Task { await model.skipApartmentEntry() } }.buttonStyle(.bordered)
+                    Button("Skip") { Task { await model.skipApartmentEntry() } }.buttonStyle(.bordered).frame(minHeight: 40)
                 }
                 Button("Save") { Task { await model.saveApartmentEntry() } }
-                    .buttonStyle(.borderedProminent).disabled(!model.canSaveApartment)
+                    .buttonStyle(.borderedProminent).frame(minHeight: 40).disabled(!model.canSaveApartment)
             }
         }
-        .padding(22)
-        .presentationDetents([.height(520), .medium])
+        .padding(16)
+        .presentationDetents([.height(460), .medium])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled()
     }
@@ -57,7 +57,7 @@ struct ApartmentEntrySheet: View {
             let next = model.apartmentInput + digit
             if let value = Int(next), value <= 255 { model.apartmentInput = next }
         } label: {
-            Text(digit).font(.title2.weight(.medium)).frame(maxWidth: .infinity, minHeight: 54)
+            Text(digit).font(.title3.weight(.medium)).frame(maxWidth: .infinity, minHeight: 42)
         }
         .buttonStyle(.bordered)
         .accessibilityLabel(digit)

@@ -9,6 +9,7 @@ public enum SimulatorScreenshotScene: String, Equatable, Sendable {
     case noChip = "no-chip"
     case calibrated
     case apartment
+    case apartmentHistory = "apartment-history"
     case apartmentCharge = "apartment-charge"
     case apartmentEdit = "apartment-edit"
     case settings
@@ -310,18 +311,33 @@ struct RidesRootView: View {
             model.selectSimulation(.goodToken)
             await model.performPrimaryAction()
         case .apartment:
+            ApartmentSecretStore.shared.setSecret("rides-demo-secret")
             await model.detect()
-            model.apartmentNumber = 52
+            model.adjustRides(by: 50)
+            model.apartmentInput = "52"
+            await model.saveApartmentEntry()
+        case .apartmentHistory:
+            await model.detect()
+            for delta in [50, 33, -20] {
+                model.adjustRides(by: delta)
+                await model.charge()
+            }
+            ApartmentSecretStore.shared.setSecret("rides-demo-secret")
+            model.adjustRides(by: 33)
+            model.apartmentInput = "52"
+            await model.saveApartmentEntry()
         case .apartmentCharge:
+            ApartmentSecretStore.shared.setSecret("rides-demo-secret")
             await model.detect()
-            model.apartmentInput = "52"
-            model.isApartmentSheetPresented = true
+            model.adjustRides(by: 50)
+            await model.requestCharge()
         case .apartmentEdit:
+            ApartmentSecretStore.shared.setSecret("rides-demo-secret")
             await model.detect()
-            model.apartmentNumber = 52
+            model.adjustRides(by: 50)
             model.apartmentInput = "52"
-            model.isEditingApartment = true
-            model.isApartmentSheetPresented = true
+            await model.saveApartmentEntry()
+            await model.editApartment()
         case .settings:
             await model.detect()
         }

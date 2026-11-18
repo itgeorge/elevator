@@ -61,6 +61,14 @@ struct ContentView: View {
         .sheet(isPresented: $model.isApartmentSheetPresented) {
             ApartmentEntrySheet(model: model, allowsSkip: !model.isEditingApartment)
         }
+        .alert("Charge session error", isPresented: Binding(
+            get: { model.sessionError != nil },
+            set: { if !$0 { model.sessionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { model.sessionError = nil }
+        } message: {
+            Text(model.sessionError ?? "An unexpected session error occurred.")
+        }
         .onDisappear { model.stopAutoScanning() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.stopAutoScanning() }

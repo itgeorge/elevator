@@ -45,7 +45,7 @@ final class AutoScanUITests: XCTestCase {
         autoToggle.tap()
         XCTAssertTrue(autoToggle.waitForValue("On"))
         restart.tap()
-        app.buttons["Restart calibration"].tap()
+        app.buttons.matching(NSPredicate(format: "label == %@", "Restart calibration")).firstMatch.tap()
 
         XCTAssertTrue(autoToggle.waitForValue("Off"))
         XCTAssertFalse(autoToggle.isEnabled)
@@ -216,6 +216,90 @@ final class AutoScanUITests: XCTestCase {
         detect.tap()
         XCTAssertTrue(autoToggle.waitForValue("Off", timeout: 30))
 #endif
+    }
+
+    func testApartmentSessionsAndConfirmationScreenshots() {
+        launchScene("apartment-history")
+        attachScreenshot("main-apt-history-portrait")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        attachScreenshot("main-apt-history-landscape")
+        XCUIDevice.shared.orientation = .portrait
+
+        let load = app.buttons["load-charge-session"]
+        XCTAssertTrue(load.waitForExistence(timeout: 15))
+        load.tap()
+        XCTAssertTrue(app.navigationBars["Load session"].waitForExistence(timeout: 5))
+        attachScreenshot("load-session-list")
+        let sessionRows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "saved-session-"))
+        XCTAssertGreaterThan(sessionRows.count, 0)
+        sessionRows.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 4 charges"].waitForExistence(timeout: 5))
+
+        app.buttons["new-charge-session"].tap()
+        XCTAssertTrue(app.buttons["Start new session"].waitForExistence(timeout: 5))
+        attachScreenshot("new-session-confirmation")
+        app.buttons["Start new session"].tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 5))
+        app.buttons["load-charge-session"].tap()
+        XCTAssertTrue(app.navigationBars["Load session"].waitForExistence(timeout: 5))
+        let oldSessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "saved-session-"))
+        XCTAssertGreaterThan(oldSessions.count, 1)
+        oldSessions.element(boundBy: 1).tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 4 charges"].waitForExistence(timeout: 5))
+
+        app.buttons["restart-calibration"].tap()
+        XCTAssertTrue(app.buttons["Restart calibration"].waitForExistence(timeout: 5))
+        attachScreenshot("calibration-confirmation")
+        app.buttons.matching(NSPredicate(format: "label == %@", "Restart calibration")).firstMatch.tap()
+    }
+
+    func testApartmentChargeAndEditKeypadScreenshotsAndSave() {
+        launchScene("apartment-charge")
+        let chargeInput = app.staticTexts["apartment-number-input"]
+        XCTAssertTrue(chargeInput.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Skip"].exists)
+        attachScreenshot("apartment-charge-keypad-skip")
+        for digit in ["5", "2"] { app.buttons["apartment-key-\(digit)"].tap() }
+        app.buttons["Save"].tap()
+
+        let apartment = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 52")).firstMatch
+        XCTAssertTrue(apartment.waitForExistence(timeout: 10))
+        apartment.tap()
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Skip"].exists)
+        attachScreenshot("apartment-edit-keypad-no-skip")
+        app.buttons["Cancel"].tap()
+
+        attachScreenshot("apartment-after-save")
+    }
+
+    func testConnectionApartmentSecretAndClearPendingSmoke() {
+        launchScene("history")
+        let pending = app.descendants(matching: .any)["pending-rides-display"]
+        XCTAssertTrue(pending.waitForExistence(timeout: 15))
+        app.buttons["Clear pending change"].tap()
+        XCTAssertTrue((pending.value as? String)?.contains("No ride change") == true)
+
+        app.buttons["Connection diagnostics"].tap()
+        let secretField = app.secureTextFields.matching(NSPredicate(format: "placeholderValue == %@", "Apartment secret")).firstMatch
+        XCTAssertTrue(secretField.waitForExistence(timeout: 10))
+        let confirmField = app.secureTextFields.matching(NSPredicate(format: "placeholderValue == %@", "Confirm apartment secret")).firstMatch
+        XCTAssertTrue(confirmField.waitForExistence(timeout: 5))
+        attachScreenshot("connection-apartment-secret-settings")
+    }
+
+    private func launchScene(_ scene: String) {
+        app.terminate()
+        app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
+        app.launchEnvironment["RIDES_SCREENSHOT_SCENE"] = scene
+        app.launch()
+    }
+
+    private func attachScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     func testLandscapeHistoryAndAutoScanScreenshot() {
