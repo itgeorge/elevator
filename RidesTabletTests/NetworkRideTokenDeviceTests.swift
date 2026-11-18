@@ -69,26 +69,32 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
         }
     }
 
-    func testKnownScanUsesPage0ScanOnly() async throws {
+    @MainActor
+    func testKnownScanReadsBlock3OnlyWhenApartmentSecretIsConfigured() async throws {
+        ApartmentSecretStore.shared.setSecret("scan-apartment-secret")
+        defer { ApartmentSecretStore.shared.clear() }
         NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
-            XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/scan")
-            return self.json(
-                request,
-                #"{"version":"v1","block4":"D6D1C733","block5":"BBC7FD03","block6":"BBC7FD03","signalMillivolts":420}"#
-            )
+            switch request.url?.path {
+            case "/api/v1/hardware/page0/scan":
+                return self.json(request, #"{"version":"v1","block4":"D6D1C733","block5":"BBC7FD03","block6":"BBC7FD03","signalMillivolts":420}"#)
+            case "/api/v1/hardware/page0/missing":
+                return self.json(request, #"{"version":"v1","blocks":[{"block":0,"value":"00000000"},{"block":1,"value":"00000000"},{"block":2,"value":"00000000"},{"block":3,"value":"CCC749CC"},{"block":7,"value":"00000000"}]}"#)
+            default: throw URLError(.badURL)
+            }
         }
 
         let device = try makeDevice()
 
         let outcome = await device.scan()
 
-        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan"])
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/scan", "/api/v1/hardware/page0/missing"])
         guard case .known(let token, let signal) = outcome else {
             return XCTFail("Expected known scan")
         }
         XCTAssertEqual(signal, 420)
         XCTAssertEqual(token.sequence, .venus)
         XCTAssertEqual(token.rideCount, 180)
+        XCTAssertEqual(token.block3, 0xCCC749CC)
         XCTAssertEqual(token.block4, 0xD6D1C733)
     }
 
@@ -321,6 +327,28 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
             return XCTFail("Expected requiresRefresh on ambiguous timeout")
         }
         XCTAssertTrue(message.contains("Detect"))
+    }
+
+    func testApartmentAndChargeUseOneVerifiedConditionalMutation() async throws {
+        let token = Token.sample(rideCount: 73, sequence: .venus)
+        let apartmentBlock = ApartmentBlockCodec.encode(secret: "adapter-secret", block3: token.blocks[3], apartment: 19)
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            XCTAssertEqual(request.url?.path, "/api/v1/hardware/page0/mutations")
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+            let mutations = try XCTUnwrap(object["mutations"] as? [[String: Any]])
+            XCTAssertEqual(mutations.compactMap { $0["block"] as? Int }, [3, 4, 5, 6])
+            let results = mutations.map { mutation -> [String: Any] in
+                ["block": mutation["block"]!, "status": "written", "expected": mutation["expected"]!,
+                 "desired": mutation["desired"]!, "actual": mutation["desired"]!]
+            }
+            let response: [String: Any] = ["version": "v1", "status": "written", "results": results,
+                                           "rollbackStatus": "notNeeded", "rollback": []]
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!, try JSONSerialization.data(withJSONObject: response))
+        }
+        let device = try makeDevice()
+        let result = await device.writeApartment(ApartmentMutationRequest(token: token, apartmentBlock: apartmentBlock, desiredRides: 81))
+        XCTAssertEqual(result, .success)
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/page0/mutations"])
     }
 
     func testResetPlansConditionalMutationsAndReturnsVerifiedToken() async throws {

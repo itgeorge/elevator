@@ -386,7 +386,19 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
             resetCallCount += 1
             lastResetRequest = request
         }
-        let image = ResetSequence.for(request.sequence).resetImage()
+        var image = ResetSequence.for(request.sequence).resetImage()
+        let current = withLock { () -> Token? in
+            if case .known(let token) = storedRead { return token }
+            return nil
+        }
+        if let current {
+            let secret = await MainActor.run { ApartmentSecretStore.shared.secret }
+            if let secret, let apartment = ApartmentBlockCodec.decode(secret: secret, block3: current.blocks[3], block4: current.block4), apartment.building == 0 {
+                image[4] = ApartmentBlockCodec.encode(secret: secret, block3: image[3], building: 0, apartment: apartment.apartment)
+            } else {
+                image[4] = current.block4
+            }
+        }
         switch await overwrite(image) {
         case .success:
             let token: Token

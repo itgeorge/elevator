@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class DomainStateTests: XCTestCase {
+    func testFakeResetPreservesAndResealsApartment() async {
+        let secret = "fake-reset-secret"
+        let store = ApartmentSecretStore.shared
+        store.setSecret(secret)
+        var blocks = Token.sample().blocks
+        blocks[3] = 0xCCC749CC
+        blocks[4] = ApartmentBlockCodec.encode(secret: secret, block3: blocks[3], apartment: 37)
+        let token = Token(blocks: blocks, rideCount: 73, sequence: .mercury)
+        let fake = FakeProxmark(read: .known(token))
+
+        let outcome = await fake.reset(ResetMutationRequest(sequence: .venus))
+        store.clear()
+
+        guard case .success(let reset) = outcome else { return XCTFail("Expected fake reset") }
+        XCTAssertNotEqual(reset.blocks[3], blocks[3])
+        XCTAssertEqual(ApartmentBlockCodec.decode(secret: secret, block3: reset.blocks[3], block4: reset.block4)?.apartment, 37)
+    }
+
     func testApartmentCodecMatchesAptV1VectorAndRejectsWrongSecret() {
         let encoded = ApartmentBlockCodec.encode(secret: "phase0-test-secret", block3: 0xCCC749CC, apartment: 42)
         XCTAssertEqual(encoded, 0xF0CC2223)
@@ -813,7 +831,7 @@ final class DomainStateTests: XCTestCase {
         XCTAssertEqual(model.pendingRides, 0)
     }
 
-    func testClearPendingRidesSetsAbsoluteZeroWithoutChangingCurrentOrToken() async {
+    func testClearPendingRidesRestoresCurrentWithoutChangingToken() async {
         let model = RidesViewModel(device: FakeProxmark())
         await model.detect()
         let tokenBefore = model.loadedToken
@@ -823,9 +841,9 @@ final class DomainStateTests: XCTestCase {
 
         model.clearPendingRides()
 
-        XCTAssertEqual(model.pendingRides, 0)
+        XCTAssertEqual(model.pendingRides, 73)
         XCTAssertEqual(model.currentRides, 73)
-        XCTAssertEqual(model.costEUR, Decimal(-73) * model.configuration.pricePerRideEUR)
+        XCTAssertEqual(model.costEUR, 0)
         XCTAssertEqual(model.loadedToken, tokenBefore)
 
         let unloaded = RidesViewModel(device: FakeProxmark())

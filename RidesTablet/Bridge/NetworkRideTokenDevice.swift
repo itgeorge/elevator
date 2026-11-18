@@ -120,7 +120,12 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
             }
             let body = try BridgePage0MutationRequest(mutations: mutations)
             let response = try await client.mutatePage0(body)
-            if response.status == "written" || response.status == "alreadyApplied" { return .success }
+            if response.status == "written" || response.status == "alreadyApplied" {
+                guard Self.verifiedAllValues(for: response, matching: body) else {
+                    return .requiresRefresh("Apartment/charge verification did not match the requested values. Tap Detect.")
+                }
+                return .success
+            }
             if response.status == "conflict" { return .requiresRefresh("Apartment/charge conflicted with a changed token. Tap Detect.") }
             return .requiresRefresh("Apartment/charge verification failed. Tap Detect.")
         } catch {
@@ -132,13 +137,14 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
         let profile = ResetSequence.for(request.sequence)
         do {
             let current = try await client.readPage0Blocks1To6()
+            let currentValues = Dictionary(uniqueKeysWithValues: current.blocks.map { ($0.block, $0.value) })
             let planned = try Page0ResetPlanningWorkflow.planMutations(
                 currentBlocks: current.blocks,
                 profile: profile,
                 apartmentSecret: await MainActor.run { ApartmentSecretStore.shared.secret }
             )
             if planned.isEmpty {
-                return .alreadyApplied(Self.token(from: profile, verified: [:]))
+                return .alreadyApplied(Self.token(from: profile, verified: currentValues.compactMapValues { UInt32($0, radix: 16) }))
             }
 
             let mutationRequest = try BridgePage0MutationRequest(mutations: planned.map {
@@ -147,7 +153,11 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
             let response = try await client.mutatePage0(mutationRequest)
             switch response.status {
             case "written", "alreadyApplied":
-                let verified = Self.verifiedBlockMap(response)
+                guard Self.verifiedAllValues(for: response, matching: mutationRequest) else {
+                    return .requiresRefresh("Reset verification did not match the requested values. Tap Detect and try again.")
+                }
+                var verified = currentValues.compactMapValues { UInt32($0, radix: 16) }
+                verified.merge(Self.verifiedBlockMap(response)) { _, actual in actual }
                 let token = Self.token(from: profile, verified: verified)
                 return response.status == "alreadyApplied" ? .alreadyApplied(token) : .success(token)
             case "conflict":
@@ -183,6 +193,18 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
             throw BridgeClientError.invalidResponse
         }
         return (block5, block6)
+    }
+
+    private static func verifiedAllValues(
+        for response: BridgePage0MutationResponse,
+        matching request: BridgePage0MutationRequest
+    ) -> Bool {
+        guard response.results.count == request.mutations.count,
+              Set(response.results.map(\.block)) == Set(request.mutations.map(\.block)) else { return false }
+        return response.results.allSatisfy { result in
+            guard let expected = request.mutations.first(where: { $0.block == result.block }) else { return false }
+            return result.expected == expected.expected && result.desired == expected.desired && result.actual == expected.desired
+        }
     }
 
     private static func verifiedBlockMap(_ response: BridgePage0MutationResponse) -> [Int: UInt32] {
