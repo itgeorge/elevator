@@ -61,6 +61,7 @@ public enum WriteOutcome: Equatable, Sendable {
 /// bearer tokens, URLSession details, or PM3 command names to the view model.
 public protocol RideTokenDevice: Sendable {
     func scan() async -> ScanOutcome
+    func scanForApartmentSnapshot() async -> ScanOutcome
     func measureCalibrationSignal() async -> CalibrationSignalOutcome
     func measureSignal() async -> TuneOutcome
     func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome
@@ -117,6 +118,7 @@ public protocol ProxmarkDevice: Sendable {
 }
 
 public extension RideTokenDevice {
+    func scanForApartmentSnapshot() async -> ScanOutcome { await scan() }
     func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome { .failure("Apartment writing is unavailable for this reader.") }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome { .failure("Calibration signal measurement is unavailable.") }
     func measureSignal() async -> TuneOutcome {

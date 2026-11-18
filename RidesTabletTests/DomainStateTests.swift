@@ -1,8 +1,66 @@
 import XCTest
 @testable import RidesTablet
 
+private actor ApartmentRefreshTestDevice: RideTokenDevice {
+    let ordinaryToken: Token
+    let freshToken: Token
+    private(set) var writtenRideToken: Token?
+    init(ordinaryToken: Token, freshToken: Token) { self.ordinaryToken = ordinaryToken; self.freshToken = freshToken }
+    func scan() async -> ScanOutcome { .known(ordinaryToken, signalMillivolts: 420) }
+    func scanForApartmentSnapshot() async -> ScanOutcome { .known(freshToken, signalMillivolts: 420) }
+    func measureCalibrationSignal() async -> CalibrationSignalOutcome { .measured(millivolts: 420, chipPresent: true) }
+    func measureSignal() async -> TuneOutcome { .measured(millivolts: 420) }
+    func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome { writtenRideToken = request.token; return .success }
+    func reset(_ request: ResetMutationRequest) async -> ResetOutcome { .failure("unused") }
+    func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome { .success }
+}
+
 @MainActor
 final class DomainStateTests: XCTestCase {
+    func testEnteringSecretRefreshesPlaceholderBlock3BeforeCharge() async {
+        let secret = "late-apartment-secret"
+        let aptBlock = ApartmentBlockCodec.encode(secret: secret, block3: 0xCCC749CC, apartment: 24)
+        var staleBlocks = Token.sample(rideCount: 73).blocks
+        staleBlocks[3] = 0
+        staleBlocks[4] = aptBlock
+        let stale = Token(blocks: staleBlocks, rideCount: 73, sequence: .mercury)
+        var freshBlocks = staleBlocks
+        freshBlocks[3] = 0xCCC749CC
+        let fresh = Token(blocks: freshBlocks, rideCount: 73, sequence: .mercury)
+        let device = ApartmentRefreshTestDevice(ordinaryToken: stale, freshToken: fresh)
+        let store = ApartmentSecretStore()
+        let model = RidesViewModel(device: device, apartmentSecretStore: store)
+        await model.detect()
+        model.adjustRides(by: 10)
+        store.setSecret(secret)
+        for _ in 0..<100 where model.apartmentNumber != 24 { await Task.yield() }
+        XCTAssertEqual(model.apartmentNumber, 24)
+        XCTAssertEqual(model.pendingRides, 83, "Matching ride mirrors preserve pending rides")
+        await model.requestCharge()
+        let writtenToken = await device.writtenRideToken
+        XCTAssertEqual(writtenToken?.blocks[3], 0xCCC749CC)
+    }
+
+    func testChangedSnapshotAfterSecretEntryResetsPendingAndDoesNotCharge() async {
+        let secret = "late-apartment-secret"
+        var staleBlocks = Token.sample(rideCount: 73).blocks
+        staleBlocks[3] = 0
+        let stale = Token(blocks: staleBlocks, rideCount: 73, sequence: .mercury)
+        let changed = Token.sample(rideCount: 80, sequence: .mercury)
+        let device = ApartmentRefreshTestDevice(ordinaryToken: stale, freshToken: changed)
+        let store = ApartmentSecretStore()
+        let model = RidesViewModel(device: device, apartmentSecretStore: store)
+        await model.detect()
+        model.adjustRides(by: 10)
+        store.setSecret(secret)
+        for _ in 0..<100 where model.currentRides != 80 { await Task.yield() }
+        XCTAssertEqual(model.currentRides, 80)
+        XCTAssertEqual(model.pendingRides, 80, "Changed snapshot requires the operator to adjust again")
+        await model.requestCharge()
+        let writtenToken = await device.writtenRideToken
+        XCTAssertNil(writtenToken)
+    }
+
     func testFakeResetPreservesAndResealsApartment() async {
         let secret = "fake-reset-secret"
         let store = ApartmentSecretStore.shared

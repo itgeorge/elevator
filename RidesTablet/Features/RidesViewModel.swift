@@ -123,6 +123,7 @@ public final class RidesViewModel: ObservableObject {
     private let apartmentSecretStore: ApartmentSecretStore
     private var apartmentSecretSubscription: AnyCancellable?
     private var editingApartment = false
+    private var apartmentSnapshotReady = false
     private let autoScanInterval: TimeInterval
     private let occupiedAutoScanInterval: TimeInterval
     private let periodicConfirmInterval: TimeInterval
@@ -187,7 +188,7 @@ public final class RidesViewModel: ObservableObject {
         }
         apartmentSecretSubscription = apartmentSecretStore.$secret.sink { [weak self] secret in
             guard let self else { return }
-            self.updateApartment(secret: secret)
+            Task { @MainActor in await self.apartmentSecretDidChange(secret) }
         }
         if let fake = device as? FakeProxmark {
             simulationScenario = fake.scenario
@@ -271,7 +272,7 @@ public final class RidesViewModel: ObservableObject {
     public var canEnableAutoScanning: Bool { signalCalibrationReady && (!isBusy || isAutoScanning) }
     public var hasKnownToken: Bool { loadedToken != nil }
     public var hasRideChange: Bool { hasKnownToken && pendingRides != currentRides }
-    public var canCharge: Bool { hasRideChange && canAdjust && !autoConfirmationIsStale && (chargeSessionStore == nil || activeChargeSession != nil) }
+    public var canCharge: Bool { hasRideChange && canAdjust && !autoConfirmationIsStale && (chargeSessionStore == nil || activeChargeSession != nil) && (apartmentSecretStore.secret == nil || apartmentSnapshotReady) }
     public var canAdjust: Bool {
         guard hasKnownToken, !isBusy else { return false }
         if case .known = state { return true }
@@ -290,7 +291,7 @@ public final class RidesViewModel: ObservableObject {
     public var canSaveApartment: Bool { UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) != nil && loadedToken != nil && !mutationInProgress }
 
     private func updateApartment(secret: String?) {
-        guard let secret, let token = loadedToken,
+        guard apartmentSnapshotReady, let secret, let token = loadedToken,
               let payload = ApartmentBlockCodec.decode(secret: secret, block3: token.blocks[3], block4: token.block4), payload.building == 0 else {
             apartmentNumber = nil
             return
@@ -299,6 +300,10 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func requestCharge() async {
+        guard hasRideChange, canAdjust, !autoConfirmationIsStale else { return }
+        if apartmentSecretStore.secret != nil && !apartmentSnapshotReady {
+            guard await refreshForApartmentSecret() else { return }
+        }
         guard canCharge else { return }
         if apartmentSecretStore.secret != nil && apartmentNumber == nil {
             editingApartment = false
@@ -312,6 +317,8 @@ public final class RidesViewModel: ObservableObject {
 
     public func editApartment() async {
         guard canAdjust, apartmentSecretStore.secret != nil else { return }
+        if !apartmentSnapshotReady, !(await refreshForApartmentSecret()) { return }
+        guard canAdjust, apartmentSnapshotReady else { return }
         editingApartment = true
         apartmentInput = apartmentNumber.map(String.init) ?? ""
         isApartmentSheetPresented = true
@@ -321,10 +328,60 @@ public final class RidesViewModel: ObservableObject {
     public func cancelApartmentEntry() async { isApartmentSheetPresented = false; resumeAutoScanningAfterMutation() }
     public func skipApartmentEntry() async { isApartmentSheetPresented = false; await charge() }
     public func saveApartmentEntry() async {
-        guard canSaveApartment, let token = loadedToken, let secret = apartmentSecretStore.secret,
+        guard canSaveApartment, apartmentSnapshotReady, let token = loadedToken, let secret = apartmentSecretStore.secret,
               let apartment = UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
         await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment)
     }
+
+    private func apartmentSecretDidChange(_ secret: String?) async {
+        apartmentSnapshotReady = false
+        apartmentNumber = nil
+        guard secret != nil, loadedToken != nil else { return }
+        _ = await refreshForApartmentSecret()
+    }
+
+    /// Re-read an already loaded token using the bridge's targeted block-3 path.
+    /// Only a matching 4/5/6 snapshot preserves the operator's pending ride choice.
+    private func refreshForApartmentSecret() async -> Bool {
+        guard loadedToken != nil, !mutationInProgress else { return false }
+        mutationInProgress = true
+        await pauseAutoScanningForMutation()
+        let before = loadedToken
+        let result = await device.scanForApartmentSnapshot()
+        var unchanged = false
+        switch result {
+        case .known(let fresh, let signal):
+            if let before, before.block4 == fresh.block4, before.block5 == fresh.block5, before.block6 == fresh.block6 {
+                var blocks = before.blocks
+                blocks[3] = fresh.blocks[3]
+                let upgraded = Token(blocks: blocks, rideCount: before.rideCount, sequence: before.sequence)
+                loadedToken = upgraded
+                apartmentSnapshotReady = true
+                updateApartment(secret: apartmentSecretStore.secret)
+                state = .known(upgraded)
+                lastTune = .measured(millivolts: signal)
+                lastSignalMillivolts = signal
+                unchanged = true
+            } else {
+                setKnown(fresh)
+                apartmentSnapshotReady = true
+                updateApartment(secret: apartmentSecretStore.secret)
+                message = "Token changed while apartment details were refreshed. Review rides and try again."
+            }
+        case .unknown, .noChip, .noChipWithSignal:
+            apartmentSnapshotReady = false
+            apartmentNumber = nil
+            message = "Token changed or could not be read. Tap Detect before continuing."
+        case .failure(let error):
+            apartmentSnapshotReady = false
+            apartmentNumber = nil
+            message = "Apartment refresh failed: \(error)"
+        }
+        mutationInProgress = false
+        resumeAutoScanningAfterMutation()
+        return unchanged
+    }
+
 
     private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool) async {
         mutationInProgress = true
@@ -853,7 +910,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public func charge() async {
-        guard canCharge else { return }
+        guard canCharge, apartmentSecretStore.secret == nil || apartmentSnapshotReady else { return }
         mutationInProgress = true
         await pauseAutoScanningForMutation()
         guard hasRideChange, let token = loadedToken else {
@@ -998,6 +1055,7 @@ public final class RidesViewModel: ObservableObject {
         currentRides = 0
         pendingRides = 0
         loadedToken = nil
+        apartmentSnapshotReady = false
         apartmentNumber = nil
         lastTune = nil
         lastSignalMillivolts = nil
@@ -1007,12 +1065,14 @@ public final class RidesViewModel: ObservableObject {
 
     private func clearLoadedTokenForRefresh() {
         loadedToken = nil
+        apartmentSnapshotReady = false
         apartmentNumber = nil
         currentRides = 0
         pendingRides = 0
     }
 
     private func setKnown(_ token: Token) {
+        apartmentSnapshotReady = apartmentSecretStore.secret != nil
         autoConfirmationIsStale = false
         loadedToken = token
         updateApartment(secret: apartmentSecretStore.secret)

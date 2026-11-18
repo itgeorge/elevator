@@ -25,6 +25,15 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
     }
 
     public func scan() async -> ScanOutcome {
+        let secretIsConfigured = await MainActor.run { ApartmentSecretStore.shared.secret != nil }
+        return await scan(readApartmentBlock3: secretIsConfigured)
+    }
+
+    public func scanForApartmentSnapshot() async -> ScanOutcome {
+        await scan(readApartmentBlock3: true)
+    }
+
+    private func scan(readApartmentBlock3: Bool) async -> ScanOutcome {
         do {
             let scan = try await client.scanPage0()
             guard let block4 = UInt32(scan.block4, radix: 16),
@@ -35,9 +44,8 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
 
             // Only fetch the targeted missing-block set when apartment support is in use.
             // This keeps the ordinary known-token path at its original single scan request.
-            let apartmentSecret = await MainActor.run { ApartmentSecretStore.shared.secret }
-            let missingForApartment = apartmentSecret == nil ? nil : try await client.readPage0MissingBlocks()
-            let block3 = missingForApartment?.blocks.first(where: { $0.block == 3 }).flatMap { UInt32($0.value, radix: 16) } ?? 0
+            let missing = readApartmentBlock3 ? try await client.readPage0MissingBlocks() : nil
+            let block3 = missing?.blocks.first(where: { $0.block == 3 }).flatMap { UInt32($0.value, radix: 16) } ?? 0
             let rideRead = RideBlockResolver.resolve(block5: block5, block6: block6)
             if rideRead.status == .success,
                let sequence = rideRead.sequence,
@@ -51,8 +59,10 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
                 return .known(token, signalMillivolts: scan.signalMillivolts)
             }
 
-            let missing = try await client.readPage0MissingBlocks()
-            let assembled = try Page0ScanWorkflow.assemblePage0(scan: scan, missing: missing)
+            let missingBlocks: BridgePage0MissingBlocksResponse
+            if let missing { missingBlocks = missing }
+            else { missingBlocks = try await client.readPage0MissingBlocks() }
+            let assembled = try Page0ScanWorkflow.assemblePage0(scan: scan, missing: missingBlocks)
             return .unknown(UnknownToken(blocks: assembled), signalMillivolts: scan.signalMillivolts)
         } catch BridgeClientError.noChipWithSignal(let signal) {
             return .noChipWithSignal(signal)
