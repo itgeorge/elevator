@@ -45,11 +45,13 @@ final class ApartmentValidationUITests: XCTestCase {
         let app = launch(scene: "apartment-charge", orientation: .landscapeLeft)
         defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
         assertKeypadVisible(app)
+        capture(app, "apartment-charge-landscape-first")
         let screen = app.windows.firstMatch.frame
         XCTAssertGreaterThan(screen.width, screen.height)
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 5))
         assertKeypadVisible(app)
+        capture(app, "apartment-charge-portrait-open-rotated")
         XCUIDevice.shared.orientation = .landscapeLeft
         assertKeypadVisible(app)
 
@@ -57,8 +59,10 @@ final class ApartmentValidationUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let edit = launch(scene: "apartment-edit")
         XCTAssertTrue(edit.staticTexts["apartment-number-input"].waitForExistence(timeout: 15))
+        capture(edit, "apartment-edit-portrait-open")
         XCUIDevice.shared.orientation = .landscapeLeft
         assertKeypadVisible(edit)
+        capture(edit, "apartment-edit-portrait-open-rotated")
         XCTAssertFalse(edit.buttons["apartment-skip"].exists)
         edit.buttons["apartment-cancel"].tap()
         edit.terminate()
@@ -66,6 +70,7 @@ final class ApartmentValidationUITests: XCTestCase {
         let landscapeEdit = launch(scene: "apartment-edit", orientation: .landscapeLeft)
         defer { landscapeEdit.terminate() }
         assertKeypadVisible(landscapeEdit)
+        capture(landscapeEdit, "apartment-edit-landscape-first")
         XCTAssertFalse(landscapeEdit.buttons["apartment-skip"].exists)
 #endif
     }
