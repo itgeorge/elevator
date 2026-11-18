@@ -11,6 +11,7 @@ final class PhysicalRidesUITests: XCTestCase {
         #elseif targetEnvironment(simulator)
         throw XCTSkip("Physical acceptance requires a real, non-simulator iPad.")
         #else
+        continueAfterFailure = false
         let runnerOptIn = ProcessInfo.processInfo.environment["TEST_RUNNER_RIDES_UI_PHYSICAL_TEST"]
             ?? ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_TEST"]
         guard runnerOptIn == "1" else { throw XCTSkip("Set TEST_RUNNER_RIDES_UI_PHYSICAL_TEST=1 to opt in.") }
@@ -39,6 +40,16 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(confirmNewSession.waitForExistence(timeout: 10))
         confirmNewSession.tap()
         XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 10))
+
+        // Discard the pending delta on the real iPad without issuing a charge.
+        let tens = initial <= 470 ? 10 : -10
+        let adjustTens = app.buttons["pending-rides-\(tens < 0 ? "minus" : "plus")-10"]
+        for _ in 0..<3 { adjustTens.tap() }
+        app.buttons["Clear pending change"].tap()
+        XCTAssertEqual(rideValue(current), initial)
+        XCTAssertTrue((app.descendants(matching: .any)["pending-rides-display"].value as? String)?.contains("No ride change") == true)
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists)
+        attach(app, name: "clear-pending-without-charge")
 
         // Use a signed one-ride delta so detected count 500 remains in range.
         let delta = initial < 500 ? 1 : -1
@@ -97,10 +108,7 @@ final class PhysicalRidesUITests: XCTestCase {
                       "Apartment-only edit must preserve the pending ride adjustment")
         attach(app, name: "apartment-edit-after-save")
 
-        // Complete the pending ride, then prove New/Load and persistence across app restart.
-        charge.tap()
-        XCTAssertTrue(waitForRideValue(current, initial + delta * 3, timeout: 30))
-        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].waitForExistence(timeout: 15))
+        // Switch away and load this session before completing its pending third charge.
         app.buttons["new-charge-session"].tap()
         XCTAssertTrue(confirmNewSession.waitForExistence(timeout: 10))
         attach(app, name: "new-session-confirmation")
@@ -108,16 +116,22 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 15))
         app.buttons["load-charge-session"].tap()
         XCTAssertTrue(app.navigationBars["Load session"].waitForExistence(timeout: 10))
-        let completedRun = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "3 charges")).firstMatch
+        let completedRun = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "2 charges")).firstMatch
         XCTAssertTrue(completedRun.waitForExistence(timeout: 10), "Completed acceptance session is not listed")
         attach(app, name: "load-acceptance-session")
         completedRun.tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 2 charges"].waitForExistence(timeout: 15))
+        charge.tap()
+        XCTAssertTrue(waitForRideValue(current, initial + delta * 3, timeout: 30))
         XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].waitForExistence(timeout: 15))
+        attach(app, name: "loaded-session-accepts-next-charge")
 
         app.terminate()
         launchPhysicalApp()
         let restartedCurrent = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
         XCTAssertTrue(restartedCurrent.waitForExistence(timeout: 30))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Apartment number")).firstMatch.exists,
+                       "The apartment secret must not survive an app restart")
         saveSecretThroughConnectionSheet() // Secret is memory-only and must be re-entered after relaunch.
         XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].waitForExistence(timeout: 15))
         XCTAssertTrue(waitForRideValue(restartedCurrent, initial + delta * 3, timeout: 30))
@@ -130,12 +144,14 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Confirm reset"].isEnabled, "Reset must require explicit profile selection")
         app.buttons["reset-profile-venus"].tap()
         app.buttons["Confirm reset"].tap()
+        XCTAssertTrue(app.buttons["Confirm reset"].waitForNonExistence(timeout: 30))
         XCTAssertTrue(waitForRideValue(restartedCurrent, 0, timeout: 30))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.waitForExistence(timeout: 15))
         app.buttons["Reset token"].tap()
         XCTAssertTrue(app.buttons["reset-profile-mercury"].waitForExistence(timeout: 10))
         app.buttons["reset-profile-mercury"].tap()
         app.buttons["Confirm reset"].tap()
+        XCTAssertTrue(app.buttons["Confirm reset"].waitForNonExistence(timeout: 30))
         XCTAssertTrue(waitForRideValue(restartedCurrent, 0, timeout: 30))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists, "Reset must preserve completed-charge history")
@@ -151,7 +167,7 @@ final class PhysicalRidesUITests: XCTestCase {
         )).firstMatch
         XCTAssertTrue(confirmRestart.waitForExistence(timeout: 10))
         attach(app, name: "calibration-confirmation")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.05)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.12)).tap()
         XCTAssertTrue(restartedCurrent.waitForExistence(timeout: 10), "Tapping outside must cancel calibration restart")
         XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists)
         restart.tap()
@@ -184,6 +200,8 @@ final class PhysicalRidesUITests: XCTestCase {
         app.buttons["Save secret"].tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["Charge token"].waitForExistence(timeout: 15))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["new-charge-session"])
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed, "Apartment snapshot refresh did not finish")
     }
 
     private func enterApartment(_ number: Int) {
