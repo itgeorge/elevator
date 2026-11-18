@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var model: RidesViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showApartmentSettings = false
     var onOpenConnection: (() -> Void)?
 
     init(onOpenConnection: (() -> Void)? = nil) {
@@ -40,8 +41,14 @@ struct ContentView: View {
             .navigationTitle("Rides")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showApartmentSettings = true } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .accessibilityLabel("Apartment secret settings")
+                }
                 if let onOpenConnection {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button(action: onOpenConnection) {
                             Label("Connection", systemImage: "antenna.radiowaves.left.and.right")
                         }
@@ -57,6 +64,10 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.isResetSheetPresented) {
             ResetSheet(model: model)
+        }
+        .sheet(isPresented: $showApartmentSettings) { ApartmentSecretSettingsView() }
+        .sheet(isPresented: $model.isApartmentSheetPresented) {
+            ApartmentEntrySheet(model: model, allowsSkip: !model.isEditingApartment)
         }
         .onDisappear { model.stopAutoScanning() }
         .onChange(of: scenePhase) { _, phase in
@@ -90,7 +101,7 @@ private struct OneScreenLayout: View {
             HStack(alignment: .top, spacing: 18) {
                 VStack(spacing: 14) {
                     DetectStrip(model: model, layout: .landscape)
-                    ChargeHistoryView(charges: model.completedCharges, maxRowsHeight: 130)
+                    ChargeHistoryView(model: model, maxRowsHeight: 130)
                 }
                 .frame(minWidth: 365, idealWidth: 410, maxWidth: 445)
 
@@ -102,17 +113,20 @@ private struct OneScreenLayout: View {
             VStack(spacing: 14) {
                 DetectStrip(model: model, layout: .portrait)
                 MainPanel(model: model)
-                ChargeHistoryView(charges: model.completedCharges, maxRowsHeight: 200)
+                ChargeHistoryView(model: model, maxRowsHeight: 200)
             }
         }
     }
 }
 
 private struct ChargeHistoryView: View {
-    let charges: [CompletedCharge]
+    @ObservedObject var model: RidesViewModel
+    var charges: [CompletedCharge] { model.completedCharges }
     let maxRowsHeight: CGFloat
     @State private var timestampPopover: UUID?
     @State private var availableWidth: CGFloat = 0
+    @State private var showNewSessionConfirmation = false
+    @State private var showSessionLoader = false
 
     // Tight metadata/count columns retain their readable widths. EUR absorbs
     // any room left in the shared table; the outer scroller handles narrow layouts.
@@ -156,8 +170,20 @@ private struct ChargeHistoryView: View {
     var body: some View {
         ScrollView(.horizontal) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Completed charges")
-                    .font(.title3.weight(.semibold))
+                HStack {
+                    Text("Completed charges")
+                        .font(.title3.weight(.semibold))
+                    Spacer(minLength: 4)
+                    Button("New") { showNewSessionConfirmation = true }
+                        .buttonStyle(.bordered).disabled(model.isBusy)
+                        .accessibilityIdentifier("new-charge-session")
+                    Button("Load") {
+                        model.refreshChargeSessions()
+                        showSessionLoader = true
+                    }
+                    .buttonStyle(.bordered).disabled(model.isBusy)
+                    .accessibilityIdentifier("load-charge-session")
+                }
                 summaryRow
                 headerRow
                 Rectangle().fill(Color.primary.opacity(0.16)).frame(height: 1)
@@ -199,6 +225,11 @@ private struct ChargeHistoryView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
         .environment(\.colorScheme, .light)
         .accessibilityLabel("Completed charge history, newest first")
+        .confirmationDialog("Start a new charge session?", isPresented: $showNewSessionConfirmation, titleVisibility: .visible) {
+            Button("Start new session", role: .destructive) { model.startNewChargeSession() }
+            Button("Cancel", role: .cancel) { }
+        } message: { Text("The current table will be cleared. The old session is saved.") }
+        .sheet(isPresented: $showSessionLoader) { SessionLoaderSheet(model: model) }
     }
 
     private var summaryRow: some View {
@@ -339,9 +370,20 @@ private struct KnownControls: View {
                 ResetButton(model: model)
                     .frame(width: 72)
                 CurrentRidesCard(model: model, centered: true, showReadOnlyCaption: false)
-                Color.clear
-                    .frame(width: 72)
-                    .accessibilityHidden(true)
+                if let apartment = model.apartmentNumber {
+                    Button { Task { await model.editApartment() } } label: {
+                        VStack(spacing: 2) {
+                            Text("Apt #").font(.headline)
+                            Text(String(apartment)).font(.system(size: 52, weight: .bold, design: .rounded).monospacedDigit())
+                                .foregroundStyle(.secondary.opacity(0.65))
+                        }
+                        .frame(width: 104)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Apartment number \(apartment), edit")
+                } else {
+                    Color.clear.frame(width: 72).accessibilityHidden(true)
+                }
             }
             .fixedSize(horizontal: false, vertical: true)
             PendingRidesCard(
@@ -463,6 +505,7 @@ private struct DetectStrip: View {
     enum Layout { case portrait, landscape }
 
     @ObservedObject var model: RidesViewModel
+    @State private var showRestartConfirmation = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let layout: Layout
 
@@ -516,6 +559,10 @@ private struct DetectStrip: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay { RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)) }
         .environment(\.colorScheme, .light)
+        .confirmationDialog("Restart calibration?", isPresented: $showRestartConfirmation, titleVisibility: .visible) {
+            Button("Restart calibration", role: .destructive) { Task { await model.restartCalibration() } }
+            Button("Cancel", role: .cancel) { }
+        } message: { Text("This clears the loaded token view but does not change completed charges.") }
     }
 
     private var controlGroup: some View {
@@ -605,7 +652,7 @@ private struct DetectStrip: View {
 
     private var restartCalibrationButton: some View {
         Button {
-            Task { await model.restartCalibration() }
+            showRestartConfirmation = true
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 18, weight: .semibold))
@@ -970,7 +1017,7 @@ private struct ChargeButton: View {
     var body: some View {
         VStack(spacing: 8) {
             Button {
-                Task { await model.charge() }
+                Task { await model.requestCharge() }
             } label: {
                 Label(model.isBusy ? "Working…" : "Charge token", systemImage: "bolt.fill")
                     .font(.title2.bold())

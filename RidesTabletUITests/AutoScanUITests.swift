@@ -45,6 +45,7 @@ final class AutoScanUITests: XCTestCase {
         autoToggle.tap()
         XCTAssertTrue(autoToggle.waitForValue("On"))
         restart.tap()
+        app.buttons["Restart calibration"].tap()
 
         XCTAssertTrue(autoToggle.waitForValue("Off"))
         XCTAssertFalse(autoToggle.isEnabled)
