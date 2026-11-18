@@ -30,6 +30,31 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue(auto.waitForValue("On"))
     }
 
+    func testCancelOpaqueConfirmationsPreservesAutoAndCalibration() {
+        let autoToggle = app.buttons["auto-scan-toggle"]
+        XCTAssertTrue(autoToggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["new-charge-session"].isEnabled)
+
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"))
+        app.buttons["new-charge-session"].tap()
+        XCTAssertTrue(app.buttons["confirm-new-charge-session"].waitForExistence(timeout: 5))
+        XCTAssertTrue(autoToggle.waitForValue("On"), "Showing the New confirmation must not stop Auto")
+        app.buttons["cancel-confirmation"].tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"), "Canceling New must preserve Auto")
+
+        app.buttons["restart-calibration"].tap()
+        XCTAssertTrue(app.buttons["confirm-restart-calibration"].waitForExistence(timeout: 5))
+        XCTAssertTrue(autoToggle.waitForValue("On"), "Showing calibration confirmation must not stop Auto")
+        app.buttons["cancel-confirmation"].tap()
+        XCTAssertTrue(autoToggle.waitForValue("On"), "Canceling calibration must preserve Auto")
+
+        autoToggle.tap()
+        XCTAssertTrue(autoToggle.waitForValue("Off"))
+        XCTAssertTrue(autoToggle.isEnabled, "Calibration readiness must survive canceled confirmation")
+        XCTAssertEqual(app.buttons["detect-primary-action"].label, "Detect")
+    }
+
     func testRestartCalibrationStopsAutoAndClearsLoadedTokenWithoutRemovingHistory() {
         let autoToggle = app.buttons["auto-scan-toggle"]
         let restart = app.buttons["restart-calibration"]
