@@ -8,6 +8,10 @@ public enum SimulatorScreenshotScene: String, Equatable, Sendable {
     case unknown
     case noChip = "no-chip"
     case calibrated
+    case apartment
+    case apartmentCharge = "apartment-charge"
+    case apartmentEdit = "apartment-edit"
+    case settings
 
     public static func parse(_ rawValue: String?) -> Self? {
         guard let rawValue else { return nil }
@@ -253,11 +257,14 @@ struct RidesRootView: View {
     private func bootstrapSimulatorFakeReader() {
         usesFakeReader = true
         if launchConfiguration.screenshotScene != nil {
-            let suite = "RidesTablet.ScreenshotHistory"
-            let defaults = UserDefaults(suiteName: suite)!
-            defaults.removePersistentDomain(forName: suite)
-            ridesModel = RidesViewModel(device: FakeProxmark(scanDelay: simulatorScanDelay), configuration: .load(),
-                                       chargeHistoryStore: UserDefaultsChargeHistoryStore(defaults: defaults))
+            let fixtureDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("RidesTablet-ScreenshotChargeSessions", isDirectory: true)
+            try? FileManager.default.removeItem(at: fixtureDirectory)
+            try? FileManager.default.createDirectory(at: fixtureDirectory, withIntermediateDirectories: true)
+            ridesModel = RidesViewModel(
+                device: FakeProxmark(scanDelay: simulatorScanDelay),
+                configuration: .load(),
+                sessionStore: FileChargeSessionStore(directory: fixtureDirectory)
+            )
         } else {
             ridesModel = RidesViewModel(device: FakeProxmark(scanDelay: simulatorScanDelay), configuration: .load())
         }
@@ -302,6 +309,21 @@ struct RidesRootView: View {
             await model.performPrimaryAction()
             model.selectSimulation(.goodToken)
             await model.performPrimaryAction()
+        case .apartment:
+            await model.detect()
+            model.apartmentNumber = 52
+        case .apartmentCharge:
+            await model.detect()
+            model.apartmentInput = "52"
+            model.isApartmentSheetPresented = true
+        case .apartmentEdit:
+            await model.detect()
+            model.apartmentNumber = 52
+            model.apartmentInput = "52"
+            model.isEditingApartment = true
+            model.isApartmentSheetPresented = true
+        case .settings:
+            await model.detect()
         }
     }
 #endif

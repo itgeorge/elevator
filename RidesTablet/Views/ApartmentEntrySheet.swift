@@ -16,7 +16,7 @@ struct ApartmentEntrySheet: View {
                 Button { Task { await model.cancelApartmentEntry() } } label: {
                     Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(.secondary)
                 }
-                .accessibilityLabel("Clear pending change")
+                .accessibilityLabel("Cancel apartment entry")
             }
             Text(model.apartmentInput.isEmpty ? "Enter 0–255" : model.apartmentInput)
                 .font(.system(size: 42, weight: .semibold, design: .rounded).monospacedDigit())
@@ -61,45 +61,6 @@ struct ApartmentEntrySheet: View {
         .buttonStyle(.bordered)
         .accessibilityLabel(digit)
         .accessibilityIdentifier("apartment-key-\(digit)")
-    }
-}
-
-@MainActor
-struct ApartmentSecretSettingsView: View {
-    @ObservedObject private var store = ApartmentSecretStore.shared
-    @Environment(\.dismiss) private var dismiss
-    @State private var secret = ""
-    @State private var confirmation = ""
-    @State private var mismatch = false
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Apartment secret") {
-                    SecureField("Apartment secret", text: $secret)
-                        .textContentType(.none).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    SecureField("Confirm apartment secret", text: $confirmation)
-                        .textContentType(.none).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    if mismatch { Text("Secrets must match and cannot be empty.").foregroundStyle(.red) }
-                    Button("Save secret") {
-                        guard !secret.isEmpty, secret == confirmation else { mismatch = true; return }
-                        store.setSecret(secret)
-                        secret = ""
-                        confirmation = ""
-                        mismatch = false
-                        dismiss()
-                    }
-                    .disabled(secret.isEmpty || confirmation.isEmpty)
-                    if store.secret != nil {
-                        Button("Clear saved secret", role: .destructive) { store.clear() }
-                    }
-                } footer: {
-                    Text("Stored in memory only on this iPad; it is not persisted.")
-                }
-            }
-            .navigationTitle("Settings")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        }
     }
 }
 

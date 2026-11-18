@@ -4,7 +4,6 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var model: RidesViewModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showApartmentSettings = false
     var onOpenConnection: (() -> Void)?
 
     init(onOpenConnection: (() -> Void)? = nil) {
@@ -41,14 +40,8 @@ struct ContentView: View {
             .navigationTitle("Rides")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showApartmentSettings = true } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    .accessibilityLabel("Apartment secret settings")
-                }
                 if let onOpenConnection {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarLeading) {
                         Button(action: onOpenConnection) {
                             Label("Connection", systemImage: "antenna.radiowaves.left.and.right")
                         }
@@ -65,7 +58,6 @@ struct ContentView: View {
         .sheet(isPresented: $model.isResetSheetPresented) {
             ResetSheet(model: model)
         }
-        .sheet(isPresented: $showApartmentSettings) { ApartmentSecretSettingsView() }
         .sheet(isPresented: $model.isApartmentSheetPresented) {
             ApartmentEntrySheet(model: model, allowsSkip: !model.isEditingApartment)
         }
@@ -806,7 +798,7 @@ private struct PendingRidesDisplay: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
                 .disabled(!model.canAdjust)
-                .accessibilityLabel("Clear pending rides to zero")
+                .accessibilityLabel("Clear pending change")
                 .accessibilityIdentifier("clear-pending-rides")
             }
             .frame(height: 44)

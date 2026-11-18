@@ -91,6 +91,10 @@ public struct BridgeConnectionView: View {
 
     @StateObject private var model: BridgeConnectionModel
     @State private var pin = ""
+    @ObservedObject private var apartmentSecretStore = ApartmentSecretStore.shared
+    @State private var apartmentSecret = ""
+    @State private var apartmentSecretConfirmation = ""
+    @State private var apartmentSecretMismatch = false
     @State private var didApplyLaunchAddressOverride = false
     @State private var didRunLaunchPhysicalAcceptance = false
     @State private var didRunLaunchSlice4PhysicalAcceptance = false
@@ -251,6 +255,38 @@ public struct BridgeConnectionView: View {
                             .font(.footnote)
                             .foregroundStyle(.orange)
                     }
+                }
+
+                Section("Apartment secret") {
+                    SecureField("Apartment secret", text: $apartmentSecret)
+                        .textContentType(.none)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Confirm apartment secret", text: $apartmentSecretConfirmation)
+                        .textContentType(.none)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    if apartmentSecretMismatch {
+                        Text("Secrets must match and cannot be empty.").foregroundStyle(.red)
+                    }
+                    Button("Save secret") {
+                        guard !apartmentSecret.isEmpty, apartmentSecret == apartmentSecretConfirmation else {
+                            apartmentSecretMismatch = true
+                            return
+                        }
+                        apartmentSecretStore.setSecret(apartmentSecret)
+                        apartmentSecret = ""
+                        apartmentSecretConfirmation = ""
+                        apartmentSecretMismatch = false
+                    }
+                    .disabled(apartmentSecret.isEmpty || apartmentSecretConfirmation.isEmpty)
+                    if apartmentSecretStore.secret != nil {
+                        Button("Clear saved secret", role: .destructive) {
+                            apartmentSecretStore.clear()
+                        }
+                    }
+                    Text("Stored in memory only on this iPad; it is not persisted.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
 
                 Section("Connection") {
