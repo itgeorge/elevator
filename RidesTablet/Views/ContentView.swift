@@ -58,8 +58,11 @@ struct ContentView: View {
         .sheet(isPresented: $model.isResetSheetPresented) {
             ResetSheet(model: model)
         }
-        .sheet(isPresented: $model.isApartmentSheetPresented) {
-            ApartmentEntrySheet(model: model, allowsSkip: !model.isEditingApartment)
+        .overlay {
+            if model.isApartmentSheetPresented {
+                ApartmentEntrySheet(model: model, allowsSkip: !model.isEditingApartment)
+                    .zIndex(10)
+            }
         }
         .alert("Charge session error", isPresented: Binding(
             get: { model.sessionError != nil },
@@ -130,7 +133,7 @@ private struct ChargeHistoryView: View {
 
     // Tight metadata/count columns retain their readable widths. EUR absorbs
     // any room left in the shared table; the outer scroller handles narrow layouts.
-    private let tightWidths: [CGFloat] = [86, 54, 62, 54]
+    private let tightWidths: [CGFloat] = [86, 54, 54, 62, 54]
     private let minimumEURWidth: CGFloat = 92
     private let columnGap: CGFloat = 8
 
@@ -160,7 +163,7 @@ private struct ChargeHistoryView: View {
     private var signedRideTotal: Int { charges.reduce(0) { $0 + $1.addedRides } }
     private var amountTotal: Decimal { charges.reduce(Decimal.zero) { $0 + $1.amountEUR } }
     private var minimumTableWidth: CGFloat {
-        tightWidths.reduce(0, +) + minimumEURWidth + columnGap * 4
+        tightWidths.reduce(0, +) + minimumEURWidth + columnGap * 5
     }
     private var tableWidth: CGFloat { max(minimumTableWidth, availableWidth - 24) }
     private var widths: [CGFloat] {
@@ -175,7 +178,7 @@ private struct ChargeHistoryView: View {
                         .font(.title3.weight(.semibold))
                     Spacer(minLength: 4)
                     Button("New") { showNewSessionConfirmation = true }
-                        .buttonStyle(.bordered).disabled(model.isBusy)
+                        .buttonStyle(.bordered).disabled(model.isBusy || !model.canStartNewSession)
                         .accessibilityIdentifier("new-charge-session")
                     Button("Load") {
                         model.refreshChargeSessions()
@@ -225,10 +228,16 @@ private struct ChargeHistoryView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
         .environment(\.colorScheme, .light)
         .accessibilityLabel("Completed charge history, newest first")
-        .confirmationDialog("Start a new charge session?", isPresented: $showNewSessionConfirmation, titleVisibility: .visible) {
-            Button("Start new session", role: .destructive) { model.startNewChargeSession() }
-            Button("Cancel", role: .cancel) { }
-        } message: { Text("The current table will be cleared. The old session is saved.") }
+        .fullScreenCover(isPresented: $showNewSessionConfirmation) {
+            OpaqueConfirmationModal(
+                title: "Start a new charge session?",
+                message: "The current table will be cleared. The old session is saved.",
+                confirmTitle: "Start new session",
+                confirmIdentifier: "confirm-new-charge-session",
+                cancel: { showNewSessionConfirmation = false },
+                confirm: { showNewSessionConfirmation = false; model.startNewChargeSession() }
+            )
+        }
         .sheet(isPresented: $showSessionLoader) { SessionLoaderSheet(model: model) }
     }
 
@@ -236,14 +245,14 @@ private struct ChargeHistoryView: View {
         HStack(spacing: columnGap) {
             Text("TOTAL · \(charges.count) charges")
                 .font(.body.weight(.semibold))
-                .frame(width: widths[0] + widths[1] + columnGap, alignment: .leading)
+                .frame(width: widths[0] + widths[1] + widths[2] + columnGap * 2, alignment: .leading)
             Text(signedRideTotal >= 0 ? "+\(signedRideTotal)" : "−\(abs(signedRideTotal))")
                 .font(.body.weight(.semibold).monospacedDigit())
-                .frame(width: widths[2], alignment: .trailing)
-            Text("—").frame(width: widths[3], alignment: .trailing)
+                .frame(width: widths[3], alignment: .trailing)
+            Text("—").frame(width: widths[4], alignment: .trailing)
             Text(Self.euroFormatter.string(from: amountTotal as NSDecimalNumber) ?? "0.00")
                 .font(.body.weight(.semibold).monospacedDigit())
-                .frame(width: widths[4], alignment: .trailing)
+                .frame(width: widths[5], alignment: .trailing)
         }
         .lineLimit(1)
     }
@@ -251,10 +260,11 @@ private struct ChargeHistoryView: View {
     private var headerRow: some View {
         HStack(spacing: columnGap) {
             column("Time", 0, alignment: .leading)
-            column("Initial", 1, alignment: .trailing)
-            column("Δ rides", 2, alignment: .trailing)
-            column("Total", 3, alignment: .trailing)
-            column("EUR", 4, alignment: .trailing)
+            column("Apt #", 1, alignment: .trailing)
+            column("Initial", 2, alignment: .trailing)
+            column("Δ rides", 3, alignment: .trailing)
+            column("Total", 4, alignment: .trailing)
+            column("EUR", 5, alignment: .trailing)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -285,14 +295,17 @@ private struct ChargeHistoryView: View {
                     .padding(16)
                     .presentationCompactAdaptation(.popover)
             }
-            Text("\(charge.initialRides)")
+            Text(charge.apartmentNumber.map(String.init) ?? "—")
                 .frame(width: widths[1], alignment: .trailing)
-            Text("\(charge.addedRides >= 0 ? "+" : "−")\(abs(charge.addedRides))")
+                .accessibilityIdentifier("charge-apartment-\(charge.id.uuidString)")
+            Text("\(charge.initialRides)")
                 .frame(width: widths[2], alignment: .trailing)
-            Text("= \(charge.totalRides)")
+            Text("\(charge.addedRides >= 0 ? "+" : "−")\(abs(charge.addedRides))")
                 .frame(width: widths[3], alignment: .trailing)
-            Text(Self.euroFormatter.string(from: charge.amountEUR as NSDecimalNumber) ?? "0.00")
+            Text("= \(charge.totalRides)")
                 .frame(width: widths[4], alignment: .trailing)
+            Text(Self.euroFormatter.string(from: charge.amountEUR as NSDecimalNumber) ?? "0.00")
+                .frame(width: widths[5], alignment: .trailing)
         }
         .font(.body.monospacedDigit())
         .lineLimit(1)
@@ -559,10 +572,16 @@ private struct DetectStrip: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay { RoundedRectangle(cornerRadius: 20).stroke(Color.black.opacity(0.08)) }
         .environment(\.colorScheme, .light)
-        .confirmationDialog("Restart calibration?", isPresented: $showRestartConfirmation, titleVisibility: .visible) {
-            Button("Restart calibration", role: .destructive) { Task { await model.restartCalibration() } }
-            Button("Cancel", role: .cancel) { }
-        } message: { Text("This clears the loaded token view but does not change completed charges.") }
+        .fullScreenCover(isPresented: $showRestartConfirmation) {
+            OpaqueConfirmationModal(
+                title: "Restart calibration?",
+                message: "This clears the loaded token view but does not change completed charges.",
+                confirmTitle: "Restart calibration",
+                confirmIdentifier: "confirm-restart-calibration",
+                cancel: { showRestartConfirmation = false },
+                confirm: { showRestartConfirmation = false; Task { await model.restartCalibration() } }
+            )
+        }
     }
 
     private var controlGroup: some View {
@@ -1226,6 +1245,46 @@ private struct ResetSheet: View {
         .padding(.top, 10)
         .padding(.bottom, 12)
         .background(.regularMaterial)
+    }
+}
+
+private struct OpaqueConfirmationModal: View {
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let confirmIdentifier: String
+    let cancel: () -> Void
+    let confirm: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            VStack(spacing: 14) {
+                Text(title).font(.title2.bold()).multilineTextAlignment(.center)
+                Text(message).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                HStack(spacing: 14) {
+                    Button("Cancel", action: cancel)
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .accessibilityIdentifier("cancel-confirmation")
+                    Button(confirmTitle, action: confirm)
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .accessibilityIdentifier(confirmIdentifier)
+                }
+            }
+            .padding(28)
+            .frame(maxWidth: 560)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.black.opacity(0.12)))
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .environment(\.colorScheme, .light)
+        .interactiveDismissDisabled()
+        .accessibilityAddTraits(.isModal)
     }
 }
 

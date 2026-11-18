@@ -4,76 +4,133 @@ import SwiftUI
 struct ApartmentEntrySheet: View {
     @ObservedObject var model: RidesViewModel
     let allowsSkip: Bool
-    @Environment(\.dismiss) private var dismiss
 
-    private let digits = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]]
+    private let digits = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["", "0", ""]]
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack {
-                Text("Apartment #").font(.title3.bold())
-                Spacer()
-                Button { Task { await model.cancelApartmentEntry() } } label: {
-                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(.secondary)
+        GeometryReader { geometry in
+            let compact = geometry.size.height < 520
+            let keyHeight = min(56, max(36, (geometry.size.height - (compact ? 230 : 250)) / 4))
+            ZStack {
+                Button {
+                    Task { await model.dismissApartmentEntry() }
+                } label: {
+                    Color.black.opacity(0.42).ignoresSafeArea()
+                        .contentShape(Rectangle())
                 }
-                .accessibilityLabel("Cancel apartment entry")
-            }
-            Text(model.apartmentInput)
-                .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                .frame(maxWidth: .infinity, minHeight: 58)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityIdentifier("apartment-number-input")
-                .accessibilityLabel("Apartment number input")
-                .accessibilityValue(model.apartmentInput.isEmpty ? "Empty" : model.apartmentInput)
-            if !model.apartmentInput.isEmpty && UInt8(model.apartmentInput) == nil {
-                Text("Apartment must be between 0 and 255.")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("apartment-validation-error")
-            }
-            VStack(spacing: 8) {
-                ForEach(digits, id: \.self) { row in
-                    HStack(spacing: 8) { ForEach(row, id: \.self) { digit in key(digit) } }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss apartment entry")
+                .accessibilityIdentifier("apartment-entry-backdrop")
+
+                VStack(spacing: compact ? 7 : 12) {
+                    HStack {
+                        Text("Apartment #").font(.title3.bold())
+                        Spacer()
+                    }
+                    HStack(spacing: 8) {
+                        Text(model.apartmentInput)
+                            .font(.system(size: compact ? 32 : 40, weight: .semibold, design: .rounded).monospacedDigit())
+                            .frame(maxWidth: .infinity, minHeight: compact ? 48 : 58, alignment: .center)
+                            .accessibilityIdentifier("apartment-number-input")
+                            .accessibilityLabel("Apartment number input")
+                            .accessibilityValue(model.apartmentInput.isEmpty ? "Empty" : model.apartmentInput)
+                        if !model.apartmentInput.isEmpty {
+                            Button {
+                                model.apartmentInput = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Clear apartment number")
+                            .accessibilityIdentifier("clear-apartment-number")
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+
+                    if !model.apartmentInput.isEmpty && UInt8(model.apartmentInput) == nil {
+                        Text("Apartment must be between 0 and 255.")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("apartment-validation-error")
+                    } else if compact {
+                        Color.clear.frame(height: 0)
+                    }
+
+                    VStack(spacing: compact ? 5 : 8) {
+                        ForEach(Array(digits.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: compact ? 6 : 8) {
+                                ForEach(Array(row.enumerated()), id: \.offset) { _, digit in
+                                    if digit.isEmpty {
+                                        Color.clear.frame(maxWidth: .infinity, minHeight: keyHeight)
+                                            .accessibilityHidden(true)
+                                    } else {
+                                        key(digit, height: keyHeight)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        actionButton("Cancel", identifier: "apartment-cancel", height: keyHeight) {
+                            Task { await model.cancelApartmentEntry() }
+                        }
+                        if allowsSkip {
+                            actionButton("Skip", identifier: "apartment-skip", height: keyHeight) {
+                                Task { await model.skipApartmentEntry() }
+                            }
+                        }
+                        Button {
+                            Task { await model.saveApartmentEntry() }
+                        } label: {
+                            Text("Save")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, minHeight: keyHeight)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!model.canSaveApartment)
+                        .accessibilityIdentifier("apartment-save")
+                    }
                 }
-                HStack(spacing: 8) {
-                    Color.clear.frame(maxWidth: .infinity, minHeight: 56)
-                    key("0")
-                    Button { if !model.apartmentInput.isEmpty { model.apartmentInput.removeLast() } } label: {
-                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: 56)
-                    }.buttonStyle(.bordered).accessibilityLabel("Backspace")
-                }
+                .padding(compact ? 12 : 24)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .fixedSize(horizontal: false, vertical: true)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+                .environment(\.colorScheme, .light)
+                .padding(16)
+                .accessibilityIdentifier("apartment-entry-modal")
             }
-            HStack {
-                Button("Cancel") { Task { await model.cancelApartmentEntry() } }.buttonStyle(.bordered).frame(minHeight: 40)
-                Spacer()
-                if allowsSkip {
-                    Button("Skip") { Task { await model.skipApartmentEntry() } }.buttonStyle(.bordered).frame(minHeight: 40)
-                }
-                Button("Save") { Task { await model.saveApartmentEntry() } }
-                    .buttonStyle(.borderedProminent).frame(minHeight: 40).disabled(!model.canSaveApartment)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
         }
-        .padding(24)
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
-        .environment(\.colorScheme, .light)
-        .presentationDetents([.large])
-        .presentationBackground(Color.white)
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled()
+        .accessibilityAddTraits(.isModal)
     }
 
-    private func key(_ digit: String) -> some View {
+    private func key(_ digit: String, height: CGFloat) -> some View {
         Button {
             guard model.apartmentInput.count < 3 else { return }
             model.apartmentInput += digit
         } label: {
-            Text(digit).font(.title2.weight(.medium)).frame(maxWidth: .infinity, minHeight: 56)
+            Text(digit).font(.title2.weight(.medium)).frame(maxWidth: .infinity, minHeight: height)
         }
         .buttonStyle(.bordered)
         .accessibilityLabel(digit)
         .accessibilityIdentifier("apartment-key-\(digit)")
+    }
+
+    private func actionButton(_ title: String, identifier: String, height: CGFloat, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: height)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -96,7 +153,7 @@ struct SessionLoaderSheet: View {
                     dismiss()
                 } label: {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(Self.dateFormatter.string(from: session.updatedAt)).font(.headline)
+                        Text(Self.dateFormatter.string(from: session.startedAt)).font(.headline)
                         Text("\(session.rideTotal) rides · \(session.charges.count) charges · €\(NSDecimalNumber(decimal: session.amountTotal))")
                             .font(.subheadline).foregroundStyle(.secondary)
                     }

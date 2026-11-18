@@ -45,7 +45,7 @@ final class AutoScanUITests: XCTestCase {
         autoToggle.tap()
         XCTAssertTrue(autoToggle.waitForValue("On"))
         restart.tap()
-        app.buttons.matching(NSPredicate(format: "label == %@", "Restart calibration")).firstMatch.tap()
+        app.buttons["confirm-restart-calibration"].tap()
 
         XCTAssertTrue(autoToggle.waitForValue("Off"))
         XCTAssertFalse(autoToggle.isEnabled)
@@ -236,11 +236,12 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertGreaterThan(sessionRows.count, 0)
         sessionRows.firstMatch.tap()
         XCTAssertTrue(app.staticTexts["TOTAL · 4 charges"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Apt #"].exists)
 
         app.buttons["new-charge-session"].tap()
-        XCTAssertTrue(app.buttons["Start new session"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["confirm-new-charge-session"].waitForExistence(timeout: 5))
         attachScreenshot("new-session-confirmation")
-        app.buttons["Start new session"].tap()
+        app.buttons["confirm-new-charge-session"].tap()
         XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 5))
         app.buttons["load-charge-session"].tap()
         XCTAssertTrue(app.navigationBars["Load session"].waitForExistence(timeout: 5))
@@ -250,16 +251,16 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["TOTAL · 4 charges"].waitForExistence(timeout: 5))
 
         app.buttons["restart-calibration"].tap()
-        XCTAssertTrue(app.buttons["Restart calibration"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["confirm-restart-calibration"].waitForExistence(timeout: 5))
         attachScreenshot("calibration-confirmation")
-        app.buttons.matching(NSPredicate(format: "label == %@", "Restart calibration")).firstMatch.tap()
+        app.buttons["confirm-restart-calibration"].tap()
     }
 
     func testApartmentChargeAndEditKeypadScreenshotsAndSave() {
         launchScene("apartment-charge", orientation: .portrait)
         let chargeInput = app.staticTexts["apartment-number-input"]
         XCTAssertTrue(chargeInput.waitForExistence(timeout: 15))
-        XCTAssertTrue(app.buttons["Skip"].exists)
+        XCTAssertTrue(app.buttons["apartment-skip"].exists)
         attachScreenshot("apartment-charge-keypad-skip-portrait")
         launchScene("apartment-charge", orientation: .landscapeLeft)
         let landscapeChargeInput = app.staticTexts["apartment-number-input"]
@@ -269,22 +270,21 @@ final class AutoScanUITests: XCTestCase {
         launchScene("apartment-charge", orientation: .portrait)
         XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 10))
         for digit in ["5", "2"] { app.buttons["apartment-key-\(digit)"].tap() }
-        app.buttons["Save"].tap()
+        app.buttons["apartment-save"].tap()
 
         let apartment = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 52")).firstMatch
         XCTAssertTrue(apartment.waitForExistence(timeout: 10))
         apartment.tap()
         XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Skip"].exists)
+        XCTAssertFalse(app.buttons["apartment-skip"].exists)
         attachScreenshot("apartment-edit-keypad-no-skip-portrait")
         launchScene("apartment-edit", orientation: .landscapeLeft)
         XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 10))
         XCTAssertTrue(waitForLandscapeLayout())
-        XCTAssertFalse(app.buttons["Skip"].exists)
+        XCTAssertFalse(app.buttons["apartment-skip"].exists)
         attachScreenshot("apartment-edit-keypad-no-skip-landscape")
         XCUIDevice.shared.orientation = .portrait
-        app.buttons["Cancel"].tap()
-
+        app.buttons["apartment-cancel"].tap()
         attachScreenshot("apartment-after-save")
     }
 

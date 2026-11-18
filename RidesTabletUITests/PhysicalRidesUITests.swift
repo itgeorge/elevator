@@ -41,7 +41,7 @@ final class PhysicalRidesUITests: XCTestCase {
         let newSessionButton = app.buttons["new-charge-session"]
         XCTAssertTrue(newSessionButton.waitForExistence(timeout: 10))
         newSessionButton.tap()
-        let confirmNewSession = app.buttons["Start new session"]
+        let confirmNewSession = app.buttons["confirm-new-charge-session"]
         XCTAssertTrue(confirmNewSession.waitForExistence(timeout: 10))
         confirmNewSession.tap()
         XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 10))
@@ -69,16 +69,16 @@ final class PhysicalRidesUITests: XCTestCase {
         charge.tap()
         XCTAssertTrue(apartmentInput.waitForExistence(timeout: 15), "Secret did not produce the missing-apartment prompt")
         attach(app, name: "apartment-cancel-prompt")
-        app.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch.tap()
+        app.buttons["apartment-cancel"].tap()
         XCTAssertEqual(rideValue(current), initial, "Apartment Cancel must leave rides unchanged")
         XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists, "Cancel must not create a completed charge")
         attach(app, name: "after-apartment-cancel")
 
         // Skip: charge rides only, preserving the missing apartment.
         charge.tap()
-        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["apartment-skip"].waitForExistence(timeout: 15))
         attach(app, name: "apartment-skip-prompt")
-        app.buttons["Skip"].tap()
+        app.buttons["apartment-skip"].tap()
         XCTAssertTrue(waitForRideValue(current, initial + delta, timeout: 30))
         XCTAssertTrue(app.staticTexts["TOTAL · 1 charges"].waitForExistence(timeout: 15))
 
@@ -88,7 +88,7 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(apartmentInput.waitForExistence(timeout: 15))
         enterApartment(42)
         attach(app, name: "apartment-save-prompt")
-        app.buttons["Save"].tap()
+        app.buttons["apartment-save"].tap()
         XCTAssertTrue(waitForRideValue(current, initial + delta * 2, timeout: 30))
         var apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 42")).firstMatch
         XCTAssertTrue(apartmentButton.waitForExistence(timeout: 20))
@@ -98,12 +98,11 @@ final class PhysicalRidesUITests: XCTestCase {
         adjust.tap()
         apartmentButton.tap()
         XCTAssertTrue(apartmentInput.waitForExistence(timeout: 10))
-        app.buttons["Backspace"].tap()
-        app.buttons["Backspace"].tap()
+        app.buttons["clear-apartment-number"].tap()
         app.buttons["apartment-key-4"].tap()
         app.buttons["apartment-key-3"].tap()
         attach(app, name: "apartment-edit-before-save")
-        app.buttons["Save"].tap()
+        app.buttons["apartment-save"].tap()
         XCTAssertTrue(waitForRideValue(current, initial + delta * 2, timeout: 20), "Apartment-only edit changed current rides")
         XCTAssertTrue(app.staticTexts["TOTAL · 2 charges"].exists, "Apartment-only edit added a charge")
         apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch
@@ -169,18 +168,17 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists, "Reset must preserve completed-charge history")
         attach(app, name: "after-cross-profile-reset")
 
-        // Confirmation dialog cancellation is by tapping outside on iPad; scope the
-        // destructive action so it cannot match the underlying restart-calibration control.
+        // Opaque modal keeps confirmation explicit and prevents accidental outside dismissal.
         let restart = app.buttons["restart-calibration"]
         XCTAssertTrue(restart.waitForExistence(timeout: 10))
         restart.tap()
         let confirmRestart = app.buttons.matching(NSPredicate(
-            format: "label == %@ AND identifier != %@", "Restart calibration", "restart-calibration"
+            format: "identifier == %@", "confirm-restart-calibration"
         )).firstMatch
         XCTAssertTrue(confirmRestart.waitForExistence(timeout: 10))
         attach(app, name: "calibration-confirmation")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.12)).tap()
-        XCTAssertTrue(restartedCurrent.waitForExistence(timeout: 10), "Tapping outside must cancel calibration restart")
+        app.buttons["cancel-confirmation"].tap()
+        XCTAssertTrue(restartedCurrent.waitForExistence(timeout: 10), "Cancel must preserve the loaded token")
         XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists)
         restart.tap()
         XCTAssertTrue(confirmRestart.waitForExistence(timeout: 10))
