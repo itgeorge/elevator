@@ -7,6 +7,7 @@ public struct Token: Codable, Equatable, Identifiable, Sendable {
     public let sequence: RideSequence
 
     public var id: String { blocks.map(Self.hex).joined(separator: "-") }
+    public var block3: UInt32 { blocks[3] }
     public var block4: UInt32 { blocks[4] }
     public var block5: UInt32 { blocks[5] }
     public var block6: UInt32 { blocks[6] }
