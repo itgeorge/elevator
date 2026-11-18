@@ -33,11 +33,17 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
                 return .failure("The bridge returned invalid scan values.")
             }
 
+            // Only fetch the targeted missing-block set when apartment support is in use.
+            // This keeps the ordinary known-token path at its original single scan request.
+            let apartmentSecret = await MainActor.run { ApartmentSecretStore.shared.secret }
+            let missingForApartment = apartmentSecret == nil ? nil : try await client.readPage0MissingBlocks()
+            let block3 = missingForApartment?.blocks.first(where: { $0.block == 3 }).flatMap { UInt32($0.value, radix: 16) } ?? 0
             let rideRead = RideBlockResolver.resolve(block5: block5, block6: block6)
             if rideRead.status == .success,
                let sequence = rideRead.sequence,
                let rides = rideRead.rides {
                 var blocks = [UInt32](repeating: 0, count: 8)
+                blocks[3] = block3
                 blocks[4] = block4
                 blocks[5] = block5
                 blocks[6] = block6
@@ -101,13 +107,35 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
         }
     }
 
+    public func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome {
+        let blocks = request.token.blocks
+        var changes: [(Int, UInt32)] = [(3, blocks[3]), (4, request.apartmentBlock)]
+        if let rides = request.desiredRides {
+            guard let encoded = request.token.sequence.encode(rides) else { return .failure("Invalid ride count.") }
+            changes += [(5, encoded), (6, encoded)]
+        }
+        do {
+            let mutations = try changes.map { block, desired in
+                try BridgePage0Mutation(block: block, expected: Token.hex(blocks[block]), desired: Token.hex(desired))
+            }
+            let body = try BridgePage0MutationRequest(mutations: mutations)
+            let response = try await client.mutatePage0(body)
+            if response.status == "written" || response.status == "alreadyApplied" { return .success }
+            if response.status == "conflict" { return .requiresRefresh("Apartment/charge conflicted with a changed token. Tap Detect.") }
+            return .requiresRefresh("Apartment/charge verification failed. Tap Detect.")
+        } catch {
+            return .requiresRefresh(Self.describe(error, operation: "Apartment/charge") + " Tap Detect and try again.")
+        }
+    }
+
     public func reset(_ request: ResetMutationRequest) async -> ResetOutcome {
         let profile = ResetSequence.for(request.sequence)
         do {
             let current = try await client.readPage0Blocks1To6()
             let planned = try Page0ResetPlanningWorkflow.planMutations(
                 currentBlocks: current.blocks,
-                profile: profile
+                profile: profile,
+                apartmentSecret: await MainActor.run { ApartmentSecretStore.shared.secret }
             )
             if planned.isEmpty {
                 return .alreadyApplied(Self.token(from: profile, verified: [:]))

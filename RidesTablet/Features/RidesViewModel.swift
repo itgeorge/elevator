@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -94,6 +95,9 @@ public final class RidesViewModel: ObservableObject {
     @Published public private(set) var loadedToken: Token?
     @Published public var isResetSheetPresented = false
     @Published public var selectedResetSequence: RideSequence?
+    @Published public var isApartmentSheetPresented = false
+    @Published public var apartmentInput = ""
+    @Published public private(set) var apartmentNumber: UInt8?
     @Published public private(set) var simulationScenario: SimulationScenario = .goodToken
     public enum CalibrationStep: Equatable { case noToken, placeToken, ready }
     @Published public private(set) var calibrationStep: CalibrationStep = .noToken
@@ -111,6 +115,9 @@ public final class RidesViewModel: ObservableObject {
     private let legacyDevice: (any ProxmarkDevice)?
     private let dumpStore: UnknownDumpStore
     private let chargeHistoryStore: any ChargeHistoryStore
+    private let apartmentSecretStore: ApartmentSecretStore
+    private var apartmentSecretSubscription: AnyCancellable?
+    private var editingApartment = false
     private let autoScanInterval: TimeInterval
     private let occupiedAutoScanInterval: TimeInterval
     private let periodicConfirmInterval: TimeInterval
@@ -146,7 +153,8 @@ public final class RidesViewModel: ObservableObject {
         autoScanInterval: TimeInterval = 0.1,
         occupiedAutoScanInterval: TimeInterval = 3,
         periodicConfirmInterval: TimeInterval = 5,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        apartmentSecretStore: ApartmentSecretStore = .shared
     ) {
         self.device = device
         self.legacyDevice = device as? any ProxmarkDevice
@@ -157,7 +165,12 @@ public final class RidesViewModel: ObservableObject {
         self.occupiedAutoScanInterval = max(0, occupiedAutoScanInterval)
         self.periodicConfirmInterval = max(0, periodicConfirmInterval)
         self.now = now
+        self.apartmentSecretStore = apartmentSecretStore
         self.completedCharges = chargeHistoryStore.load()
+        apartmentSecretSubscription = apartmentSecretStore.$secret.sink { [weak self] secret in
+            guard let self else { return }
+            self.updateApartment(secret: secret)
+        }
         if let fake = device as? FakeProxmark {
             simulationScenario = fake.scenario
         }
@@ -170,7 +183,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     public var isBusy: Bool {
-        if mutationInProgress { return true }
+        if mutationInProgress || isApartmentSheetPresented { return true }
         if case .working = state { return true }
         return false
     }
@@ -203,6 +216,74 @@ public final class RidesViewModel: ObservableObject {
     public var costText: String {
         let number = NSDecimalNumber(decimal: costEUR)
         return number == .notANumber ? "€0.00" : String(format: "€%.2f", number.doubleValue)
+    }
+
+    public var isEditingApartment: Bool { editingApartment }
+    public var canSaveApartment: Bool { UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) != nil && loadedToken != nil && !mutationInProgress }
+
+    private func updateApartment(secret: String?) {
+        guard let secret, let token = loadedToken,
+              let payload = ApartmentBlockCodec.decode(secret: secret, block3: token.blocks[3], block4: token.block4), payload.building == 0 else {
+            apartmentNumber = nil
+            return
+        }
+        apartmentNumber = payload.apartment
+    }
+
+    public func requestCharge() async {
+        guard canCharge else { return }
+        if apartmentSecretStore.secret != nil && apartmentNumber == nil {
+            editingApartment = false
+            apartmentInput = ""
+            isApartmentSheetPresented = true
+            await pauseAutoScanningForMutation()
+            return
+        }
+        await charge()
+    }
+
+    public func editApartment() async {
+        guard canAdjust, apartmentSecretStore.secret != nil else { return }
+        editingApartment = true
+        apartmentInput = apartmentNumber.map(String.init) ?? ""
+        isApartmentSheetPresented = true
+        await pauseAutoScanningForMutation()
+    }
+
+    public func cancelApartmentEntry() async { isApartmentSheetPresented = false; resumeAutoScanningAfterMutation() }
+    public func skipApartmentEntry() async { isApartmentSheetPresented = false; await charge() }
+    public func saveApartmentEntry() async {
+        guard canSaveApartment, let token = loadedToken, let secret = apartmentSecretStore.secret,
+              let apartment = UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+        await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment)
+    }
+
+    private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool) async {
+        mutationInProgress = true
+        await pauseAutoScanningForMutation()
+        let aptBlock = ApartmentBlockCodec.encode(secret: secret, block3: token.blocks[3], apartment: apartment)
+        let desired = includeCharge ? pendingRides : nil
+        let chargeAt = Date(), initial = currentRides
+        state = .working(includeCharge ? "Charging…" : "Saving apartment…")
+        let outcome = await device.writeApartment(ApartmentMutationRequest(token: token, apartmentBlock: aptBlock, desiredRides: desired))
+        switch outcome {
+        case .success:
+            var newBlocks = token.blocks; newBlocks[4] = aptBlock
+            if let desired, let encoded = token.sequence.encode(desired) { newBlocks[5] = encoded; newBlocks[6] = encoded }
+            let updated = Token(blocks: newBlocks, rideCount: desired ?? token.rideCount, sequence: token.sequence)
+            loadedToken = updated; apartmentNumber = apartment; isApartmentSheetPresented = false
+            if includeCharge {
+                let delta = Int(pendingRides) - Int(initial)
+                completedCharges.insert(CompletedCharge(timestamp: chargeAt, sequence: token.sequence, initialRides: initial, addedRides: delta, totalRides: pendingRides, amountEUR: Decimal(delta) * configuration.pricePerRideEUR), at: 0)
+                chargeHistoryStore.save(completedCharges)
+                currentRides = pendingRides
+            }
+            state = .known(updated); message = includeCharge ? "Charge successful." : "Apartment saved."
+            if mutationNeedsPostWriteRefresh { await refreshAfterMutation() }
+        case .failure(let error): state = .failed(error); message = error
+        case .requiresRefresh(let error): clearLoadedTokenForRefresh(); state = .failed(error); message = error
+        }
+        mutationInProgress = false; resumeAutoScanningAfterMutation()
     }
 
     public var aptBlock4Text: String {
@@ -466,9 +547,9 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func pauseAutoScanningForMutation() async {
-        autoWasPausedForMutation = isAutoScanning
-        mutationNeedsPostWriteRefresh = isAutoScanning
         guard isAutoScanning else { return }
+        autoWasPausedForMutation = true
+        mutationNeedsPostWriteRefresh = true
         isAutoScanning = false
         cycleGeneration += 1
         autoScanTask?.cancel()
@@ -675,7 +756,7 @@ public final class RidesViewModel: ObservableObject {
 
     public func clearPendingRides() {
         guard canAdjust else { return }
-        pendingRides = 0
+        pendingRides = currentRides
     }
 
     /// The cash controls are deliberately ride controls underneath: €1.50 is 50 rides.
@@ -732,7 +813,6 @@ public final class RidesViewModel: ObservableObject {
                 amountEUR: amountEUR
             )
             completedCharges.insert(charge, at: 0)
-            completedCharges = Array(completedCharges.prefix(100))
             chargeHistoryStore.save(completedCharges)
             loadedToken = updated
             currentRides = desiredRides
@@ -863,6 +943,7 @@ public final class RidesViewModel: ObservableObject {
     private func setKnown(_ token: Token) {
         autoConfirmationIsStale = false
         loadedToken = token
+        updateApartment(secret: apartmentSecretStore.secret)
         currentRides = min(token.rideCount, configuration.maxRides)
         pendingRides = currentRides
         state = .known(token)

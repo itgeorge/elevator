@@ -9,7 +9,8 @@ enum Page0ResetPlanningWorkflow {
 
     static func planMutations(
         currentBlocks: [BridgePage0BlockValue],
-        profile: ResetSequence
+        profile: ResetSequence,
+        apartmentSecret: String? = nil
     ) throws -> [PlannedMutation] {
         guard currentBlocks.count == Page0Blocks1To6.allowlist.count,
               zip(Page0Blocks1To6.allowlist, currentBlocks.map(\.block)).allSatisfy(==) else {
@@ -17,7 +18,15 @@ enum Page0ResetPlanningWorkflow {
         }
 
         let currentByBlock = Dictionary(uniqueKeysWithValues: currentBlocks.map { ($0.block, $0.value) })
-        let image = profile.resetImage()
+        var image = profile.resetImage()
+        let currentBlock3 = UInt32(currentByBlock[3]!, radix: 16)!
+        let currentBlock4 = UInt32(currentByBlock[4]!, radix: 16)!
+        if let apartmentSecret, let apt = ApartmentBlockCodec.decode(secret: apartmentSecret, block3: currentBlock3, block4: currentBlock4), apt.building == 0 {
+            image[4] = ApartmentBlockCodec.encode(secret: apartmentSecret, block3: image[3], building: apt.building, apartment: apt.apartment)
+        } else {
+            // With no usable secret, retain block 4 rather than destroying an unknown apartment payload.
+            image[4] = currentBlock4
+        }
 
         let identityMatches = (1...4).allSatisfy { block in
             currentByBlock[block] == formatBlock(image[block])

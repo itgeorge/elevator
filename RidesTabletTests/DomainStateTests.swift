@@ -3,6 +3,42 @@ import XCTest
 
 @MainActor
 final class DomainStateTests: XCTestCase {
+    func testApartmentCodecMatchesAptV1VectorAndRejectsWrongSecret() {
+        let encoded = ApartmentBlockCodec.encode(secret: "phase0-test-secret", block3: 0xCCC749CC, apartment: 42)
+        XCTAssertEqual(encoded, 0xF0CC2223)
+        XCTAssertEqual(ApartmentBlockCodec.decode(secret: "phase0-test-secret", block3: 0xCCC749CC, block4: encoded)?.apartment, 42)
+        XCTAssertNil(ApartmentBlockCodec.decode(secret: "wrong", block3: 0xCCC749CC, block4: encoded))
+    }
+
+    func testApartmentOnlyEditPreservesPendingRidesAndChargeSaveCombinesWrites() async {
+        let store = ApartmentSecretStore(secret: "apartment-test-secret")
+        let original = Token.sample(rideCount: 73)
+        let fake = FakeProxmark(read: .known(original))
+        let model = RidesViewModel(device: fake, apartmentSecretStore: store)
+        await model.detect()
+        model.adjustRides(by: 20)
+        await model.editApartment()
+        model.apartmentInput = "12"
+        await model.saveApartmentEntry()
+        XCTAssertEqual(model.apartmentNumber, 12)
+        XCTAssertEqual(model.pendingRides, 93)
+        XCTAssertTrue(model.completedCharges.isEmpty)
+
+        // Simulate a token whose apartment is undecodable under the configured secret.
+        let noApartment = Token.sample(rideCount: 73)
+        let secondFake = FakeProxmark(read: .known(noApartment))
+        let second = RidesViewModel(device: secondFake, apartmentSecretStore: store)
+        await second.detect()
+        second.adjustRides(by: 10)
+        await second.requestCharge()
+        XCTAssertTrue(second.isApartmentSheetPresented)
+        second.apartmentInput = "8"
+        await second.saveApartmentEntry()
+        XCTAssertEqual(second.apartmentNumber, 8)
+        XCTAssertEqual(second.currentRides, 83)
+        XCTAssertEqual(second.completedCharges.count, 1)
+    }
+
     func testManualKnownAndUnknownBaselinesDoNotPeriodicallyReread() async throws {
         let knownFake = FakeProxmark()
         let known = RidesViewModel(device: knownFake, autoScanInterval: 60)

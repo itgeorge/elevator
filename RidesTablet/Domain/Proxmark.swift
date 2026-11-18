@@ -25,6 +25,15 @@ public struct RideMirrorWriteRequest: Equatable, Sendable {
     public var expectedBlock6: UInt32 { token.block6 }
 }
 
+public struct ApartmentMutationRequest: Equatable, Sendable {
+    public let token: Token
+    public let apartmentBlock: UInt32
+    public let desiredRides: UInt?
+    public init(token: Token, apartmentBlock: UInt32, desiredRides: UInt? = nil) {
+        self.token = token; self.apartmentBlock = apartmentBlock; self.desiredRides = desiredRides
+    }
+}
+
 public struct ResetMutationRequest: Equatable, Sendable {
     public let sequence: RideSequence
 
@@ -56,6 +65,7 @@ public protocol RideTokenDevice: Sendable {
     func measureSignal() async -> TuneOutcome
     func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome
     func reset(_ request: ResetMutationRequest) async -> ResetOutcome
+    func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome
 }
 
 public enum DetectOutcome: Equatable, Sendable {
@@ -107,6 +117,7 @@ public protocol ProxmarkDevice: Sendable {
 }
 
 public extension RideTokenDevice {
+    func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome { .failure("Apartment writing is unavailable for this reader.") }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome { .failure("Calibration signal measurement is unavailable.") }
     func measureSignal() async -> TuneOutcome {
         switch await measureCalibrationSignal() {
@@ -358,6 +369,15 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
                 return .failure(error)
             }
         }
+    }
+
+    public func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome {
+        var blocks = request.token.blocks
+        blocks[4] = request.apartmentBlock
+        let rides = request.desiredRides ?? request.token.rideCount
+        if let encoded = request.token.sequence.encode(rides) { blocks[5] = encoded; blocks[6] = encoded }
+        let updated = Token(blocks: blocks, rideCount: rides, sequence: request.token.sequence)
+        return await write(updated)
     }
 
     public func reset(_ request: ResetMutationRequest) async -> ResetOutcome {
