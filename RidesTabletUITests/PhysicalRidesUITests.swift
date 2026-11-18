@@ -107,6 +107,13 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue((pending.value as? String)?.contains("\(initial + delta * 3)") == true,
                       "Apartment-only edit must preserve the pending ride adjustment")
         attach(app, name: "apartment-edit-after-save")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 15), .completed)
+        attach(app, name: "physical-main-apartment-landscape")
+        XCUIDevice.shared.orientation = .portrait
+        let portrait = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in self.app.frame.height > self.app.frame.width }, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [portrait], timeout: 15), .completed)
 
         // Switch away and load this session before completing its pending third charge.
         app.buttons["new-charge-session"].tap()
@@ -197,6 +204,7 @@ final class PhysicalRidesUITests: XCTestCase {
         secretField.typeText(secret)
         confirmField.tap()
         confirmField.typeText(secret)
+        attach(app, name: "physical-secret-password-fields")
         app.buttons["Save secret"].tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["Charge token"].waitForExistence(timeout: 15))
@@ -225,7 +233,7 @@ final class PhysicalRidesUITests: XCTestCase {
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)

@@ -9,7 +9,7 @@ struct ApartmentEntrySheet: View {
     private let digits = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]]
 
     var body: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 14) {
             HStack {
                 Text("Apartment #").font(.title3.bold())
                 Spacer()
@@ -19,8 +19,8 @@ struct ApartmentEntrySheet: View {
                 .accessibilityLabel("Cancel apartment entry")
             }
             Text(model.apartmentInput)
-                .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
-                .frame(maxWidth: .infinity, minHeight: 48)
+                .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
+                .frame(maxWidth: .infinity, minHeight: 58)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityIdentifier("apartment-number-input")
                 .accessibilityLabel("Apartment number input")
@@ -31,15 +31,15 @@ struct ApartmentEntrySheet: View {
                     .foregroundStyle(.red)
                     .accessibilityIdentifier("apartment-validation-error")
             }
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 ForEach(digits, id: \.self) { row in
                     HStack(spacing: 8) { ForEach(row, id: \.self) { digit in key(digit) } }
                 }
                 HStack(spacing: 8) {
-                    Color.clear.frame(maxWidth: .infinity, minHeight: 42)
+                    Color.clear.frame(maxWidth: .infinity, minHeight: 56)
                     key("0")
                     Button { if !model.apartmentInput.isEmpty { model.apartmentInput.removeLast() } } label: {
-                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: 42)
+                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: 56)
                     }.buttonStyle(.bordered).accessibilityLabel("Backspace")
                 }
             }
@@ -53,8 +53,13 @@ struct ApartmentEntrySheet: View {
                     .buttonStyle(.borderedProminent).frame(minHeight: 40).disabled(!model.canSaveApartment)
             }
         }
-        .padding(16)
-        .presentationDetents([.height(460), .medium])
+        .padding(24)
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+        .environment(\.colorScheme, .light)
+        .presentationDetents([.large])
+        .presentationBackground(Color.white)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled()
     }
@@ -64,7 +69,7 @@ struct ApartmentEntrySheet: View {
             guard model.apartmentInput.count < 3 else { return }
             model.apartmentInput += digit
         } label: {
-            Text(digit).font(.title3.weight(.medium)).frame(maxWidth: .infinity, minHeight: 42)
+            Text(digit).font(.title2.weight(.medium)).frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.bordered)
         .accessibilityLabel(digit)
