@@ -331,6 +331,7 @@ struct RidesRootView: View {
             ApartmentSecretStore.shared.setSecret("rides-demo-secret")
             await model.detect()
             model.adjustRides(by: 50)
+            await model.editApartment()
             model.apartmentInput = "52"
             await model.saveApartmentEntry()
         case .apartmentHistory:
@@ -340,9 +341,11 @@ struct RidesRootView: View {
                 await model.charge()
             }
             ApartmentSecretStore.shared.setSecret("rides-demo-secret")
-            model.adjustRides(by: 33)
+            await model.editApartment()
             model.apartmentInput = "52"
             await model.saveApartmentEntry()
+            model.adjustRides(by: 33)
+            await model.charge()
         case .apartmentCharge:
             ApartmentSecretStore.shared.setSecret("rides-demo-secret")
             await model.detect()
