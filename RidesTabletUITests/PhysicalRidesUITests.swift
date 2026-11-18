@@ -206,6 +206,34 @@ final class PhysicalRidesUITests: XCTestCase {
     }
 
     #if RIDES_PHYSICAL_UI_WRITES && !targetEnvironment(simulator)
+    func testPhysicalReadOnlyFinalStateAndSecretFingerprint() throws {
+        continueAfterFailure = false
+        let runnerOptIn = ProcessInfo.processInfo.environment["TEST_RUNNER_RIDES_UI_PHYSICAL_TEST"]
+            ?? ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_TEST"]
+        guard runnerOptIn == "1" else { throw XCTSkip("Set TEST_RUNNER_RIDES_UI_PHYSICAL_TEST=1 to opt in.") }
+        XCTAssertTrue(secret == requiredPhysicalSecret, "Set the fresh physical-test secret through the test-runner environment.")
+
+        launchPhysicalApp()
+        let current = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
+        XCTAssertTrue(current.waitForExistence(timeout: 30), "Real Detect did not publish a ride count")
+        XCTAssertTrue(waitForLoadedRideValue(current, timeout: 30), "Real Detect did not publish a ride count")
+        saveSecretThroughConnectionSheet()
+        XCTAssertEqual(rideValue(current), 0, "Fresh readback must show Mercury at zero rides")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.waitForExistence(timeout: 15),
+                       "Fresh readback under the new secret must decode apartment 43")
+        attach(app, name: "physical-final-hardware-readback-mercury-0-apartment-43")
+
+        app.buttons["Connection diagnostics"].tap()
+        let fingerprint = app.staticTexts["apartmentSecretFingerprint"]
+        XCTAssertTrue(fingerprint.waitForExistence(timeout: 10), "Saved secret fingerprint is not displayed")
+        XCTAssertTrue(app.buttons["clearApartmentSecretButton"].exists)
+        XCTAssertFalse(app.secureTextFields["Apartment secret"].exists)
+        XCTAssertFalse(app.secureTextFields["Confirm apartment secret"].exists)
+        XCTAssertFalse(app.buttons["saveApartmentSecretButton"].exists)
+        attach(app, name: "physical-saved-secret-fingerprint-settings")
+        app.buttons["Done"].tap()
+    }
+
     private func launchPhysicalApp() {
         app = XCUIApplication()
         app.launchEnvironment["RIDES_UI_PHYSICAL_BOOTSTRAP"] = "1"

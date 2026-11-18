@@ -1,0 +1,101 @@
+{
+  "date": "2026-11-19",
+  "device": {
+    "model": "iPad Air (4th generation)",
+    "udid": "00008101-001A68EE21F0001E",
+    "hardware": "PM3 via RidesBridge",
+    "bridge": "existing iPad pairing retained"
+  },
+  "sourceCommit": "328d84a (physical acceptance flow)",
+  "readOnlyTestSource": "Added as part of this follow-up; included in the final evidence commit.",
+  "physicalAcceptance": {
+    "result": "passed",
+    "tests": {"passed": 1, "failed": 0, "skipped": 0},
+    "resultBundle": "/tmp/rides-ui-followup-physical-2026-11-19.xcresult",
+    "log": "/tmp/rides-ui-followup-physical-2026-11-19.log",
+    "test": "RidesTabletUITests/PhysicalRidesUITests/testPhysicalRidesAcceptance",
+    "destination": "platform=iOS,id=00008101-001A68EE21F0001E",
+    "buildConditions": ["DEBUG", "RIDES_PHYSICAL_UI_WRITES"],
+    "diagnostics": "never",
+    "bundleIdentifier": "com.itgeorge.RidesTablet",
+    "signingTeam": "TJY5296P7S",
+    "runnerOptIn": "provided through test-runner environment",
+    "testSecret": "provided through test-runner environment; omitted from this receipt"
+  },
+  "landscapeKeypadChecks": {
+    "result": "passed",
+    "chargePopup": {
+      "openedAfterLandscape": true,
+      "targets": ["0-9", "Cancel", "Skip", "Save"],
+      "assertions": ["present", "inside XCUIApplication frame", "hittable"]
+    },
+    "apartmentEditPopup": {
+      "openedAfterLandscape": true,
+      "targets": ["0-9", "Cancel", "Save"],
+      "assertions": ["present", "inside XCUIApplication frame", "hittable"]
+    },
+    "visualReview": "All keypad digits and footers are visible in the saved full-frame landscape captures; no cropping was used."
+  },
+  "readOnlyFinalVerification": {
+    "result": "passed",
+    "tests": {"passed": 1, "failed": 0, "skipped": 0},
+    "resultBundle": "/tmp/rides-ui-followup-physical-readonly-2026-11-19.xcresult",
+    "test": "RidesTabletUITests/PhysicalRidesUITests/testPhysicalReadOnlyFinalStateAndSecretFingerprint",
+    "operations": "fresh physical Detect and UI/settings reads; no token writes",
+    "observed": {"rideCount": 0, "apartmentNumber": 43, "apartmentSecretPlaintextDisplayed": false},
+    "settings": "Saved-secret SHA-256 prefix is displayed; secure entry fields and Save button are absent; Clear remains available."
+  },
+  "chargeSessionEvidence": {
+    "copiedFromDeviceTo": "/tmp/rides-ui-followup-physical-2026-11-19-device-sessions",
+    "sessionJsonCount": 11,
+    "freshTestSecretFoundInAnySessionJson": false,
+    "acceptanceSessionId": "9EF18A98-31B5-4B7B-BF3A-CAF4C5D252B0",
+    "acceptanceSession": {
+      "chargeCount": 3,
+      "apartmentNumbersNewestFirst": [43, 42, null],
+      "rideEquationsNewestFirst": ["444 + 1 = 445", "443 + 1 = 444", "442 + 1 = 443"],
+      "totalEUR": 0.09,
+      "createdAtIsNotFirstChargeTime": true,
+      "startedAtInterpretation": "ChargeSession.startedAt is derived as the minimum charge timestamp (earliest charge); createdAt remains the earlier provisional session-creation time."
+    }
+  },
+  "screenshots": {
+    "directory": "RidesTablet/Screenshots/ui-followup-2026-11-19",
+    "landscapeImages": [
+      "physical-charge-landscape-first-open.png",
+      "physical-edit-landscape-first-open-42.png",
+      "physical-edit-landscape-before-save-43.png",
+      "physical-main-landscape-after-edit.png"
+    ],
+    "additionalImages": [
+      "physical-final-hardware-readback-and-charge-history.png",
+      "physical-saved-secret-fingerprint-settings.png",
+      "physical-new-session-confirmation.png",
+      "physical-calibration-confirmation.png",
+      "physical-reopened-session-apartment-history.png"
+    ],
+    "orientationNote": "Landscape XCTest exports were losslessly rotated to native 2360x1640 orientation for viewing; no pixels were cropped or resized. Other portrait exports remain 1640x2360. Original XCTest exports and manifests remain in the /tmp attachment directories."
+  },
+  "credentialHandling": {
+    "bearerTokensOrPairingPinsInReceipt": false,
+    "iPadPairing": "left intact",
+    "newMacClientCredential": "not created; no separate Mac-client pairing/revocation step was performed; the iPad pairing was left untouched"
+  },
+  "deployment": {
+    "normalDebugBuild": {
+      "result": "passed",
+      "log": "/tmp/rides-ui-followup-normal-debug-build.log",
+      "derivedData": "/tmp/RidesTabletFollowupNormal",
+      "compileConditions": ["DEBUG"],
+      "physicalWriteCompileConditionPresent": false,
+      "runnerTestEnvironmentSupplied": false,
+      "bundleIdentifier": "com.itgeorge.RidesTablet",
+      "appBinarySHA256": "1647ac66239c52c974c7e0ef63357b5c71f1ac31f822aec1f432aa8ca0ccd19e"
+    },
+    "install": "passed on the same iPad Air 4",
+    "launch": "devicectl reported the normal app launched successfully",
+    "bridgeHealth": "http://127.0.0.1:5080/api/v1/health returned status ok; bridge left running",
+    "bridgeRestarted": false,
+    "serverDeployment": false
+  }
+}
