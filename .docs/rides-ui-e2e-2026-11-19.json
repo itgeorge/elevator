@@ -6,8 +6,11 @@
     "hardware": "PM3 via RidesBridge",
     "bridge": "existing iPad pairing retained"
   },
-  "sourceCommit": "328d84a (physical acceptance flow)",
-  "readOnlyTestSource": "Added as part of this follow-up; included in the final evidence commit.",
+  "sourceCommit": "328d84a (original physical acceptance flow)",
+  "previousPhysicalE2ESourceCommit": "a9dab0f",
+  "latestLayoutFixSourceCommit": "4c65848",
+  "worktreeMergeCommit": "fe3c0a8",
+  "readOnlyTestSource": "Extended for first-frame landscape history verification; included in the final follow-up commit.",
   "physicalAcceptance": {
     "result": "passed",
     "tests": {"passed": 1, "failed": 0, "skipped": 0},
@@ -39,10 +42,22 @@
   "readOnlyFinalVerification": {
     "result": "passed",
     "tests": {"passed": 1, "failed": 0, "skipped": 0},
-    "resultBundle": "/tmp/rides-ui-followup-physical-readonly-2026-11-19.xcresult",
+    "resultBundle": "/tmp/rides-ui-followup-physical-landscape-history.xcresult",
+    "log": "/tmp/rides-ui-followup-physical-landscape-history.log",
     "test": "RidesTabletUITests/PhysicalRidesUITests/testPhysicalReadOnlyFinalStateAndSecretFingerprint",
-    "operations": "fresh physical Detect and UI/settings reads; no token writes",
-    "observed": {"rideCount": 0, "apartmentNumber": 43, "apartmentSecretPlaintextDisplayed": false},
+    "operations": "fresh physical Detect and UI/settings/history reads; no token writes",
+    "observed": {"displayedRideCount": 0, "decodedApartmentNumber": 43, "apartmentSecretPlaintextDisplayed": false},
+    "scopeNote": "This UI fresh-Detect check records the displayed ride count and apartment decode only; it is not an independent verification of profile identity or token mirror blocks.",
+    "landscapeHistory": {
+      "orientationSetBeforeAppLaunch": true,
+      "minimumViewportWidthPoints": 465,
+      "assertions": ["EUR header wholly inside history viewport", "every EUR row wholly inside history viewport", "EUR header and every EUR row hittable"],
+      "result": "passed",
+      "visualRows": 3,
+      "visualEURValues": ["0.03", "0.03", "0.03"],
+      "visualTotalEUR": "0.09",
+      "screenshot": "physical-final-landscape-history-all-columns.png"
+    },
     "settings": "Saved-secret SHA-256 prefix is displayed; secure entry fields and Save button are absent; Clear remains available."
   },
   "chargeSessionEvidence": {
@@ -65,7 +80,7 @@
       "physical-charge-landscape-first-open.png",
       "physical-edit-landscape-first-open-42.png",
       "physical-edit-landscape-before-save-43.png",
-      "physical-main-landscape-after-edit.png"
+      "physical-final-landscape-history-all-columns.png"
     ],
     "additionalImages": [
       "physical-final-hardware-readback-and-charge-history.png",
@@ -74,7 +89,7 @@
       "physical-calibration-confirmation.png",
       "physical-reopened-session-apartment-history.png"
     ],
-    "orientationNote": "Landscape XCTest exports were losslessly rotated to native 2360x1640 orientation for viewing; no pixels were cropped or resized. Other portrait exports remain 1640x2360. Original XCTest exports and manifests remain in the /tmp attachment directories."
+    "orientationNote": "Landscape XCTest exports were losslessly rotated to native 2360x1640 orientation for viewing; no pixels were cropped or resized. Other portrait exports remain 1640x2360. Original XCTest exports and manifests remain in the /tmp attachment directories. The earlier clipped main-screen image is not included as final proof; its raw export remains in /tmp and its historical commit is preserved."
   },
   "credentialHandling": {
     "bearerTokensOrPairingPinsInReceipt": false,
@@ -83,17 +98,17 @@
   },
   "deployment": {
     "normalDebugBuild": {
-      "result": "passed",
-      "log": "/tmp/rides-ui-followup-normal-debug-build.log",
-      "derivedData": "/tmp/RidesTabletFollowupNormal",
+      "result": "passed after latest layout fix",
+      "log": "/tmp/rides-ui-followup-final-normal-debug-build.log",
+      "derivedData": "/tmp/RidesTabletFollowupFinalNormal",
       "compileConditions": ["DEBUG"],
       "physicalWriteCompileConditionPresent": false,
       "runnerTestEnvironmentSupplied": false,
       "bundleIdentifier": "com.itgeorge.RidesTablet",
-      "appBinarySHA256": "1647ac66239c52c974c7e0ef63357b5c71f1ac31f822aec1f432aa8ca0ccd19e"
+      "appBinarySHA256": "3a4d5154d87dfa414b6e3170738153b5429e178bcf21be6d163148eb3923b413"
     },
-    "install": "passed on the same iPad Air 4",
-    "launch": "devicectl reported the normal app launched successfully",
+    "install": "passed on the same iPad Air 4 after the read-only test",
+    "launch": "devicectl reported the latest normal app launched successfully",
     "bridgeHealth": "http://127.0.0.1:5080/api/v1/health returned status ok; bridge left running",
     "bridgeRestarted": false,
     "serverDeployment": false

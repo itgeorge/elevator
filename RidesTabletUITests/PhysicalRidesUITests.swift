@@ -213,15 +213,34 @@ final class PhysicalRidesUITests: XCTestCase {
         guard runnerOptIn == "1" else { throw XCTSkip("Set TEST_RUNNER_RIDES_UI_PHYSICAL_TEST=1 to opt in.") }
         XCTAssertTrue(secret == requiredPhysicalSecret, "Set the fresh physical-test secret through the test-runner environment.")
 
+        // Orient before process launch so the history layout is selected on its first frame.
+        XCUIDevice.shared.orientation = .landscapeLeft
         launchPhysicalApp()
         let current = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
         XCTAssertTrue(current.waitForExistence(timeout: 30), "Real Detect did not publish a ride count")
         XCTAssertTrue(waitForLoadedRideValue(current, timeout: 30), "Real Detect did not publish a ride count")
+        XCTAssertGreaterThan(app.frame.width, app.frame.height, "App must launch directly into landscape")
         saveSecretThroughConnectionSheet()
-        XCTAssertEqual(rideValue(current), 0, "Fresh readback must show Mercury at zero rides")
+        XCTAssertEqual(rideValue(current), 0, "Fresh readback must show the displayed ride count at zero")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.waitForExistence(timeout: 15),
                        "Fresh readback under the new secret must decode apartment 43")
-        attach(app, name: "physical-final-hardware-readback-mercury-0-apartment-43")
+
+        let historyViewport = app.scrollViews["completed-charge-history-scroll"]
+        let eurHeader = app.staticTexts["history-column-5"]
+        let eurCells = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "charge-eur-"))
+        XCTAssertTrue(historyViewport.waitForExistence(timeout: 10), "Completed-charge history is missing")
+        XCTAssertGreaterThanOrEqual(historyViewport.frame.width, 465,
+                                    "Landscape history viewport must fit the minimum table width and padding")
+        XCTAssertTrue(eurHeader.waitForExistence(timeout: 10), "EUR column header is missing")
+        XCTAssertGreaterThan(eurCells.count, 0, "Expected saved charge EUR rows in physical history")
+        let eurTargets = [eurHeader] + (0..<eurCells.count).map { eurCells.element(boundBy: $0) }
+        for target in eurTargets {
+            XCTAssertTrue(historyViewport.frame.contains(target.frame),
+                          "EUR header/row must be wholly inside the history viewport: target=\(target.frame), viewport=\(historyViewport.frame)")
+            XCTAssertTrue(target.isHittable, "EUR header/row must be hittable: \(target.identifier)")
+        }
+        attach(app, name: "physical-final-landscape-history-all-columns")
+        attach(app, name: "physical-final-hardware-readback-0-apartment-43")
 
         app.buttons["Connection diagnostics"].tap()
         let fingerprint = app.staticTexts["apartmentSecretFingerprint"]
