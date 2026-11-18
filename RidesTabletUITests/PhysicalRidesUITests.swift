@@ -1,116 +1,216 @@
 import XCTest
 
 final class PhysicalRidesUITests: XCTestCase {
+    private let secret = "rides-ui-e2e-test-2026"
+    private let bridgeAddress = "192.168.0.163"
+    private var app = XCUIApplication()
+
     func testPhysicalRidesAcceptance() throws {
         #if !RIDES_PHYSICAL_UI_WRITES
-        throw XCTSkip("Physical UI writes are disabled; build UI tests with RIDES_PHYSICAL_UI_WRITES only for the authorized test token.")
+        throw XCTSkip("Physical UI writes are disabled; build with RIDES_PHYSICAL_UI_WRITES for the authorized test token.")
         #elseif targetEnvironment(simulator)
-        throw XCTSkip("Physical Rides acceptance requires a real, non-simulator iPad.")
+        throw XCTSkip("Physical acceptance requires a real, non-simulator iPad.")
         #else
-        guard ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_TEST"] == "1" else {
-            throw XCTSkip("Set RIDES_UI_PHYSICAL_TEST=1 explicitly to enable physical UI automation.")
-        }
-        let app = XCUIApplication()
-        app.launchEnvironment["RIDES_UI_PHYSICAL_BOOTSTRAP"] = "1"
-        app.launch()
+        let runnerOptIn = ProcessInfo.processInfo.environment["TEST_RUNNER_RIDES_UI_PHYSICAL_TEST"]
+            ?? ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_TEST"]
+        guard runnerOptIn == "1" else { throw XCTSkip("Set TEST_RUNNER_RIDES_UI_PHYSICAL_TEST=1 to opt in.") }
 
-        let detect = app.buttons["detect-primary-action"]
-        XCTAssertTrue(detect.waitForExistence(timeout: 30), "The paired Rides screen did not appear")
-        let rides = app.staticTexts["current-rides-display"]
-        XCTAssertTrue(rides.waitForExistence(timeout: 30), "Current rides did not load from the PM3")
-        let initialText = rides.label
-        let initial = Self.firstInteger(in: initialText)
-        XCTAssertNotNil(initial, "Could not parse dynamically detected rides: \(initialText)")
-        XCTAssertTrue((0...500).contains(initial!), "Detected ride count outside acceptance bounds")
-        attach(&app, name: "initial-live-detect")
+        launchPhysicalApp()
+        let current = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
+        XCTAssertTrue(current.waitForExistence(timeout: 30), "Paired Rides UI did not load")
+        XCTAssertTrue(app.buttons["detect-primary-action"].exists)
+        XCTAssertTrue(waitForLoadedRideValue(current, timeout: 30), "Real Detect did not publish a ride count")
+        let initial = rideValue(current)
+        XCTAssertTrue((0...500).contains(initial), "Live ride count must be within 0...500 (got \(initial))")
+        attach(app, name: "initial-live-detect")
 
-        // Physical automation is deliberately conservative: do not guess through pairing
-        // or a modal unless the expected live controls are actually exposed.
-        let charge = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Charge")).firstMatch
-        guard charge.waitForExistence(timeout: 15) else { throw XCTSkip("Charge controls are unavailable on this physical app state") }
-        let plus = app.buttons["pending-rides-plus-1"]
-        guard plus.waitForExistence(timeout: 10), plus.isEnabled else {
-            throw XCTSkip("Pending-rides controls are not exposed; coordinator fallback provides the programmatic hardware run")
-        }
-        plus.tap()
+        // Set the in-memory secret through the same existing SecureFields as an operator.
+        saveSecretThroughConnectionSheet()
+        XCTAssertTrue(current.waitForExistence(timeout: 15))
+        let existingApartment = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Apartment number")).firstMatch
+        XCTAssertFalse(existingApartment.exists,
+                       "Preflight requires a token without a test-secret apartment; stop before any token writes if one is already present.")
+
+        // Isolate this run in a new local session, preserving the previous active session.
+        let newSessionButton = app.buttons["new-charge-session"]
+        XCTAssertTrue(newSessionButton.waitForExistence(timeout: 10))
+        newSessionButton.tap()
+        let confirmNewSession = app.buttons["Start new session"]
+        XCTAssertTrue(confirmNewSession.waitForExistence(timeout: 10))
+        confirmNewSession.tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 10))
+
+        // Use a signed one-ride delta so detected count 500 remains in range.
+        let delta = initial < 500 ? 1 : -1
+        let adjust = app.buttons["pending-rides-\(delta < 0 ? "minus" : "plus")-1"]
+        let charge = app.buttons["Charge token"]
+        let apartmentInput = app.descendants(matching: .any)["apartment-number-input"]
+        XCTAssertTrue(adjust.waitForExistence(timeout: 10))
+        XCTAssertTrue(charge.waitForExistence(timeout: 10))
+
+        // Cancel: no hardware or session change.
+        adjust.tap()
         charge.tap()
-        let apartment = app.otherElements["apartment-number-input"]
-        guard apartment.waitForExistence(timeout: 15) else {
-            throw XCTSkip("Apartment prompt did not appear; no UI mutation was attempted")
-        }
-        attach(&app, name: "apartment-prompt")
-        let cancel = app.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch
-        guard cancel.exists else { throw XCTSkip("Apartment Cancel control is unavailable") }
-        cancel.tap()
-        XCTAssertTrue(rides.waitForExistence(timeout: 15))
-        XCTAssertEqual(Self.firstInteger(in: rides.label), initial, "Cancel must not change rides")
-        attach(&app, name: "after-apartment-cancel")
+        XCTAssertTrue(apartmentInput.waitForExistence(timeout: 15), "Secret did not produce the missing-apartment prompt")
+        attach(app, name: "apartment-cancel-prompt")
+        app.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch.tap()
+        XCTAssertEqual(rideValue(current), initial, "Apartment Cancel must leave rides unchanged")
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists, "Cancel must not create a completed charge")
+        attach(app, name: "after-apartment-cancel")
 
-        // Continue only when the real apartment prompt exposes its documented controls.
+        // Skip: charge rides only, preserving the missing apartment.
         charge.tap()
-        guard app.buttons["Skip"].waitForExistence(timeout: 15) else {
-            throw XCTSkip("Skip UI unavailable after Cancel; use the DEBUG coordinator fallback")
-        }
-        attach(&app, name: "apartment-skip-prompt")
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 15))
+        attach(app, name: "apartment-skip-prompt")
         app.buttons["Skip"].tap()
-        XCTAssertTrue(plus.waitForExistence(timeout: 15))
-        plus.tap()
-        charge.tap()
-        guard app.staticTexts["apartment-number-input"].waitForExistence(timeout: 15) else {
-            throw XCTSkip("Save prompt unavailable after Skip; no further writes performed")
-        }
-        for digit in ["4", "2"] { app.buttons["apartment-key-\(digit)"].tap() }
-        attach(&app, name: "apartment-save-prompt")
-        app.buttons["Save"].tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 42")).firstMatch.waitForExistence(timeout: 20))
-        plus.tap()
-        let apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 42")).firstMatch
-        apartmentButton.tap()
-        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 10))
-        for digit in ["4", "3"] { app.buttons["apartment-key-\(digit)"].tap() }
-        app.buttons["Save"].tap()
-        attach(&app, name: "apartment-edit-saved")
+        XCTAssertTrue(waitForRideValue(current, initial + delta, timeout: 30))
+        XCTAssertTrue(app.staticTexts["TOTAL · 1 charges"].waitForExistence(timeout: 15))
 
-        // Reset must require a profile selection; cross-profile reset leaves the apt visible.
+        // Save: apartment 42 and the second ride adjustment are written together.
+        adjust.tap()
+        charge.tap()
+        XCTAssertTrue(apartmentInput.waitForExistence(timeout: 15))
+        enterApartment(42)
+        attach(app, name: "apartment-save-prompt")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(waitForRideValue(current, initial + delta * 2, timeout: 30))
+        var apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 42")).firstMatch
+        XCTAssertTrue(apartmentButton.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["TOTAL · 2 charges"].exists)
+
+        // Edit existing 42 to 43 with a pending ride; only apartment data may change.
+        adjust.tap()
+        apartmentButton.tap()
+        XCTAssertTrue(apartmentInput.waitForExistence(timeout: 10))
+        app.buttons["Backspace"].tap()
+        app.buttons["Backspace"].tap()
+        app.buttons["apartment-key-4"].tap()
+        app.buttons["apartment-key-3"].tap()
+        attach(app, name: "apartment-edit-before-save")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(waitForRideValue(current, initial + delta * 2, timeout: 20), "Apartment-only edit changed current rides")
+        XCTAssertTrue(app.staticTexts["TOTAL · 2 charges"].exists, "Apartment-only edit added a charge")
+        apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch
+        XCTAssertTrue(apartmentButton.waitForExistence(timeout: 20))
+        let pending = app.descendants(matching: .any)["pending-rides-display"]
+        XCTAssertTrue((pending.value as? String)?.contains("\(initial + delta * 3)") == true,
+                      "Apartment-only edit must preserve the pending ride adjustment")
+        attach(app, name: "apartment-edit-after-save")
+
+        // Complete the pending ride, then prove New/Load and persistence across app restart.
+        charge.tap()
+        XCTAssertTrue(waitForRideValue(current, initial + delta * 3, timeout: 30))
+        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].waitForExistence(timeout: 15))
+        app.buttons["new-charge-session"].tap()
+        XCTAssertTrue(confirmNewSession.waitForExistence(timeout: 10))
+        attach(app, name: "new-session-confirmation")
+        confirmNewSession.tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].waitForExistence(timeout: 15))
+        app.buttons["load-charge-session"].tap()
+        XCTAssertTrue(app.navigationBars["Load session"].waitForExistence(timeout: 10))
+        let completedRun = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "3 charges")).firstMatch
+        XCTAssertTrue(completedRun.waitForExistence(timeout: 10), "Completed acceptance session is not listed")
+        attach(app, name: "load-acceptance-session")
+        completedRun.tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].waitForExistence(timeout: 15))
+
+        app.terminate()
+        launchPhysicalApp()
+        let restartedCurrent = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
+        XCTAssertTrue(restartedCurrent.waitForExistence(timeout: 30))
+        saveSecretThroughConnectionSheet() // Secret is memory-only and must be re-entered after relaunch.
+        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].waitForExistence(timeout: 15))
+        XCTAssertTrue(waitForRideValue(restartedCurrent, initial + delta * 3, timeout: 30))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.exists)
+        attach(app, name: "reopened-active-session")
+
+        // Cross-profile reset to Venus then Mercury; apartment 43 must survive both.
         app.buttons["Reset token"].tap()
         XCTAssertTrue(app.buttons["reset-profile-venus"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["Confirm reset"].isEnabled)
+        XCTAssertFalse(app.buttons["Confirm reset"].isEnabled, "Reset must require explicit profile selection")
         app.buttons["reset-profile-venus"].tap()
         app.buttons["Confirm reset"].tap()
-        XCTAssertTrue(app.buttons["current-rides-display"].waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForRideValue(restartedCurrent, 0, timeout: 30))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.waitForExistence(timeout: 15))
         app.buttons["Reset token"].tap()
         XCTAssertTrue(app.buttons["reset-profile-mercury"].waitForExistence(timeout: 10))
         app.buttons["reset-profile-mercury"].tap()
         app.buttons["Confirm reset"].tap()
-        attach(&app, name: "after-cross-profile-reset")
+        XCTAssertTrue(waitForRideValue(restartedCurrent, 0, timeout: 30))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists, "Reset must preserve completed-charge history")
+        attach(app, name: "after-cross-profile-reset")
 
+        // Confirmation dialog cancellation is by tapping outside on iPad; scope the
+        // destructive action so it cannot match the underlying restart-calibration control.
         let restart = app.buttons["restart-calibration"]
-        guard restart.waitForExistence(timeout: 10) else { throw XCTSkip("Calibration control unavailable") }
+        XCTAssertTrue(restart.waitForExistence(timeout: 10))
         restart.tap()
-        let confirmRestart = app.buttons["Restart calibration"]
+        let confirmRestart = app.buttons.matching(NSPredicate(
+            format: "label == %@ AND identifier != %@", "Restart calibration", "restart-calibration"
+        )).firstMatch
         XCTAssertTrue(confirmRestart.waitForExistence(timeout: 10))
-        attach(&app, name: "calibration-confirmation")
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(rides.exists, "Canceling calibration confirmation must preserve the loaded token")
+        attach(app, name: "calibration-confirmation")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.05)).tap()
+        XCTAssertTrue(restartedCurrent.waitForExistence(timeout: 10), "Tapping outside must cancel calibration restart")
+        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists)
         restart.tap()
         XCTAssertTrue(confirmRestart.waitForExistence(timeout: 10))
         confirmRestart.tap()
-        let primaryTitle = app.buttons["detect-primary-action"]
-        XCTAssertTrue(primaryTitle.waitForValue("Calibrate: NO token", timeout: 15))
-        attach(&app, name: "after-calibration-restart")
+        XCTAssertTrue(app.buttons["detect-primary-action"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["detect-primary-action"].label, "Calibrate: NO token")
+        XCTAssertTrue(app.staticTexts["TOTAL · 3 charges"].exists)
+        attach(app, name: "after-calibration-restart")
         #endif
     }
 
     #if RIDES_PHYSICAL_UI_WRITES && !targetEnvironment(simulator)
+    private func launchPhysicalApp() {
+        app = XCUIApplication()
+        app.launchEnvironment["RIDES_UI_PHYSICAL_BOOTSTRAP"] = "1"
+        app.launchEnvironment["RIDES_BRIDGE_ADDRESS_OVERRIDE"] = bridgeAddress
+        app.launch()
+    }
+
+    private func saveSecretThroughConnectionSheet() {
+        app.buttons["Connection diagnostics"].tap()
+        let secretField = app.secureTextFields["Apartment secret"]
+        let confirmField = app.secureTextFields["Confirm apartment secret"]
+        XCTAssertTrue(secretField.waitForExistence(timeout: 10))
+        secretField.tap()
+        secretField.typeText(secret)
+        confirmField.tap()
+        confirmField.typeText(secret)
+        app.buttons["Save secret"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Charge token"].waitForExistence(timeout: 15))
+    }
+
+    private func enterApartment(_ number: Int) {
+        for digit in String(number) { app.buttons["apartment-key-\(digit)"].tap() }
+    }
+
+    private func rideValue(_ element: XCUIElement) -> Int {
+        Int((element.value as? String) ?? "") ?? -1
+    }
+
+    private func waitForRideValue(_ element: XCUIElement, _ expected: Int, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate { _, _ in self.rideValue(element) == expected }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForLoadedRideValue(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate { _, _ in self.rideValue(element) >= 0 }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     private func attach(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
-    }
-    private static func firstInteger(in text: String) -> Int? {
-        let digits = text.split(whereSeparator: { !$0.isNumber }).first
-        return digits.flatMap { Int($0) }
     }
     #endif
 }
