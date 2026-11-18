@@ -66,6 +66,10 @@ SIMCTL_CHILD_RIDES_SCREENSHOT_SCENE=known \
 
 `RIDES_SCREENSHOT_SCENE` accepts `known`, `pending`, `history`, `reset`, `unknown`, and `no-chip` (alias `nochip`). Each scene runs Detect (and opens the reset sheet or adjusts pending where needed) before you capture with `xcrun simctl io <UDID> screenshot path.png`. `history` generates three fake charges in an isolated screenshot history store; it never writes a real token or adds demo entries to the operator history.
 
+## Physical iPad evidence (18 Nov 2026)
+
+The real-device PM3/bridge acceptance run, decoded final token read, copied session-file proof, and provenance are recorded in [the physical E2E receipt](../.docs/rides-ui-e2e-2026-11-18.json). Selected un-cropped XCTest attachments are in [`Screenshots/ui-2026-11-18`](Screenshots/ui-2026-11-18); the landscape capture is losslessly rotated to upright native 2360×1640 orientation (raw export retained outside the repository). This evidence is from an iPad Air 4 with the physical bridge/PM3, not the simulator fixture path.
+
 ## Simulation scenarios (DEBUG fake reader only)
 
 When the DEBUG fake reader is enabled, the top-right slider menu offers: Good token, Weak signal, No chip, Unknown family, and Write failure. Unknown family reports exactly `Unknown, logged` only after the page-0 dump saves successfully. If logging fails, it reports `Unknown token — log failed` with the save error. No chip reports exactly `No T55xx chip detected. Place the token on the reader and try again.`

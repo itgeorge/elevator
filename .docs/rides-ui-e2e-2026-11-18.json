@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-18",
+  "physicalAcceptance": {
+    "result": "passed",
+    "test": "PhysicalRidesUITests/testPhysicalRidesAcceptance",
+    "durationSeconds": 141.637,
+    "failures": 0,
+    "device": "iPad Air 4th Gen (UDID 00008101-001A68EE21F0001E)",
+    "resultBundle": "/tmp/rides-ui-physical-e2e-attempt3.xcresult",
+    "log": "/tmp/rides-ui-physical-e2e-attempt3.log",
+    "hardware": "Live RidesBridge + PM3; XCTest opted into physical writes and calibration bypass only in DEBUG; calibration called real model.detect; no fabricated signal bounds or Auto path",
+    "verifiedFlows": [
+      "200 rides +10×3 returned to 200 with zero pending and no extra charge",
+      "Cancel, Skip, Save apartment prompt; edit-only apartment change preserved pending rides",
+      "Loaded prior session accepted next charge; app terminate/relaunch required secret reentry",
+      "Reset Venus then Mercury; apartment 43 preserved",
+      "Calibration confirmation cancel and confirm; completed history retained"
+    ]
+  },
+  "finalBridgeRead": {
+    "source": "fresh authenticated GET http://127.0.0.1:5080/api/v1/hardware/page0/blocks1to6",
+    "decoded": { "sequence": "mercury", "rides": 0, "apartment": 43, "mirrorsMatch": true },
+    "rawPrivatePath": "/tmp/rides-ui-physical-e2e/final-token.json"
+  },
+  "deviceSessionFiles": {
+    "source": "devicectl appDataContainer copy from physical iPad",
+    "privateCopy": "/tmp/rides-ui-physical-e2e/device-sessions",
+    "files": 4,
+    "activeSession": "9205C210-12DC-42B5-A0A4-0FB7ECED4C46",
+    "activeSessionCharges": 3,
+    "activeSessionNetRidesEUR": { "rides": 3, "eur": 0.09 },
+    "otherSessions": "two empty sessions retained",
+    "apartmentSecretPresent": false
+  },
+  "screenshots": {
+    "directory": "RidesTablet/Screenshots/ui-2026-11-18",
+    "source": "XCTest attachments exported from physical result bundle; full screen, no crop or fabrication",
+    "landscapeNormalization": "raw attachment is 1640x2360 sideways; published landscape losslessly rotated upright to 2360x1640, preserving all pixels/content",
+    "files": [
+      "physical-main-portrait.png",
+      "physical-main-landscape.png",
+      "physical-charge-keypad-save-42.png",
+      "physical-apartment-edit-43.png",
+      "physical-secret-fields.png",
+      "physical-session-picker.png",
+      "physical-reopened-active-session.png",
+      "physical-calibration-confirmation.png"
+    ]
+  },
+  "normalDebugDeployment": {
+    "build": "passed",
+    "command": "xcodebuild -project RidesTablet/RidesTablet.xcodeproj -scheme RidesTablet -configuration Debug -destination 'platform=iOS,id=00008101-001A68EE21F0001E' -derivedDataPath /tmp/RidesTabletFinalUI -allowProvisioningUpdates DEVELOPMENT_TEAM=TJY5296P7S PRODUCT_BUNDLE_IDENTIFIER=com.itgeorge.RidesTablet build",
+    "buildLog": "/tmp/rides-ui-final-normal-build.log",
+    "installedAndLaunched": true,
+    "launch": "devicectl --terminate-existing, no test launch environment",
+    "server": "left running",
+    "simulatorFinalSuite": "not claimed; separate simulator agent owns that run"
+  },
+  "credentialCleanup": "Mac test client revoke and local credential removal performed after verification"
+}
