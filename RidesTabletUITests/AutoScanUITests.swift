@@ -398,6 +398,8 @@ final class AutoScanUITests: XCTestCase {
         let eurHeader = app.staticTexts["history-column-5"]
         let eurCells = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "charge-eur-"))
         XCTAssertTrue(historyViewport.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(historyViewport.frame.width, 465,
+                                    "History viewport must fit the 442pt table plus 24pt padding")
         XCTAssertTrue(eurHeader.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(eurCells.count, 0)
         for cell in [eurHeader] + (0..<eurCells.count).map({ eurCells.element(boundBy: $0) }) {
