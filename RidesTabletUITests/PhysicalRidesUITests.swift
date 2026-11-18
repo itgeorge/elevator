@@ -1,7 +1,9 @@
 import XCTest
 
 final class PhysicalRidesUITests: XCTestCase {
-    private let secret = "rides-ui-e2e-test-2026"
+    private var secret: String {
+        ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_SECRET"] ?? "rides-ui-e2e-test-2026"
+    }
     private let bridgeAddress = "192.168.0.163"
     private var app = XCUIApplication()
 
@@ -35,7 +37,7 @@ final class PhysicalRidesUITests: XCTestCase {
         XCTAssertTrue(current.waitForExistence(timeout: 15))
         let existingApartment = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Apartment number")).firstMatch
         XCTAssertFalse(existingApartment.exists,
-                       "Preflight requires a token without a test-secret apartment; stop before any token writes if one is already present.")
+                       "Preflight requires no apartment decodable under the selected test secret; stop before any token writes if any apartment is present.")
 
         // Isolate this run in a new local session, preserving the previous active session.
         let newSessionButton = app.buttons["new-charge-session"]

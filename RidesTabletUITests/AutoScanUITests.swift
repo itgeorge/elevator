@@ -296,11 +296,30 @@ final class AutoScanUITests: XCTestCase {
         XCTAssertTrue((pending.value as? String)?.contains("No ride change") == true)
 
         app.buttons["Connection diagnostics"].tap()
-        let secretField = app.secureTextFields.matching(NSPredicate(format: "placeholderValue == %@", "Apartment secret")).firstMatch
+        let secretField = app.secureTextFields["apartmentSecretField"]
         XCTAssertTrue(secretField.waitForExistence(timeout: 10))
-        let confirmField = app.secureTextFields.matching(NSPredicate(format: "placeholderValue == %@", "Confirm apartment secret")).firstMatch
+        let confirmField = app.secureTextFields["confirmApartmentSecretField"]
         XCTAssertTrue(confirmField.waitForExistence(timeout: 5))
-        attachScreenshot("connection-apartment-secret-settings")
+        attachScreenshot("connection-apartment-secret-settings-empty")
+
+        secretField.tap()
+        secretField.typeText("simulator-ui-fingerprint-secret")
+        confirmField.tap()
+        confirmField.typeText("simulator-ui-fingerprint-secret")
+        app.buttons["saveApartmentSecretButton"].tap()
+        let fingerprint = app.staticTexts["apartmentSecretFingerprint"]
+        XCTAssertTrue(fingerprint.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["clearApartmentSecretButton"].exists)
+        XCTAssertFalse(app.secureTextFields["apartmentSecretField"].exists)
+        XCTAssertFalse(app.secureTextFields["confirmApartmentSecretField"].exists)
+        XCTAssertFalse(app.buttons["saveApartmentSecretButton"].exists)
+        attachScreenshot("connection-apartment-secret-fingerprint")
+
+        app.buttons["clearApartmentSecretButton"].tap()
+        XCTAssertTrue(app.secureTextFields["apartmentSecretField"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.secureTextFields["confirmApartmentSecretField"].exists)
+        XCTAssertTrue(app.buttons["saveApartmentSecretButton"].exists)
+        XCTAssertFalse(app.staticTexts["apartmentSecretFingerprint"].exists)
     }
 
     private func launchScene(_ scene: String, orientation: UIDeviceOrientation = .portrait) {
