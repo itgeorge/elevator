@@ -365,6 +365,22 @@ public final class BridgeClient: @unchecked Sendable {
         return try decode(BridgePage0MirrorResponse.self, data: data)
     }
 
+    public func measureTokenPresence() async throws -> BridgeTokenPresenceResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let data = try await send(path: "api/v1/hardware/presence", method: "GET", body: nil, requiresAuthentication: true)
+        return try decode(BridgeTokenPresenceResponse.self, data: data)
+    }
+
+    /// Narrow apartment-only path. The bridge may use only its already-detected native reader session.
+    public func writeApartmentBlock4Verified(_ request: BridgeApartmentBlock4WriteRequest) async throws -> BridgeApartmentBlock4WriteResponse {
+        guard hasCredential else { throw BridgeClientError.missingCredential }
+        let body: Data
+        do { body = try JSONEncoder().encode(request) }
+        catch { throw BridgeClientError.invalidResponse }
+        let data = try await send(path: "api/v1/hardware/apartment/block4/write-verified", method: "POST", body: body, requiresAuthentication: true)
+        return try decode(BridgeApartmentBlock4WriteResponse.self, data: data)
+    }
+
     /// Sends one conditional mutation request. The bridge owns preflight, write,
     /// verification, and rollback; the client never replays this call.
     public func mutatePage0(_ request: BridgePage0MutationRequest) async throws -> BridgePage0MutationResponse {

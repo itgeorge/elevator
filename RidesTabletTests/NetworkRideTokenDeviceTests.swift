@@ -329,6 +329,51 @@ final class NetworkRideTokenDeviceTests: XCTestCase {
         XCTAssertTrue(message.contains("Detect"))
     }
 
+    func testApartmentOnlyUsesNarrowVerifiedBlock4EndpointAndChecksResponseValue() async throws {
+        let token = Token.sample(rideCount: 73, sequence: .venus)
+        let desired: UInt32 = 0x1234ABCD
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            XCTAssertEqual(request.url?.path, "/api/v1/hardware/apartment/block4/write-verified")
+            XCTAssertEqual(request.httpMethod, "POST")
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+            XCTAssertEqual(object["version"] as? String, "v1")
+            XCTAssertEqual(object["desired"] as? String, Token.hex(desired))
+            XCTAssertNil(object["block"])
+            return self.json(request, """
+            {"version":"v1","block":4,"verifiedValue":"\(Token.hex(desired))"}
+            """)
+        }
+        let result = try await makeDevice().writeApartment(
+            ApartmentMutationRequest(token: token, apartmentBlock: desired, desiredRides: nil))
+        XCTAssertEqual(result, .success)
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, ["/api/v1/hardware/apartment/block4/write-verified"])
+
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            self.json(request, #"{"version":"v1","block":4,"verifiedValue":"FFFFFFFF"}"#)
+        }
+        guard case .requiresRefresh = try await makeDevice().writeApartment(
+            ApartmentMutationRequest(token: token, apartmentBlock: desired, desiredRides: nil)) else {
+            return XCTFail("Mismatched returned verified value must require refresh")
+        }
+    }
+
+    func testPresenceTransportMapsPresentAbsentAndFailureWithoutReads() async throws {
+        let device = try makeDevice()
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in
+            XCTAssertEqual(request.url?.path, "/api/v1/hardware/presence")
+            XCTAssertEqual(request.httpMethod, "GET")
+            return self.json(request, #"{"version":"v1","present":true}"#)
+        }
+        let present = await device.measureTokenPresence()
+        XCTAssertEqual(present, .present)
+        NetworkRideTokenDeviceURLProtocol.handler = { [self] request in self.json(request, #"{"version":"v1","present":false}"#) }
+        let absent = await device.measureTokenPresence()
+        XCTAssertEqual(absent, .absent)
+        NetworkRideTokenDeviceURLProtocol.handler = { _ in throw URLError(.timedOut) }
+        guard case .failure = await device.measureTokenPresence() else { return XCTFail("Expected honest presence failure") }
+        XCTAssertEqual(NetworkRideTokenDeviceURLProtocol.requestLog, Array(repeating: "/api/v1/hardware/presence", count: 3))
+    }
+
     func testApartmentAndChargeUseOneVerifiedConditionalMutation() async throws {
         let token = Token.sample(rideCount: 73, sequence: .venus)
         let apartmentBlock = ApartmentBlockCodec.encode(secret: "adapter-secret", block3: token.blocks[3], apartment: 19)

@@ -582,6 +582,61 @@ public struct BridgePage0MutationResponse: Codable, Equatable, Sendable {
     }
 }
 
+public struct BridgeApartmentBlock4WriteRequest: Codable, Equatable, Sendable {
+    public let version: String
+    public let desired: String
+
+    public init(version: String = "v1", desired: String) throws {
+        guard version == "v1", BridgeValueValidation.isUppercaseHex32(desired) else {
+            throw BridgeContractError.invalidPage0Mutation
+        }
+        self.version = version
+        self.desired = desired
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "desired"])
+        try self.init(version: container.decode(String.self, forKey: .version), desired: container.decode(String.self, forKey: .desired))
+    }
+}
+
+public struct BridgeApartmentBlock4WriteResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let block: Int
+    public let verifiedValue: String
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "block", "verifiedValue"])
+        let version = try container.decode(String.self, forKey: .version)
+        let block = try container.decode(Int.self, forKey: .block)
+        let value = try container.decode(String.self, forKey: .verifiedValue)
+        guard version == "v1", block == 4, BridgeValueValidation.isUppercaseHex32(value) else {
+            throw DecodingError.dataCorruptedError(forKey: .verifiedValue, in: container, debugDescription: "Invalid verified apartment block response.")
+        }
+        self.version = version
+        self.block = block
+        self.verifiedValue = value
+    }
+}
+
+public struct BridgeTokenPresenceResponse: Codable, Equatable, Sendable {
+    public let version: String
+    public let present: Bool
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try requireExactKeys(decoder, ["version", "present"])
+        let version = try container.decode(String.self, forKey: .version)
+        guard version == "v1" else {
+            throw DecodingError.dataCorruptedError(forKey: .version, in: container, debugDescription: "Invalid presence response version.")
+        }
+        self.version = version
+        self.present = try container.decode(Bool.self, forKey: .present)
+    }
+}
+
 public enum BridgeContractError: Error, Equatable, Sendable {
     case invalidPairStatus
     case invalidBlockValue

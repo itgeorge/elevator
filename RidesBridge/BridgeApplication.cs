@@ -207,6 +207,46 @@ public static class BridgeApplication
             }
         });
 
+        app.MapGet("/api/v1/hardware/presence", async (
+            IBridgePm3Device device, BridgeOperationGate gate, BridgeOptions options, HttpContext context) =>
+        {
+            try
+            {
+                var present = await gate.ExecuteAsync(ct => device.ProbeTokenPresenceAsync(ct),
+                    context.RequestAborted, waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                return Results.Ok(new TokenPresenceResponse(BridgeOptions.ApiVersion, present));
+            }
+            catch (BridgeHardwareException ex) { return HardwareError(ex.Error); }
+            catch (OperationCanceledException) { return Results.StatusCode(StatusCodes.Status499ClientClosedRequest); }
+            catch (IOException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (UnauthorizedAccessException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (ObjectDisposedException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (InvalidOperationException) { return HardwareError(BridgeHardwareError.Unavailable); }
+        });
+
+        app.MapPost("/api/v1/hardware/apartment/block4/write-verified", async (
+            ApartmentBlock4WriteRequest? request, IBridgePm3Device device, BridgeOperationGate gate,
+            BridgeOptions options, HttpContext context) =>
+        {
+            if (request is null || request.Version != BridgeOptions.ApiVersion
+                || !Page0MutationValidator.TryNormalizeBlockHex(request.Desired, out var desired))
+                return Results.BadRequest(new BridgeErrorResponse("invalid_apartment_write", "A v1 request with one exact 8-hex desired block value is required."));
+            try
+            {
+                var verified = await gate.ExecuteDetachedAsync(ct => device.WriteApartmentBlock4VerifiedAsync(desired, ct),
+                    context.RequestAborted, waitTimeout: options.OperationWaitTimeout,
+                    operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                return Results.Ok(new ApartmentBlock4WriteResponse(BridgeOptions.ApiVersion, 4, verified));
+            }
+            catch (BridgeHardwareException ex) { return HardwareError(ex.Error); }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { return Results.StatusCode(StatusCodes.Status499ClientClosedRequest); }
+            catch (IOException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (UnauthorizedAccessException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (ObjectDisposedException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (InvalidOperationException) { return HardwareError(BridgeHardwareError.Unavailable); }
+        });
+
         app.MapGet("/api/v1/hardware/signal", async (
             IBridgePm3Device device, BridgeOperationGate gate, BridgeOptions options, HttpContext context) =>
         {

@@ -13,6 +13,10 @@ public sealed record Page0ScanResponse(string Version, string Block4, string Blo
 public sealed record CalibrationSignalSample(int SignalMillivolts, bool ChipPresent);
 public sealed record CalibrationSignalResponse(string Version, int SignalMillivolts, bool ChipPresent);
 public sealed record HardwareSignalResponse(string Version, int SignalMillivolts);
+public sealed record TokenPresenceResponse(string Version, bool Present);
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+public sealed record ApartmentBlock4WriteRequest(string? Version, string? Desired);
+public sealed record ApartmentBlock4WriteResponse(string Version, int Block, string VerifiedValue);
 public sealed record Page0BlockReadResult(int Block, string Value);
 public sealed record Page0MissingBlocksResponse(string Version, IReadOnlyList<Page0BlockReadResult> Blocks);
 public sealed record Page0Blocks1To6Response(string Version, IReadOnlyList<Page0BlockReadResult> Blocks);
@@ -82,4 +86,6 @@ public interface IBridgePm3Device : IAsyncDisposable
     async Task<int> MeasureSignalAsync(CancellationToken ct = default) =>
         (await MeasureCalibrationSignalAsync(ct).ConfigureAwait(false)).SignalMillivolts;
     Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0MissingBlocksAsync(CancellationToken ct = default);
+    Task<bool> ProbeTokenPresenceAsync(CancellationToken ct = default) => throw new BridgeHardwareException(BridgeHardwareError.Unavailable, "Presence probing is unsupported.");
+    Task<string> WriteApartmentBlock4VerifiedAsync(string value, CancellationToken ct = default) => throw new BridgeHardwareException(BridgeHardwareError.Unavailable, "Fast apartment writes are unavailable.");
 }

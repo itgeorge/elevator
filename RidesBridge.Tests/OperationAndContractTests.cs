@@ -494,6 +494,52 @@ public sealed class OperationAndContractTests
         Assert.That(error.Message, Does.Not.Contain("native detail"));
     }
 
+    [Test]
+    public async Task ApartmentVerifiedWriteContractIsAuthenticatedNarrowAndVersioned()
+    {
+        var device = new FakeBridgePm3Device();
+        await using var host = await BridgeTestHost.CreateAsync(device);
+        var unauthorized = await host.Client.PostAsJsonAsync("/api/v1/hardware/apartment/block4/write-verified",
+            new ApartmentBlock4WriteRequest("v1", "AABBCCDD"));
+        Assert.That(unauthorized.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That(device.ApartmentWrites, Is.Zero);
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+
+        foreach (var invalid in new[]
+        {
+            "{\"version\":\"v1\",\"desired\":\"AABBCCDD\",\"block\":5}",
+            "{\"version\":\"v2\",\"desired\":\"AABBCCDD\"}",
+            "{\"version\":\"v1\",\"desired\":\"AABBCCDG\"}",
+        })
+        {
+            var rejected = await host.Client.PostAsync("/api/v1/hardware/apartment/block4/write-verified",
+                new StringContent(invalid, System.Text.Encoding.UTF8, "application/json"));
+            Assert.That(rejected.IsSuccessStatusCode, Is.False);
+        }
+        Assert.That(device.ApartmentWrites, Is.Zero);
+
+        var response = await host.Client.PostAsJsonAsync("/api/v1/hardware/apartment/block4/write-verified",
+            new ApartmentBlock4WriteRequest("v1", "AABBCCDD"));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await response.Content.ReadFromJsonAsync<ApartmentBlock4WriteResponse>(),
+            Is.EqualTo(new ApartmentBlock4WriteResponse("v1", 4, "AABBCCDD")));
+        Assert.That(device.ApartmentWrites, Is.EqualTo(1));
+        Assert.That(device.ReadCalls, Is.Zero);
+    }
+
+    [Test]
+    public async Task PresenceEndpointUsesOnlyPresenceProbeAndRequiresAuthentication()
+    {
+        var device = new FakeBridgePm3Device { IsPresent = false };
+        await using var host = await BridgeTestHost.CreateAsync(device);
+        Assert.That((await host.Client.GetAsync("/api/v1/hardware/presence")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await host.PairAsync());
+        var response = await host.Client.GetFromJsonAsync<TokenPresenceResponse>("/api/v1/hardware/presence");
+        Assert.That(response, Is.EqualTo(new TokenPresenceResponse("v1", false)));
+        Assert.That(device.PresenceCalls, Is.EqualTo(1));
+        Assert.That(device.ReadCalls, Is.Zero);
+    }
+
     private static class InterlockedExtensions
     {
         public static void Max(ref int location, int value)

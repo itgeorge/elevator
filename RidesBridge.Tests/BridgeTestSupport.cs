@@ -14,6 +14,10 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
 {
     private readonly Func<CancellationToken, Task<string>> _read;
     public int ReadCalls;
+    public int PresenceCalls;
+    public int ApartmentWrites;
+    public bool IsPresent { get; set; } = true;
+    public string? LastApartmentWrite { get; private set; }
     public int StartCalls;
     public Exception? StartException { get; init; }
     public bool Disposed { get; private set; }
@@ -88,6 +92,15 @@ internal sealed class FakeBridgePm3Device : IBridgePm3Device
         6 => WritePage0Block6Async(value, ct),
         _ => Task.CompletedTask,
     };
+
+    public Task<bool> ProbeTokenPresenceAsync(CancellationToken ct = default) { PresenceCalls++; return Task.FromResult(IsPresent); }
+
+    public Task<string> WriteApartmentBlock4VerifiedAsync(string value, CancellationToken ct = default)
+    {
+        ApartmentWrites++;
+        LastApartmentWrite = value;
+        return Task.FromResult(value);
+    }
 
     public Task<IReadOnlyList<Page0BlockReadResult>> ReadPage0Blocks1To6Async(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Page0BlockReadResult>>(

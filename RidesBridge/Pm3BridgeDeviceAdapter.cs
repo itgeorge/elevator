@@ -39,6 +39,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
     // from the synchronization primitive itself.
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private IBridgePm3Session? _session;
+    private bool _detectedSessionReady;
     private int _disposed;
 
     public Pm3BridgeDeviceAdapter(BridgeOptions bridgeOptions)
@@ -81,6 +82,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
             var session = _session ?? throw BridgeHardwareException.Unavailable();
             session.InvalidateT55DetectCache();
             await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            _detectedSessionReady = true;
             var block5 = await ReadAndValidateAsync(session, 5, ct).ConfigureAwait(false);
             var block6 = await ReadAndValidateAsync(session, 6, ct).ConfigureAwait(false);
             return (block5, block6);
@@ -119,6 +121,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
             var session = _session ?? throw BridgeHardwareException.Unavailable();
             session.InvalidateT55DetectCache();
             await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            _detectedSessionReady = true;
             var scope = new Page0MutationSession(this, session);
             ownershipTransferred = true;
             return scope;
@@ -160,6 +163,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
             var session = _session ?? throw BridgeHardwareException.Unavailable();
             session.InvalidateT55DetectCache();
             await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            _detectedSessionReady = true;
             var results = new Page0BlockReadResult[Page0Blocks1To6.Allowlist.Length];
             for (var index = 0; index < Page0Blocks1To6.Allowlist.Length; index++)
             {
@@ -210,10 +214,12 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
             try
             {
                 await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+                _detectedSessionReady = true;
                 return new CalibrationSignalSample(signal, true);
             }
             catch (Exception ex)
             {
+                _detectedSessionReady = false;
                 // Native PM3 detect commonly reports absence as Pm3CommandException;
                 // normalize it through the same mapper used by every hardware operation.
                 var mapped = await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
@@ -269,9 +275,11 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
             try
             {
                 await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+                _detectedSessionReady = true;
             }
             catch (Exception ex)
             {
+                _detectedSessionReady = false;
                 var mapped = ex as BridgeHardwareException ?? await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
                 if (mapped.Error != BridgeHardwareError.NoChip) throw mapped;
                 throw new BridgeHardwareException(
@@ -314,6 +322,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
             var session = _session ?? throw BridgeHardwareException.Unavailable();
             session.InvalidateT55DetectCache();
             await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+            _detectedSessionReady = true;
             var results = new Page0BlockReadResult[Page0MissingBlocks.Allowlist.Length];
             for (var index = 0; index < Page0MissingBlocks.Allowlist.Length; index++)
             {
@@ -340,6 +349,69 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
         {
             _operationLock.Release();
         }
+    }
+
+    public async Task<bool> ProbeTokenPresenceAsync(CancellationToken ct = default)
+    {
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            if (_session is null)
+            {
+                _session = _sessionFactory(_bridgeOptions);
+                await _session.ConnectAsync(ct).ConfigureAwait(false);
+            }
+            var session = _session ?? throw BridgeHardwareException.Unavailable();
+            _detectedSessionReady = false;
+            session.InvalidateT55DetectCache();
+            try
+            {
+                await session.EnsureT55SessionActiveAsync(ct).ConfigureAwait(false);
+                _detectedSessionReady = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _detectedSessionReady = false;
+                if (ex is Pm3UnsupportedChipTypeException or Pm3UnsupportedModulationException)
+                    throw new BridgeHardwareException(BridgeHardwareError.Unavailable, "Presence probe could not determine chip presence for this unsupported tag.", ex);
+                var mapped = ex as BridgeHardwareException ?? await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+                if (mapped.Error == BridgeHardwareError.NoChip)
+                    return false;
+                throw mapped;
+            }
+        }
+        catch (BridgeHardwareException) { throw; }
+        catch (Exception ex) { throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false); }
+        finally { _operationLock.Release(); }
+    }
+
+    public async Task<string> WriteApartmentBlock4VerifiedAsync(string value, CancellationToken ct = default)
+    {
+        if (!IsBlockHex(value)) throw new ArgumentException("Apartment writes require exactly 8 hexadecimal characters.", nameof(value));
+        await _operationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            var session = _session;
+            if (session is null || !_detectedSessionReady)
+                throw new BridgeHardwareException(BridgeHardwareError.Unavailable, "A connected, detected native session is required; refresh the token first.");
+            var actual = await session.WriteDetectedPage0BlockVerifiedAsync(4, Tokens.T55Block.FromHex(value), ct).ConfigureAwait(false);
+            if (!IsBlockHex(actual) || !string.Equals(actual, value, StringComparison.OrdinalIgnoreCase))
+            {
+                _detectedSessionReady = false;
+                throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "Verified apartment write returned an invalid value.");
+            }
+            return actual.ToUpperInvariant();
+        }
+        catch (BridgeHardwareException) { _detectedSessionReady = false; throw; }
+        catch (Exception ex)
+        {
+            _detectedSessionReady = false;
+            throw await MapHardwareExceptionAsync(ex).ConfigureAwait(false);
+        }
+        finally { _operationLock.Release(); }
     }
 
     private async Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct)
@@ -472,6 +544,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
         if (_session is not null && await _session.IsConnectedAsync(ct).ConfigureAwait(false))
             return;
 
+        _detectedSessionReady = false;
         ThrowIfDisposed();
         _session ??= _sessionFactory(_bridgeOptions);
         if (!await _session.IsConnectedAsync(ct).ConfigureAwait(false))
@@ -487,6 +560,7 @@ public sealed class Pm3BridgeDeviceAdapter : IBridgePm3Device, IPage0MutationSes
     private async Task DiscardSessionAfterFailureAsync()
     {
         var session = Interlocked.Exchange(ref _session, null);
+        _detectedSessionReady = false;
         if (session is null)
             return;
 

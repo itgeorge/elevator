@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Pm3UsbApi;
 using RidesBridge;
 
 namespace RidesBridge.Tests;
@@ -141,6 +142,95 @@ public sealed class MutationSessionTests
         Assert.That((await adapter.ReadPage0Block1To6Async(5)), Is.EqualTo("EEEEEEEE"));
     }
 
+    [Test]
+    public async Task ApartmentFastWriteUsesWarmDetectedSessionAndExactlyOneVerifiedWrite()
+    {
+        var spy = new NativeSessionSpy();
+        await using var adapter = new Pm3BridgeDeviceAdapter(
+            new BridgeOptions { DataDirectory = Path.GetTempPath() }, _ => spy);
+        await adapter.ScanPage0Async(); // warms the native configuration in the existing session
+        spy.FastCalls.Clear();
+        spy.LegacyReads.Clear();
+        spy.LegacyWrites.Clear();
+        spy.VerifiedWrites.Clear();
+
+        var actual = await adapter.WriteApartmentBlock4VerifiedAsync("ABCDEF12");
+
+        Assert.That(actual, Is.EqualTo("ABCDEF12"));
+        Assert.That(spy.FastCalls, Is.EqualTo(new[] { "verified-write4" }));
+        Assert.That(spy.EnsureCount, Is.EqualTo(1), "Only the warming scan may detect.");
+        Assert.That(spy.IsConnectedCount, Is.EqualTo(1), "Fast write must not issue an extra session health/version command.");
+        Assert.That(spy.LegacyReads, Is.Empty);
+        Assert.That(spy.LegacyWrites, Is.Empty);
+        Assert.That(spy.VerifiedWrites, Is.EqualTo(new uint[] { 4 }));
+    }
+
+    [Test]
+    public async Task ApartmentVerifiedWriteFailureIsNotReportedSuccessfulOrRetried()
+    {
+        var spy = new NativeSessionSpy { VerifiedWriteException = new IOException("transport lost") };
+        await using var adapter = new Pm3BridgeDeviceAdapter(
+            new BridgeOptions { DataDirectory = Path.GetTempPath() }, _ => spy);
+        await adapter.ScanPage0Async();
+        spy.FastCalls.Clear();
+        spy.LegacyReads.Clear();
+        spy.LegacyWrites.Clear();
+        spy.DetectedReads.Clear();
+        spy.VerifiedWrites.Clear();
+
+        var error = Assert.ThrowsAsync<BridgeHardwareException>(async () =>
+            await adapter.WriteApartmentBlock4VerifiedAsync("ABCDEF12"));
+        Assert.That(error!.Error, Is.EqualTo(BridgeHardwareError.Unavailable));
+        Assert.That(spy.FastCalls, Is.EqualTo(new[] { "verified-write4" }));
+        Assert.That(spy.VerifiedWrites, Is.EqualTo(new uint[] { 4 }));
+        Assert.That(spy.LegacyReads, Is.Empty);
+        Assert.That(spy.LegacyWrites, Is.Empty);
+        Assert.That(spy.DetectedReads, Is.Empty);
+    }
+
+    [Test]
+    public async Task PresenceProbeDetectsOnceWithoutBlockReadsAndWarmsFastPath()
+    {
+        var spy = new NativeSessionSpy();
+        await using var adapter = new Pm3BridgeDeviceAdapter(
+            new BridgeOptions { DataDirectory = Path.GetTempPath() }, _ => spy);
+
+        Assert.That(await adapter.ProbeTokenPresenceAsync(), Is.True);
+        Assert.That(spy.FastCalls, Is.EqualTo(new[] { "detect" }));
+        Assert.That(spy.LegacyReads, Is.Empty);
+        Assert.That(spy.DetectedReads, Is.Empty);
+        Assert.That(spy.VerifiedWrites, Is.Empty);
+        await adapter.WriteApartmentBlock4VerifiedAsync("ABCDEF12");
+        Assert.That(spy.FastCalls, Is.EqualTo(new[] { "detect", "verified-write4" }));
+    }
+
+    [Test]
+    public async Task AbsentPresenceInvalidatesFastWriteReadiness()
+    {
+        var calls = new List<string>();
+        var session = new FakeBridgePm3Session(calls, ensureException: new Pm3CommandException("No T55xx chip detected."));
+        await using var adapter = new Pm3BridgeDeviceAdapter(
+            new BridgeOptions { DataDirectory = Path.GetTempPath() }, _ => session);
+        Assert.That(await adapter.ProbeTokenPresenceAsync(), Is.False);
+        var error = Assert.ThrowsAsync<BridgeHardwareException>(async () =>
+            await adapter.WriteApartmentBlock4VerifiedAsync("ABCDEF12"));
+        Assert.That(error!.Error, Is.EqualTo(BridgeHardwareError.Unavailable));
+        Assert.That(calls, Is.EqualTo(new[] { "connect", "invalidate", "ensure" }));
+    }
+
+    [Test]
+    public async Task ApartmentFastWriteWithoutWarmDetectionFailsWithoutDetectOrFallback()
+    {
+        var spy = new NativeSessionSpy();
+        await using var adapter = new Pm3BridgeDeviceAdapter(
+            new BridgeOptions { DataDirectory = Path.GetTempPath() }, _ => spy);
+        var error = Assert.ThrowsAsync<BridgeHardwareException>(async () =>
+            await adapter.WriteApartmentBlock4VerifiedAsync("ABCDEF12"));
+        Assert.That(error!.Error, Is.EqualTo(BridgeHardwareError.Unavailable));
+        Assert.That(spy.FastCalls, Is.Empty);
+        Assert.That(spy.VerifiedWrites, Is.Empty);
+    }
+
     private static Page0MutationRequest Request(params Page0Mutation[] mutations) => new("v1", mutations);
 
     private sealed class SessionDevice(RecordingMutationSession session) : IBridgePm3Device, IPage0MutationSessionProvider
@@ -167,7 +257,9 @@ public sealed class MutationSessionTests
 
     private sealed class NativeSessionSpy : IBridgePm3Session
     {
-        public Dictionary<uint, string> Blocks { get; } = new() { [5] = "AAAAAAAA", [6] = "CCCCCCCC" };
+        public Dictionary<uint, string> Blocks { get; } = new() { [4] = "44444444", [5] = "AAAAAAAA", [6] = "CCCCCCCC" };
+        public List<string> FastCalls { get; } = [];
+        public Exception? VerifiedWriteException { get; init; }
         public List<uint> DetectedReads { get; } = [];
         public List<uint> VerifiedWrites { get; } = [];
         public List<uint> LegacyReads { get; } = [];
@@ -178,12 +270,13 @@ public sealed class MutationSessionTests
         public Task<bool> IsConnectedAsync(CancellationToken ct = default) { IsConnectedCount++; return Task.FromResult(true); }
         public Task ConnectAsync(CancellationToken ct = default) => Task.CompletedTask;
         public void InvalidateT55DetectCache() { }
-        public Task EnsureT55SessionActiveAsync(CancellationToken ct = default) { EnsureCount++; return Task.CompletedTask; }
-        public Task StartLfTuneAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task EnsureT55SessionActiveAsync(CancellationToken ct = default) { EnsureCount++; FastCalls.Add("detect"); return Task.CompletedTask; }
+        public Task StartLfTuneAsync(CancellationToken ct = default) { FastCalls.Add("tune"); return Task.CompletedTask; }
+        public Task<uint> GetLfTuneLastMilliVoltsAsync(CancellationToken ct = default) => Task.FromResult(420U);
         public Task<string> ReadPage0BlockAsync(uint block, CancellationToken ct = default)
         {
             LegacyReads.Add(block);
+            FastCalls.Add($"read{block}");
             return Task.FromResult(Blocks[block]);
         }
         public Task WritePage0BlockAsync(uint block, Tokens.T55Block data, CancellationToken ct = default)
@@ -200,6 +293,8 @@ public sealed class MutationSessionTests
         public Task<string> WriteDetectedPage0BlockVerifiedAsync(uint block, Tokens.T55Block data, CancellationToken ct = default)
         {
             VerifiedWrites.Add(block);
+            FastCalls.Add($"verified-write{block}");
+            if (VerifiedWriteException is not null) throw VerifiedWriteException;
             var actual = data.ToHex().ToUpperInvariant();
             Blocks[block] = actual;
             return Task.FromResult(actual);

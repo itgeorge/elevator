@@ -16,6 +16,15 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
         } catch { return .failure(Self.describe(error, operation: "Signal measurement")) }
     }
 
+    public func measureTokenPresence() async -> TokenPresenceOutcome {
+        do {
+            let response = try await client.measureTokenPresence()
+            return response.present ? .present : .absent
+        } catch {
+            return .failure(Self.describe(error, operation: "Presence check"))
+        }
+    }
+
     public func measureCalibrationSignal() async -> CalibrationSignalOutcome {
         do {
             let sample = try await client.measureCalibrationSignal()
@@ -118,6 +127,18 @@ public final class NetworkRideTokenDevice: RideTokenDevice, @unchecked Sendable 
     }
 
     public func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome {
+        if request.desiredRides == nil {
+            do {
+                let body = try BridgeApartmentBlock4WriteRequest(desired: Token.hex(request.apartmentBlock))
+                let response = try await client.writeApartmentBlock4Verified(body)
+                guard response.verifiedValue == Token.hex(request.apartmentBlock) else {
+                    return .requiresRefresh("Apartment write verification did not match the requested value. Tap Detect.")
+                }
+                return .success
+            } catch {
+                return .requiresRefresh(Self.describe(error, operation: "Apartment write") + " Tap Detect and try again.")
+            }
+        }
         let blocks = request.token.blocks
         var changes: [(Int, UInt32)] = [(3, blocks[3]), (4, request.apartmentBlock)]
         if let rides = request.desiredRides {
