@@ -32,7 +32,7 @@ public struct UserDefaultsChargeHistoryStore: ChargeHistoryStore {
     private let key: String
     public let limit: Int
 
-    public init(defaults: UserDefaults = .standard, key: String = "completedChargeHistory", limit: Int = 100) {
+    public init(defaults: UserDefaults = .standard, key: String = "completedChargeHistory", limit: Int = .max) {
         self.defaults = defaults
         self.key = key
         self.limit = limit
@@ -92,6 +92,9 @@ public final class RidesViewModel: ObservableObject {
     @Published public private(set) var currentRides: UInt = 0
     @Published public private(set) var pendingRides: UInt = 0
     @Published public private(set) var completedCharges: [CompletedCharge]
+    @Published public private(set) var activeChargeSession: ChargeSession?
+    @Published public private(set) var savedChargeSessions: [ChargeSession] = []
+    @Published public var sessionError: String?
     @Published public private(set) var loadedToken: Token?
     @Published public var isResetSheetPresented = false
     @Published public var selectedResetSequence: RideSequence?
@@ -114,7 +117,9 @@ public final class RidesViewModel: ObservableObject {
     private let device: any RideTokenDevice
     private let legacyDevice: (any ProxmarkDevice)?
     private let dumpStore: UnknownDumpStore
-    private let chargeHistoryStore: any ChargeHistoryStore
+    // Legacy history injection is retained for isolated existing tests only.
+    private let chargeHistoryStore: (any ChargeHistoryStore)?
+    private let chargeSessionStore: FileChargeSessionStore?
     private let apartmentSecretStore: ApartmentSecretStore
     private var apartmentSecretSubscription: AnyCancellable?
     private var editingApartment = false
@@ -149,7 +154,8 @@ public final class RidesViewModel: ObservableObject {
         device: any RideTokenDevice = FakeProxmark(),
         configuration: RidesConfiguration = .prototype,
         dumpStore: UnknownDumpStore = UnknownDumpStore(),
-        chargeHistoryStore: any ChargeHistoryStore = UserDefaultsChargeHistoryStore(),
+        chargeHistoryStore: (any ChargeHistoryStore)? = nil,
+        sessionStore: FileChargeSessionStore? = nil,
         autoScanInterval: TimeInterval = 0.1,
         occupiedAutoScanInterval: TimeInterval = 3,
         periodicConfirmInterval: TimeInterval = 5,
@@ -161,18 +167,79 @@ public final class RidesViewModel: ObservableObject {
         self.configuration = configuration
         self.dumpStore = dumpStore
         self.chargeHistoryStore = chargeHistoryStore
+        self.chargeSessionStore = sessionStore ?? (chargeHistoryStore == nil ? FileChargeSessionStore() : nil)
         self.autoScanInterval = max(0, autoScanInterval)
         self.occupiedAutoScanInterval = max(0, occupiedAutoScanInterval)
         self.periodicConfirmInterval = max(0, periodicConfirmInterval)
         self.now = now
         self.apartmentSecretStore = apartmentSecretStore
-        self.completedCharges = chargeHistoryStore.load()
+        self.completedCharges = chargeHistoryStore?.load() ?? []
+        if let store = self.chargeSessionStore {
+            do {
+                let session = try store.loadActiveSession()
+                self.activeChargeSession = session
+                self.completedCharges = session.charges
+                self.savedChargeSessions = try store.listSessions()
+            } catch {
+                self.sessionError = "Could not open charge session: \(error.localizedDescription)"
+            }
+        }
         apartmentSecretSubscription = apartmentSecretStore.$secret.sink { [weak self] secret in
             guard let self else { return }
             self.updateApartment(secret: secret)
         }
         if let fake = device as? FakeProxmark {
             simulationScenario = fake.scenario
+        }
+    }
+
+    public func refreshChargeSessions() {
+        guard let store = chargeSessionStore else { return }
+        do { savedChargeSessions = try store.listSessions() }
+        catch { sessionError = "Could not list charge sessions: \(error.localizedDescription)" }
+    }
+
+    public func startNewChargeSession() {
+        guard !isBusy, let store = chargeSessionStore else { return }
+        do {
+            try persistActiveSession()
+            let session = try store.createSession()
+            activeChargeSession = session
+            completedCharges = []
+            sessionError = nil
+            refreshChargeSessions()
+        } catch { sessionError = "Could not start a new session: \(error.localizedDescription)" }
+    }
+
+    public func loadChargeSession(_ session: ChargeSession) {
+        guard !isBusy, let store = chargeSessionStore else { return }
+        do {
+            try persistActiveSession()
+            let loaded = try store.load(id: session.id)
+            try store.setActiveSession(id: loaded.id)
+            activeChargeSession = loaded
+            completedCharges = loaded.charges
+            sessionError = nil
+            refreshChargeSessions()
+        } catch { sessionError = "Could not load charge session: \(error.localizedDescription)" }
+    }
+
+    private func persistActiveSession() throws {
+        guard let store = chargeSessionStore, var session = activeChargeSession else { return }
+        session.charges = completedCharges
+        session.updatedAt = Date()
+        activeChargeSession = session
+        try store.save(session)
+    }
+
+    private func saveCompletedCharges() {
+        chargeHistoryStore?.save(completedCharges)
+        do {
+            try persistActiveSession()
+            if let store = chargeSessionStore { savedChargeSessions = try store.listSessions() }
+            sessionError = nil
+        } catch {
+            sessionError = "Token charge succeeded, but the session file could not be saved: \(error.localizedDescription). Do not repeat the charge."
         }
     }
 
@@ -203,7 +270,7 @@ public final class RidesViewModel: ObservableObject {
     public var canEnableAutoScanning: Bool { signalCalibrationReady && (!isBusy || isAutoScanning) }
     public var hasKnownToken: Bool { loadedToken != nil }
     public var hasRideChange: Bool { hasKnownToken && pendingRides != currentRides }
-    public var canCharge: Bool { hasRideChange && canAdjust && !autoConfirmationIsStale }
+    public var canCharge: Bool { hasRideChange && canAdjust && !autoConfirmationIsStale && (chargeSessionStore == nil || activeChargeSession != nil) }
     public var canAdjust: Bool {
         guard hasKnownToken, !isBusy else { return false }
         if case .known = state { return true }
@@ -275,7 +342,7 @@ public final class RidesViewModel: ObservableObject {
             if includeCharge {
                 let delta = Int(pendingRides) - Int(initial)
                 completedCharges.insert(CompletedCharge(timestamp: chargeAt, sequence: token.sequence, initialRides: initial, addedRides: delta, totalRides: pendingRides, amountEUR: Decimal(delta) * configuration.pricePerRideEUR), at: 0)
-                chargeHistoryStore.save(completedCharges)
+                saveCompletedCharges()
                 currentRides = pendingRides
             }
             state = .known(updated); message = includeCharge ? "Charge successful." : "Apartment saved."
@@ -813,7 +880,7 @@ public final class RidesViewModel: ObservableObject {
                 amountEUR: amountEUR
             )
             completedCharges.insert(charge, at: 0)
-            chargeHistoryStore.save(completedCharges)
+            saveCompletedCharges()
             loadedToken = updated
             currentRides = desiredRides
             state = .known(updated)

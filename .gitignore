@@ -7,6 +7,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignore
 
+# Local agent worktrees
+/.worktrees/
+
 # Build results
 [Dd]ebug/
 # Repo PM3 debug tooling (exception to [Dd]ebug/ — not MSBuild output)
