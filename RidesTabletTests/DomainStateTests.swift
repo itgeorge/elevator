@@ -7,6 +7,7 @@ private actor ApartmentRefreshTestDevice: RideTokenDevice {
     private(set) var writtenRideToken: Token?
     init(ordinaryToken: Token, freshToken: Token) { self.ordinaryToken = ordinaryToken; self.freshToken = freshToken }
     func scan() async -> ScanOutcome { .known(ordinaryToken, signalMillivolts: 420) }
+    func measureTokenPresence() async -> TokenPresenceOutcome { .present }
     func scanForApartmentSnapshot() async -> ScanOutcome { .known(freshToken, signalMillivolts: 420) }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome { .measured(millivolts: 420, chipPresent: true) }
     func measureSignal() async -> TuneOutcome { .measured(millivolts: 420) }

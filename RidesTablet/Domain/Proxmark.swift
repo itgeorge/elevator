@@ -176,6 +176,7 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
     private(set) public var writeCallCount = 0
     private(set) public var overwriteCallCount = 0
     private(set) public var scanCallCount = 0
+    private(set) public var presenceCallCount = 0
     private(set) public var writeRideMirrorsCallCount = 0
     private(set) public var resetCallCount = 0
     private(set) public var lastWrittenToken: Token?
@@ -321,6 +322,7 @@ public final class FakeProxmark: ProxmarkDevice, RideTokenDevice, @unchecked Sen
     public func measureTokenPresence() async -> TokenPresenceOutcome {
         await Task.yield()
         return withLock {
+            presenceCallCount += 1
             switch storedDetect {
             case .detected: return .present
             case .noChip: return .absent

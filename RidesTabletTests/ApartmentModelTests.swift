@@ -146,19 +146,72 @@ final class ApartmentModelTests: XCTestCase {
         model.stopAutoScanning()
     }
 
+    func testAbsentPresenceArrivingWhileSaveIsDrainingPreventsWrite() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentHeldPresence-\\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let device = HeldApartmentWriteDevice(token: .sample(rideCount: 73), holdPresence: true)
+        let model = RidesViewModel(device: device, sessionStore: FileChargeSessionStore(directory: directory), apartmentSecretStore: ApartmentSecretStore(secret: secret))
+        await model.performPrimaryAction(); await model.performPrimaryAction(); await model.detect()
+        model.adjustRides(by: 10)
+        await model.requestCharge()
+        await device.waitUntilPresenceStarts()
+        model.apartmentInput = "42"
+        let saveTask = Task { await model.saveApartmentEntry() }
+        XCTAssertFalse(model.isApartmentSheetPresented)
+        XCTAssertTrue(model.isBusy)
+        await device.completePresence(.absent)
+        await saveTask.value
+        let writeCount = await device.writeCount
+        XCTAssertEqual(writeCount, 0)
+        XCTAssertTrue(model.completedCharges.isEmpty)
+        XCTAssertNil(model.loadedToken)
+    }
+
     func testExplicitAbsentPresenceBeforeSaveInvalidatesPopupAndPreventsWrite() async throws {
         let context = try await makeModel(secret: secret, apartment: 17)
         defer { try? FileManager.default.removeItem(at: context.directory) }
+        context.fake.set(detect: .noChip)
         await context.model.editApartment()
         context.model.apartmentInput = "18"
-        context.fake.set(detect: .noChip)
-        for _ in 0..<100 where context.model.isApartmentSheetPresented { await Task.yield() }
-        try await Task.sleep(for: .milliseconds(300))
+        for _ in 0..<1_000 where context.fake.presenceCallCount == 0 { await Task.yield() }
+        for _ in 0..<1_000 where context.model.isApartmentSheetPresented { await Task.yield() }
         XCTAssertFalse(context.model.isApartmentSheetPresented)
+        context.fake.set(detect: .detected)
         await context.model.saveApartmentEntry()
         XCTAssertEqual(context.fake.writeCallCount, 0)
         XCTAssertNil(context.model.loadedToken)
         XCTAssertTrue(context.model.completedCharges.isEmpty)
+    }
+
+    func testAbsentPresenceInChargePopupNeverFallsThroughToSkipCharge() async throws {
+        let context = try await makeModel(secret: secret)
+        defer { try? FileManager.default.removeItem(at: context.directory) }
+        context.model.adjustRides(by: 10)
+        context.fake.set(detect: .noChip)
+        await context.model.requestCharge()
+        for _ in 0..<1_000 where context.fake.presenceCallCount == 0 { await Task.yield() }
+        for _ in 0..<1_000 where context.model.isApartmentSheetPresented { await Task.yield() }
+        XCTAssertFalse(context.model.isApartmentSheetPresented)
+        XCTAssertEqual(context.fake.writeCallCount, 0)
+        XCTAssertTrue(context.model.completedCharges.isEmpty)
+        XCTAssertNil(context.model.loadedToken)
+    }
+
+    func testSecretChangeAndBackgroundInvalidateApartmentPopup() async throws {
+        let secretContext = try await makeModel(secret: secret, apartment: 17)
+        defer { try? FileManager.default.removeItem(at: secretContext.directory) }
+        await secretContext.model.editApartment()
+        secretContext.secretStore.setSecret("changed-secret")
+        for _ in 0..<1_000 where secretContext.model.isApartmentSheetPresented { await Task.yield() }
+        XCTAssertFalse(secretContext.model.isApartmentSheetPresented)
+        XCTAssertNil(secretContext.model.loadedToken)
+
+        let backgroundContext = try await makeModel(secret: secret, apartment: 18)
+        defer { try? FileManager.default.removeItem(at: backgroundContext.directory) }
+        await backgroundContext.model.editApartment()
+        backgroundContext.model.stopAutoScanning()
+        XCTAssertFalse(backgroundContext.model.isApartmentSheetPresented)
+        XCTAssertNil(backgroundContext.model.loadedToken)
     }
 
     func testEditingPrefilledApartmentSavesOnlyApartmentAndPreservesPendingRides() async throws {
@@ -320,12 +373,26 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
     private var startedContinuation: CheckedContinuation<Void, Never>?
     private var didStart = false
     private var calibrationSamples = 0
+    private let holdPresence: Bool
+    private var presenceContinuation: CheckedContinuation<TokenPresenceOutcome, Never>?
+    private var presenceStartedContinuation: CheckedContinuation<Void, Never>?
+    private var presenceStarted = false
     private(set) var writeCount = 0
 
-    init(token: Token) { self.token = token }
+    init(token: Token, holdPresence: Bool = false) { self.token = token; self.holdPresence = holdPresence }
 
     func scan() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
-    func measureTokenPresence() async -> TokenPresenceOutcome { .present }
+    func measureTokenPresence() async -> TokenPresenceOutcome {
+        guard holdPresence else { return .present }
+        presenceStarted = true
+        presenceStartedContinuation?.resume(); presenceStartedContinuation = nil
+        return await withCheckedContinuation { presenceContinuation = $0 }
+    }
+    func waitUntilPresenceStarts() async {
+        if presenceStarted { return }
+        await withCheckedContinuation { presenceStartedContinuation = $0 }
+    }
+    func completePresence(_ outcome: TokenPresenceOutcome) { presenceContinuation?.resume(returning: outcome); presenceContinuation = nil }
     func scanForApartmentSnapshot() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome {
         calibrationSamples += 1
