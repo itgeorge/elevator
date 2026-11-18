@@ -34,6 +34,8 @@ public static class BridgeApplication
             services.AddSingleton<IBonjourPublisher, HaukcodeBonjourPublisher>();
         else
             services.AddSingleton(publisher);
+        if (options.SignalTracePath is not null)
+            services.AddSingleton(new SignalTrace(options.SignalTracePath));
         services.AddSingleton<Page0ConditionalWriter>(serviceProvider =>
             new Page0ConditionalWriter(
                 serviceProvider.GetRequiredService<IBridgePm3Device>(),
@@ -215,12 +217,29 @@ public static class BridgeApplication
                     operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
                 if (signal < 0)
                     throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed signal response.");
+                TraceObservation(context, "signal", signal, "ok");
                 return Results.Ok(new HardwareSignalResponse(BridgeOptions.ApiVersion, signal));
             }
-            catch (BridgeHardwareException ex) { return HardwareError(ex.Error); }
-            catch (OperationCanceledException) { return Results.StatusCode(StatusCodes.Status499ClientClosedRequest); }
-            catch (IOException) { return HardwareError(BridgeHardwareError.Unavailable); }
-            catch (UnauthorizedAccessException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (BridgeHardwareException ex)
+            {
+                TraceObservation(context, "signal", ex.SignalMillivolts, HardwareErrorCode(ex.Error));
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                TraceObservation(context, "signal", null, "canceled");
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                TraceObservation(context, "signal", null, "pm3_unavailable");
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                TraceObservation(context, "signal", null, "pm3_unavailable");
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
         });
 
         app.MapGet("/api/v1/hardware/calibration/signal", async (
@@ -231,12 +250,29 @@ public static class BridgeApplication
                 var signal = await gate.ExecuteAsync(operationCt => device.MeasureCalibrationSignalAsync(operationCt),
                     context.RequestAborted, waitTimeout: options.OperationWaitTimeout,
                     operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
+                TraceObservation(context, "calibration", signal.SignalMillivolts, signal.ChipPresent ? "chip=true" : "chip=false");
                 return Results.Ok(new CalibrationSignalResponse(BridgeOptions.ApiVersion, signal.SignalMillivolts, signal.ChipPresent));
             }
-            catch (BridgeHardwareException ex) { return HardwareError(ex.Error); }
-            catch (OperationCanceledException) { return Results.StatusCode(StatusCodes.Status499ClientClosedRequest); }
-            catch (IOException) { return HardwareError(BridgeHardwareError.Unavailable); }
-            catch (UnauthorizedAccessException) { return HardwareError(BridgeHardwareError.Unavailable); }
+            catch (BridgeHardwareException ex)
+            {
+                TraceObservation(context, "calibration", ex.SignalMillivolts, HardwareErrorCode(ex.Error));
+                return HardwareError(ex.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                TraceObservation(context, "calibration", null, "canceled");
+                return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (IOException)
+            {
+                TraceObservation(context, "calibration", null, "pm3_unavailable");
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                TraceObservation(context, "calibration", null, "pm3_unavailable");
+                return HardwareError(BridgeHardwareError.Unavailable);
+            }
         });
 
         app.MapGet("/api/v1/hardware/page0/scan", async (
@@ -254,6 +290,7 @@ public static class BridgeApplication
                     operationTimeout: options.HardwareExecutionTimeout).ConfigureAwait(false);
                 if (!IsBlockHex(scan.Block4Hex) || !IsBlockHex(scan.Block5Hex) || !IsBlockHex(scan.Block6Hex))
                     throw new BridgeHardwareException(BridgeHardwareError.MalformedResponse, "PM3 returned a malformed block response.");
+                TraceObservation(context, "scan", scan.SignalMillivolts, "ok");
                 return Results.Ok(new Page0ScanResponse(
                     BridgeOptions.ApiVersion,
                     scan.Block4Hex.ToUpperInvariant(),
@@ -263,6 +300,7 @@ public static class BridgeApplication
             }
             catch (BridgeHardwareException ex)
             {
+                TraceObservation(context, "scan", ex.SignalMillivolts, HardwareErrorCode(ex.Error));
                 return ex.Error == BridgeHardwareError.NoChip && ex.SignalMillivolts is int signal
                     ? Results.Json(new BridgeErrorResponse("no_chip", "No supported T55xx chip is present.", signal), statusCode: 409)
                     : HardwareError(ex.Error);
@@ -553,6 +591,21 @@ public static class BridgeApplication
         RandomNumberGenerator.Fill(bytes);
         return Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
+
+    private static void TraceObservation(HttpContext context, string kind, int? millivolts, string detail) =>
+        context.RequestServices.GetService<SignalTrace>()?.Write(kind, millivolts, detail);
+
+    private static string HardwareErrorCode(BridgeHardwareError error) => error switch
+    {
+        BridgeHardwareError.Unavailable => "pm3_unavailable",
+        BridgeHardwareError.NoChip => "no_chip",
+        BridgeHardwareError.Timeout => "pm3_timeout",
+        BridgeHardwareError.Busy => "bridge_busy",
+        BridgeHardwareError.MalformedResponse => "malformed_device_response",
+        BridgeHardwareError.TuneFailed => "lf_tune_failed",
+        BridgeHardwareError.ReadFailed => "page0_read_failed",
+        _ => "pm3_unavailable",
+    };
 
     private static IResult HardwareError(BridgeHardwareError error) => error switch
     {

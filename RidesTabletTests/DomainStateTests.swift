@@ -104,8 +104,8 @@ final class DomainStateTests: XCTestCase {
         await model.runAutoScanCycleForTesting()
         XCTAssertFalse(model.isAutoSignalBlocked)
         XCTAssertEqual(fake.scanCallCount, 0, "Recovery starts settling instead of reading immediately")
-        for _ in 0..<2 { await model.runAutoScanCycleForTesting() }
-        XCTAssertEqual(fake.scanCallCount, 1, "Three stable eligible probes confirm after recovery")
+        for _ in 0..<3 { await model.runAutoScanCycleForTesting() }
+        XCTAssertEqual(fake.scanCallCount, 1, "Four stable eligible probes confirm after recovery")
         XCTAssertFalse(model.canCharge)
         model.stopAutoScanning()
     }
@@ -152,6 +152,7 @@ final class DomainStateTests: XCTestCase {
         let model = RidesViewModel(device: fake, autoScanInterval: 60)
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
+        await waitForAutoCycle(model, fake: fake)
         for _ in 0..<2 { await model.runAutoScanCycleForTesting() }
         let finalProbe = Task { await model.runAutoScanCycleForTesting() }
 
@@ -165,7 +166,7 @@ final class DomainStateTests: XCTestCase {
         XCTAssertFalse(model.isAutoDetecting, "Stopping auto scan clears Detecting immediately")
     }
 
-    func testUnconfirmedPlacementWaitsForThreeStableEligibleProbes() async {
+    func testUnconfirmedPlacementWaitsForFourStableEligibleProbes() async {
         let fake = FakeProxmark()
         let model = RidesViewModel(device: fake, autoScanInterval: 60)
         await calibrateFake(model, fake)
@@ -175,6 +176,8 @@ final class DomainStateTests: XCTestCase {
         XCTAssertTrue(model.isAutoSettling)
         await model.runAutoScanCycleForTesting()
         XCTAssertEqual(fake.scanCallCount, 0)
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 0, "Three flat probes do not settle")
         await model.runAutoScanCycleForTesting()
         XCTAssertEqual(fake.scanCallCount, 1)
         XCTAssertFalse(model.isAutoSettling)
@@ -210,73 +213,127 @@ final class DomainStateTests: XCTestCase {
         model.stopAutoScanning()
     }
 
-    func testEarlyOutlierRemainsInWholeEpisodeSpread() async {
+    func testSpikeInsideTheFourProbeWindowDoesNotSettle() async {
         let fake = FakeProxmark()
         let instant = Date(timeIntervalSince1970: 1_500)
         let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
-        for value in [7_000, 9_000, 9_000, 9_000, 9_000] {
+        for value in [9_000, 12_700, 9_000, 9_000] {
             fake.set(tune: .measured(millivolts: value))
             await model.runAutoScanCycleForTesting()
         }
-        XCTAssertEqual(fake.scanCallCount, 0, "An early >10% outlier is not evicted by three later flat samples")
+        XCTAssertEqual(fake.scanCallCount, 0, "A spike still inside the four-probe window keeps the slope above tune noise")
         model.stopAutoScanning()
     }
 
-    func testExactlyTenPercentWholeEpisodeSpreadSettlesAfterThreeSamples() async {
+    func testThreeProbesDoNotSettle() async {
         let fake = FakeProxmark()
         let instant = Date(timeIntervalSince1970: 2_400)
         let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
-        for value in [10_000, 11_758, 10_000] { // calibration span is 17,580 mV
+        for value in [10_000, 10_000, 10_000] {
             fake.set(tune: .measured(millivolts: value))
             await model.runAutoScanCycleForTesting()
         }
-        XCTAssertEqual(fake.scanCallCount, 1, "Exactly 10% spread is accepted at the three-sample minimum")
+        XCTAssertEqual(fake.scanCallCount, 0, "Settle needs four probes")
         model.stopAutoScanning()
     }
 
-    func testSpreadAboveTenPercentDoesNotSettleAtThreeSamples() async {
-        let fake = FakeProxmark()
-        let instant = Date(timeIntervalSince1970: 2_450)
-        let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
-        await calibrateFake(model, fake)
-        model.toggleAutoScanning()
-        for value in [10_000, 11_759, 10_000] {
-            fake.set(tune: .measured(millivolts: value))
-            await model.runAutoScanCycleForTesting()
-        }
-        XCTAssertEqual(fake.scanCallCount, 0, "Spread just above 10% must not settle")
-        model.stopAutoScanning()
-    }
-
-    func testLowerHalfEligibleProbeContributesToWholeEpisodeSpread() async {
-        let fake = FakeProxmark()
-        let instant = Date(timeIntervalSince1970: 2_500)
-        let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
-        await calibrateFake(model, fake)
-        model.toggleAutoScanning()
-        for value in [9_000, 12_700, 9_000] {
-            fake.set(tune: .measured(millivolts: value))
-            await model.runAutoScanCycleForTesting()
-        }
-        XCTAssertEqual(fake.scanCallCount, 0, "A gate-eligible lower-half outlier remains in the episode spread")
-        model.stopAutoScanning()
-    }
-
-    func testThreeStableEligibleSamplesCanSettleBelowBetterHalfWithoutTimer() async {
+    func testFourStableEligibleSamplesCanSettleBelowBetterHalfWithoutTimer() async {
         let fake = FakeProxmark()
         let instant = Date(timeIntervalSince1970: 2_600)
         let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
-        for _ in 0..<3 {
+        for _ in 0..<4 {
             fake.set(tune: .measured(millivolts: 12_000)) // quality .34, above the high-signal cutoff
             await model.runAutoScanCycleForTesting()
         }
-        XCTAssertEqual(fake.scanCallCount, 1, "Three stable gate-eligible samples settle without arming fallback")
+        XCTAssertEqual(fake.scanCallCount, 1, "Four stable gate-eligible samples settle without arming fallback")
+        model.stopAutoScanning()
+    }
+
+    /// 18 Nov 2026 calibration: empty 70,675 mV, placed 59,692 mV.
+    /// The bad-spot approach kept stepping about 150–350 mV per probe after it left the weak band.
+    func testRecordedSlowCreepDoesNotSettleWhileSlopeExceedsTuneNoise() async {
+        let fake = FakeProxmark()
+        let instant = Date(timeIntervalSince1970: 5_000)
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
+        await calibrateFake(model, fake, empty: 70_675, present: 59_692)
+        await beginFreshSettleWindow(model, fake, empty: 70_675)
+        for value in [68_466, 68_114, 68_096, 67_850, 67_650, 67_450] {
+            fake.set(tune: .measured(millivolts: value))
+            await model.runAutoScanCycleForTesting()
+            XCTAssertEqual(fake.scanCallCount, 0, "A \(value) mV creep probe is still moving")
+        }
+        model.stopAutoScanning()
+    }
+
+    /// Same session, after the 3,274 mV jolt into the good seat. The tail is flat only once the
+    /// last four probes slope at or under 80 mV per sample. The clock stays frozen, so the
+    /// five-second fallback cannot accept the placement.
+    func testRecordedJoltTailSettlesOnlyWhenFourProbeSlopeIsWithinTuneNoise() async {
+        let fake = FakeProxmark()
+        let instant = Date(timeIntervalSince1970: 5_100)
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
+        await calibrateFake(model, fake, empty: 70_675, present: 59_692)
+        await beginFreshSettleWindow(model, fake, empty: 70_675)
+        let tail = [61_600, 61_333, 61_221, 60_929, 60_964, 60_903, 60_878]
+        for value in tail.dropLast() {
+            fake.set(tune: .measured(millivolts: value))
+            await model.runAutoScanCycleForTesting()
+            XCTAssertEqual(fake.scanCallCount, 0, "\(value) mV is still inside the jolt tail")
+        }
+        fake.set(tune: .measured(millivolts: tail.last!))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 1, "60,878 mV closes a four-probe slope inside tune noise")
+        model.stopAutoScanning()
+    }
+
+    func testEightyMillivoltsPerSampleIsTheInclusiveSettleBoundary() async {
+        let fake = FakeProxmark()
+        let instant = Date(timeIntervalSince1970: 5_200)
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
+        await calibrateFake(model, fake, empty: 70_675, present: 59_692)
+        await beginFreshSettleWindow(model, fake, empty: 70_675)
+        for value in [60_000, 60_080, 60_160] {
+            fake.set(tune: .measured(millivolts: value))
+            await model.runAutoScanCycleForTesting()
+            XCTAssertEqual(fake.scanCallCount, 0, "Three probes cannot settle")
+        }
+        fake.set(tune: .measured(millivolts: 60_240))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 1, "A slope of exactly 80 mV per sample settles on the fourth probe")
+        model.stopAutoScanning()
+
+        let steeper = FakeProxmark()
+        let steeperModel = RidesViewModel(device: steeper, autoScanInterval: 60, now: { instant })
+        await calibrateFake(steeperModel, steeper, empty: 70_675, present: 59_692)
+        await beginFreshSettleWindow(steeperModel, steeper, empty: 70_675)
+        for value in [62_000, 62_081, 62_162, 62_243, 62_324, 62_405] {
+            steeper.set(tune: .measured(millivolts: value))
+            await steeperModel.runAutoScanCycleForTesting()
+        }
+        XCTAssertEqual(steeper.scanCallCount, 0, "81 mV per sample stays above tune noise")
+        steeperModel.stopAutoScanning()
+    }
+
+    func testApproachOutlierDropsOutOfTheFourProbeWindow() async {
+        let fake = FakeProxmark()
+        let instant = Date(timeIntervalSince1970: 5_300)
+        let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
+        await calibrateFake(model, fake)
+        await beginFreshSettleWindow(model, fake, empty: 18_000)
+        for value in [7_000, 9_000, 9_000, 9_000] {
+            fake.set(tune: .measured(millivolts: value))
+            await model.runAutoScanCycleForTesting()
+            XCTAssertEqual(fake.scanCallCount, 0, "The 7,000 mV approach sample is still inside the slope window")
+        }
+        fake.set(tune: .measured(millivolts: 9_000))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 1, "Four flat probes settle after the approach sample leaves the window")
         model.stopAutoScanning()
     }
 
@@ -304,25 +361,25 @@ final class DomainStateTests: XCTestCase {
         model.stopAutoScanning()
     }
 
-    func testHighCutoffResetsRetryCooldownAndRequiresThreeFreshProbes() async {
+    func testHighCutoffResetsRetryCooldownAndRequiresFourFreshProbes() async {
         let fake = FakeProxmark(detect: .noChip)
         let instant = Date(timeIntervalSince1970: 2_900)
         let model = RidesViewModel(device: fake, autoScanInterval: 60, now: { instant })
         await calibrateFake(model, fake)
         fake.set(detect: .noChip)
         model.toggleAutoScanning()
-        for _ in 0..<3 { await model.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await model.runAutoScanCycleForTesting() }
         XCTAssertEqual(fake.scanCallCount, 1)
         fake.set(tune: .measured(millivolts: 18_000))
         await model.runAutoScanCycleForTesting()
         XCTAssertTrue(model.isAutoSignalBlocked)
         fake.set(tune: .measured(millivolts: 9_000))
-        for _ in 0..<2 {
+        for _ in 0..<3 {
             await model.runAutoScanCycleForTesting()
             XCTAssertEqual(fake.scanCallCount, 1)
         }
         await model.runAutoScanCycleForTesting()
-        XCTAssertEqual(fake.scanCallCount, 2, "A blocked interval resets cooldown and starts a fresh three-probe episode")
+        XCTAssertEqual(fake.scanCallCount, 2, "A blocked interval resets cooldown and starts a fresh four-probe episode")
         model.stopAutoScanning()
     }
 
@@ -362,7 +419,9 @@ final class DomainStateTests: XCTestCase {
         await model.runAutoScanCycleForTesting()
         XCTAssertEqual(fake.scanCallCount, 0, "The cutoff discarded the previous episode's samples")
         await model.runAutoScanCycleForTesting()
-        XCTAssertEqual(fake.scanCallCount, 1, "Three fresh probes settle after recovery")
+        XCTAssertEqual(fake.scanCallCount, 0, "Three fresh probes do not settle")
+        await model.runAutoScanCycleForTesting()
+        XCTAssertEqual(fake.scanCallCount, 1, "Four fresh probes settle after recovery")
         model.stopAutoScanning()
     }
 
@@ -381,7 +440,7 @@ final class DomainStateTests: XCTestCase {
         XCTAssertEqual(knownModel.currentAutoScanInterval, fast)
         await calibrateFake(knownModel, knownModelFake)
         knownModel.toggleAutoScanning()
-        for _ in 0..<3 { await knownModel.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await knownModel.runAutoScanCycleForTesting() }
         for _ in 0..<500 where knownModel.currentAutoScanInterval == fast { await Task.yield() }
         XCTAssertEqual(knownModel.currentAutoScanInterval, slow)
         knownModel.stopAutoScanning()
@@ -396,7 +455,7 @@ final class DomainStateTests: XCTestCase {
         )
         await calibrateFake(unknownModel, unknownModelFake)
         unknownModel.toggleAutoScanning()
-        for _ in 0..<3 { await unknownModel.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await unknownModel.runAutoScanCycleForTesting() }
         for _ in 0..<500 where unknownModel.currentAutoScanInterval == fast { await Task.yield() }
         XCTAssertNil(unknownModel.loadedToken)
         XCTAssertEqual(unknownModel.currentAutoScanInterval, slow)
@@ -409,7 +468,7 @@ final class DomainStateTests: XCTestCase {
         XCTAssertEqual(model.currentAutoScanInterval, 0.2)
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
-        for _ in 0..<3 { await model.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await model.runAutoScanCycleForTesting() }
         for _ in 0..<500 where model.currentAutoScanInterval == 0.2 { await Task.yield() }
         XCTAssertEqual(model.currentAutoScanInterval, 1.7)
 
@@ -442,7 +501,7 @@ final class DomainStateTests: XCTestCase {
 
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
-        for _ in 0..<3 { await model.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await model.runAutoScanCycleForTesting() }
         for _ in 0..<5 { await model.runAutoScanCycleForTesting() }
         XCTAssertEqual(fake.scanCallCount, 1, "Stable unknown presence must not cause periodic full reads")
 
@@ -460,7 +519,7 @@ final class DomainStateTests: XCTestCase {
         await calibrateFake(model, fake)
         fake.set(detect: .noChip, tune: .measured(millivolts: 420))
         model.toggleAutoScanning()
-        for _ in 0..<3 { await model.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await model.runAutoScanCycleForTesting() }
         XCTAssertNil(model.loadedToken)
         XCTAssertEqual(model.state, .noChip)
         let scansAfterNoChip = fake.scanCallCount
@@ -542,7 +601,7 @@ final class DomainStateTests: XCTestCase {
         XCTAssertEqual(model.primaryActionTitle, "Calibrate: NO token")
         await calibrateFake(model, fake)
         model.toggleAutoScanning()
-        for _ in 0..<3 { await model.runAutoScanCycleForTesting() }
+        for _ in 0..<4 { await model.runAutoScanCycleForTesting() }
         XCTAssertEqual(model.primaryActionTitle, "Detect")
         XCTAssertEqual(model.loadedToken?.rideCount, 73)
 
@@ -820,6 +879,15 @@ final class DomainStateTests: XCTestCase {
         XCTAssertEqual(model.pendingRides, 113)
         model.round(.costDelta)
         XCTAssertEqual(model.pendingRides, 123)
+    }
+
+    private func beginFreshSettleWindow(_ model: RidesViewModel, _ fake: FakeProxmark, empty: Int) async {
+        model.toggleAutoScanning()
+        await waitForAutoCycle(model, fake: fake)
+        fake.set(tune: .measured(millivolts: empty))
+        await model.runAutoScanCycleForTesting()
+        XCTAssertTrue(model.isAutoSignalBlocked)
+        XCTAssertEqual(fake.scanCallCount, 0)
     }
 
     private func calibrateFake(_ model: RidesViewModel, _ fake: FakeProxmark, empty: Int = 18_000, present: Int = 420) async {

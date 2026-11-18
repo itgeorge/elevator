@@ -61,6 +61,34 @@ public sealed class Page0ScanBridgeTests
     }
 
     [Test]
+    public async Task SignalTraceRecordsMillivoltsWithoutTokenOrPairingMaterial()
+    {
+        var tracePath = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"), "signal-trace.log");
+        var device = FakePm3Device.CreateKnownVenusSeeded();
+        await using var host = await ScanTestHost.CreateAsync(device, tracePath);
+        var token = await host.PairAsync();
+        host.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        Assert.That((await host.Client.GetAsync("/api/v1/hardware/signal")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await host.Client.GetAsync("/api/v1/hardware/calibration/signal")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await host.Client.GetAsync("/api/v1/hardware/page0/scan")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        await using var absent = await ScanTestHost.CreateAsync(FakePm3Device.CreateNoChip(), tracePath);
+        absent.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await absent.PairAsync());
+        var noChip = await absent.Client.GetAsync("/api/v1/hardware/page0/scan");
+        Assert.That(noChip.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+
+        var trace = File.ReadAllText(tracePath);
+        Assert.That(trace, Does.Contain($"\tsignal\t{FakePm3Device.SeedSignalMillivolts}\tok"));
+        Assert.That(trace, Does.Contain($"\tcalibration\t{FakePm3Device.SeedSignalMillivolts}\tchip=true"));
+        Assert.That(trace, Does.Contain($"\tscan\t{FakePm3Device.SeedSignalMillivolts}\tok"));
+        Assert.That(trace, Does.Contain("\tscan\t18000\tno_chip"));
+        Assert.That(trace, Does.Not.Contain(token));
+        Assert.That(trace, Does.Not.Contain(FakePm3Device.SeedBlock4Hex));
+        Assert.That(trace, Does.Not.Contain(FakePm3Device.SeedBlock5Hex));
+    }
+
+    [Test]
     public async Task SignalEndpointIsAuthenticatedTuneOnlyAndDoesNotDetectOrRead()
     {
         var device = new RecordingScanDevice { SignalMillivolts = 12_345 };
@@ -288,7 +316,7 @@ public sealed class Page0ScanBridgeTests
             Client = client;
         }
 
-        public static async Task<ScanTestHost> CreateAsync(IBridgePm3Device device)
+        public static async Task<ScanTestHost> CreateAsync(IBridgePm3Device device, string? signalTracePath = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -300,6 +328,7 @@ public sealed class Page0ScanBridgeTests
             {
                 BindUrl = "http://127.0.0.1:5080",
                 PairedClientsPath = Path.Combine(Path.GetTempPath(), "ridesbridge-tests", Guid.NewGuid().ToString("N"), "paired.json"),
+                SignalTracePath = signalTracePath,
             }, device);
             var app = builder.Build();
             app.MapRidesBridge();

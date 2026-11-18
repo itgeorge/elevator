@@ -115,10 +115,11 @@ public final class RidesViewModel: ObservableObject {
     private let occupiedAutoScanInterval: TimeInterval
     private let periodicConfirmInterval: TimeInterval
     private let now: () -> Date
-    // Exact whole-episode spread without retaining an ever-growing sample array.
-    private var settleProbeCount = 0
-    private var settleProbeMinimum: Int?
-    private var settleProbeMaximum: Int?
+    /// Resting-token tune noise measured 18 Nov 2026 is about 30 mV per 100 ms probe.
+    /// A slow placement creep stays around 100–200 mV per probe, so 80 mV per sample
+    /// accepts a settled token and withholds a read while it is still moving.
+    private static let settleSlopeLimitMillivoltsPerSample = 80.0
+    private var settleProbes: [Int] = []
     private var settleDeadline: Date?
     private var lastUnconfirmedAttemptAt: Date?
     private var confirmedTokenPresence = false
@@ -291,16 +292,14 @@ public final class RidesViewModel: ObservableObject {
 
             let initialOrUnconfirmed = lastFullScanAt == nil || autoConfirmationIsStale || !confirmedTokenPresence
             if initialOrUnconfirmed {
-                settleProbeCount += 1
-                settleProbeMinimum = min(settleProbeMinimum ?? signal, signal)
-                settleProbeMaximum = max(settleProbeMaximum ?? signal, signal)
+                settleProbes.append(signal)
+                if settleProbes.count > 4 { settleProbes.removeFirst(settleProbes.count - 4) }
                 if quality >= 0.5 && settleDeadline == nil {
                     settleDeadline = now().addingTimeInterval(periodicConfirmInterval)
                 }
                 isAutoSettling = true
                 autoScanStatus = "Waiting for signal to settle."
-                let spread = (settleProbeMaximum ?? signal) - (settleProbeMinimum ?? signal)
-                let settled = settleProbeCount >= 3 && Double(spread) / Double(max(1, calibrationSpan)) <= 0.10
+                let settled = Self.settleSlopeIsFlat(settleProbes)
                 let deadlineReached = settleDeadline.map { now() >= $0 } == true
                 let retryDue = lastUnconfirmedAttemptAt.map { now().timeIntervalSince($0) >= periodicConfirmInterval } == true
                 let attemptDue = lastUnconfirmedAttemptAt == nil || retryDue
@@ -335,10 +334,17 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func clearSettleWindow() {
-        settleProbeCount = 0
-        settleProbeMinimum = nil
-        settleProbeMaximum = nil
+        settleProbes.removeAll()
         settleDeadline = nil
+    }
+
+    /// Least-squares slope of four equally spaced probes, in millivolts per sample.
+    /// For samples y0…y3 the slope is (-3y0 - y1 + y2 + 3y3) / 10.
+    static func settleSlopeIsFlat(_ samples: [Int]) -> Bool {
+        guard samples.count >= 4 else { return false }
+        let recent = Array(samples.suffix(4))
+        let slope = (-3 * Double(recent[0]) - Double(recent[1]) + Double(recent[2]) + 3 * Double(recent[3])) / 10
+        return abs(slope) <= settleSlopeLimitMillivoltsPerSample
     }
 
     private func signalQuality(_ signal: Int) -> Double {

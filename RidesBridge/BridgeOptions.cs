@@ -27,6 +27,8 @@ public sealed record BridgeOptions
     public string? BridgeIdentityPath { get; init; }
     /// <summary>Directory for temporary pairing QR PNGs; defaults to the private data directory.</summary>
     public string? PairingQrArtifactDirectory { get; init; }
+    /// <summary>Absolute path for the operator signal trace. Null disables recording.</summary>
+    public string? SignalTracePath { get; init; }
     public TimeSpan PairingLifetime { get; init; } = TimeSpan.FromMinutes(2);
     /// <summary>Maximum time to wait for the single hardware-operation gate. Must remain below the iPad's 30-second request deadline.</summary>
     public TimeSpan OperationWaitTimeout { get; init; } = TimeSpan.FromSeconds(5);
@@ -70,6 +72,8 @@ public sealed record BridgeOptions
         if (PairingQrArtifactDirectory is not null
             && (string.IsNullOrWhiteSpace(PairingQrArtifactDirectory) || !Path.IsPathFullyQualified(PairingQrArtifactDirectory)))
             throw new BridgeConfigurationException("PairingQrArtifactDirectory must be a non-empty absolute path.");
+        if (SignalTracePath is not null && (string.IsNullOrWhiteSpace(SignalTracePath) || !Path.IsPathFullyQualified(SignalTracePath)))
+            throw new BridgeConfigurationException("SignalTracePath must be a non-empty absolute path.");
         if (!FakePm3Device && !Pm3AutoDiscover && string.IsNullOrWhiteSpace(Pm3Port))
             throw new BridgeConfigurationException("Pm3Port is required when Pm3AutoDiscover is false.");
         return this;

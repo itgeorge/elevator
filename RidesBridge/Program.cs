@@ -41,6 +41,11 @@ try
                 builder.Configuration,
                 EverydayPortSelector.Select(new TcpPortAvailabilityProbe())).Validate()
             : BridgeOptions.FromConfiguration(builder.Configuration).Validate();
+    if (launch.Everyday || launch.FakePm3)
+    {
+        options = options with { SignalTracePath = Path.Combine(Path.GetTempPath(), "rides-signal-trace.log") };
+        options.Validate();
+    }
 }
 catch (BridgeConfigurationException ex)
 {
@@ -99,6 +104,8 @@ try
     if (fakePm3Profile is not null)
         Console.WriteLine($"Fake PM3 profile: {FakePm3ProfileResolver.GetDisplayName(fakePm3Profile.Value)}");
     BridgeTerminalDisplay.Write(options, pairing, bridgeIdentity.Id, Console.Out, artifactLease: pairingQrArtifacts);
+    if (options.SignalTracePath is not null)
+        Console.WriteLine($"Signal trace: {options.SignalTracePath}");
     if (pairingQrArtifacts is not null)
         pairingQrCleanupTask = pairingQrArtifacts.RunAsync(pairingQrLifetime.Token);
 
