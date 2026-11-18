@@ -188,7 +188,11 @@ public final class RidesViewModel: ObservableObject {
         }
         apartmentSecretSubscription = apartmentSecretStore.$secret.sink { [weak self] secret in
             guard let self else { return }
-            Task { @MainActor in await self.apartmentSecretDidChange(secret) }
+            // Existing block bytes can be decoded immediately, including when clearing a key.
+            self.updateApartment(secret: secret)
+            if secret != nil && !self.apartmentSnapshotReady {
+                Task { @MainActor in await self.apartmentSecretDidChange(secret) }
+            }
         }
         if let fake = device as? FakeProxmark {
             simulationScenario = fake.scenario
@@ -334,9 +338,7 @@ public final class RidesViewModel: ObservableObject {
     }
 
     private func apartmentSecretDidChange(_ secret: String?) async {
-        apartmentSnapshotReady = false
-        apartmentNumber = nil
-        guard secret != nil, loadedToken != nil else { return }
+        guard secret != nil, loadedToken != nil, !apartmentSnapshotReady else { return }
         _ = await refreshForApartmentSecret()
     }
 
