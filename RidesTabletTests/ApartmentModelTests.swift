@@ -109,6 +109,9 @@ final class ApartmentModelTests: XCTestCase {
         let device = HeldApartmentWriteDevice(token: token)
         let model = RidesViewModel(device: device, sessionStore: FileChargeSessionStore(directory: directory),
                                    apartmentSecretStore: ApartmentSecretStore(secret: secret))
+        await model.performPrimaryAction()
+        await model.performPrimaryAction()
+        XCTAssertTrue(model.signalCalibrationReady)
         await model.detect()
         model.adjustRides(by: 10)
         model.toggleAutoScanning()
@@ -301,13 +304,19 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
     private var writeContinuation: CheckedContinuation<WriteOutcome, Never>?
     private var startedContinuation: CheckedContinuation<Void, Never>?
     private var didStart = false
+    private var calibrationSamples = 0
     private(set) var writeCount = 0
 
     init(token: Token) { self.token = token }
 
     func scan() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func scanForApartmentSnapshot() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
-    func measureCalibrationSignal() async -> CalibrationSignalOutcome { .measured(millivolts: 420, chipPresent: true) }
+    func measureCalibrationSignal() async -> CalibrationSignalOutcome {
+        calibrationSamples += 1
+        return calibrationSamples == 1
+            ? .measured(millivolts: 18_000, chipPresent: false)
+            : .measured(millivolts: 420, chipPresent: true)
+    }
     func measureSignal() async -> TuneOutcome { .measured(millivolts: 420) }
     func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome { .failure("Unexpected ride-only write") }
     func reset(_ request: ResetMutationRequest) async -> ResetOutcome { .failure("Unexpected reset") }
