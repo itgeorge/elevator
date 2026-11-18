@@ -215,7 +215,7 @@ public final class RidesViewModel: ObservableObject {
             guard let self else { return }
             // Existing block bytes can be decoded immediately, including when clearing a key.
             self.updateApartment(secret: secret)
-            if self.isApartmentSheetPresented {
+            if self.isApartmentSheetPresented || self.apartmentPopupWriteClaimed {
                 Task { @MainActor [weak self] in await self?.invalidateApartmentPopupForLifecycle(message: "Apartment secret changed. Detect the token again.") }
             } else if secret != nil && !self.apartmentSnapshotReady {
                 Task { @MainActor [weak self] in await self?.apartmentSecretDidChange(secret) }
@@ -409,6 +409,7 @@ public final class RidesViewModel: ObservableObject {
         guard isApartmentSheetPresented, !mutationInProgress, !apartmentPopupWriteClaimed, canSaveApartment, apartmentSnapshotReady,
               let token = loadedToken, let secret = apartmentSecretStore.secret,
               let apartment = UInt8(apartmentInput.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+        let popupGeneration = apartmentPopupGeneration
         apartmentPopupWriteClaimed = true
         mutationInProgress = true
         isApartmentSheetPresented = false
@@ -423,7 +424,7 @@ public final class RidesViewModel: ObservableObject {
             apartmentPopupWriteClaimed = false
             return
         }
-        await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment, alreadyClaimed: true)
+        await performApartmentWrite(token: token, secret: secret, apartment: apartment, includeCharge: !editingApartment, alreadyClaimed: true, popupGeneration: popupGeneration)
         apartmentPopupWriteClaimed = false
     }
 
@@ -552,13 +553,23 @@ public final class RidesViewModel: ObservableObject {
     }
 
 
-    private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool, alreadyClaimed: Bool = false) async {
+    private func performApartmentWrite(token: Token, secret: String, apartment: UInt8, includeCharge: Bool, alreadyClaimed: Bool = false, popupGeneration: Int? = nil) async {
         if !alreadyClaimed { mutationInProgress = true }
         await pauseAutoScanningForMutation()
         if !includeCharge { mutationNeedsPostWriteRefresh = false }
         let aptBlock = ApartmentBlockCodec.encode(secret: secret, block3: token.blocks[3], apartment: apartment)
         let desired = includeCharge ? pendingRides : nil
         let chargeAt = Date(), initial = currentRides
+        guard popupGeneration == nil || (popupGeneration == apartmentPopupGeneration && apartmentSecretStore.secret == secret && apartmentPresenceVerdict == .present && apartmentSnapshotReady) else {
+            mutationInProgress = false
+            apartmentPopupWriteClaimed = false
+            clearLoadedTokenForRefresh()
+            state = .failed("Apartment entry changed before the write. Tap Detect before continuing.")
+            message = "Apartment entry changed before the write. Tap Detect before continuing."
+            autoWasPausedForMutation = false
+            mutationNeedsPostWriteRefresh = false
+            return
+        }
         state = .working(includeCharge ? "Charging…" : "Saving apartment…")
         let outcome = await device.writeApartment(ApartmentMutationRequest(token: token, apartmentBlock: aptBlock, desiredRides: desired))
         switch outcome {
