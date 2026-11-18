@@ -75,6 +75,38 @@ final class ApartmentValidationUITests: XCTestCase {
 #endif
     }
 
+    func testApartmentOnlyEditDoesNotAddChargeOrChangePendingRides() throws {
+#if !targetEnvironment(simulator)
+        throw XCTSkip("Apartment edit UI regression uses the simulator fake reader.")
+#else
+        continueAfterFailure = false
+        let app = launch(scene: "apartment-edit")
+        defer { app.terminate() }
+
+        let number = app.staticTexts["apartment-number-input"]
+        XCTAssertTrue(number.waitForExistence(timeout: 15))
+        XCTAssertEqual(number.value as? String, "52")
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists)
+        let pending = app.descendants(matching: .any)["pending-rides-display"]
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        let pendingBefore = pending.value as? String
+        XCTAssertNotNil(pendingBefore)
+
+        app.buttons["clear-apartment-number"].tap()
+        for digit in ["5", "3"] { app.buttons["apartment-key-\\(digit)"].tap() }
+        app.buttons["apartment-save"].tap()
+
+        XCTAssertTrue(number.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists,
+                      "Saving an apartment-only edit must not add a completed charge")
+        XCTAssertEqual(pending.value as? String, pendingBefore,
+                       "Apartment-only edit must preserve pending rides")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(
+            format: "label CONTAINS %@", "Apartment number 53"
+        )).firstMatch.waitForExistence(timeout: 10))
+#endif
+    }
+
     func testOutsideTapCancelsEditButSkipsCharge() throws {
 #if !targetEnvironment(simulator)
         throw XCTSkip("Outside-dismiss keypad behavior uses the simulator fake reader.")
