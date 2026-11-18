@@ -32,6 +32,7 @@ struct RidesRootView: View {
     @State private var usesFakeReader = false
 #if DEBUG
     @State private var didStartReadOnlyAutoSmoke = false
+    @State private var didFinishLaunchConnectionSetup = false
 #endif
     private let launchConfiguration: BridgeConnectionLaunchConfiguration
 
@@ -64,6 +65,7 @@ struct RidesRootView: View {
             await connection.applyLaunchAddressOverride(launchConfiguration.addressOverride)
             await connection.startAutomaticBonjourReconnect()
 #if DEBUG
+            didFinishLaunchConnectionSetup = true
             if launchConfiguration.simulatorFakeReaderEnabled {
                 bootstrapSimulatorFakeReader()
                 if let scene = launchConfiguration.screenshotScene, let ridesModel {
@@ -184,6 +186,12 @@ struct RidesRootView: View {
     }
 
     private func refreshOperatorWorkflow(force: Bool = false) {
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        let physicalTest = environment["RIDES_UI_PHYSICAL_BOOTSTRAP"] == "1" || environment["RIDES_UI_PHYSICAL_ACCEPTANCE"] == "1"
+        // A test Detect must use the final paired client, not the pre-relocation URL.
+        if physicalTest && !didFinishLaunchConnectionSetup { return }
+#endif
         if usesFakeReader { return }
         guard connection.isReadyForOperatorWorkflow, let device = connection.makeRideTokenDevice() else {
             if !connection.isPaired {

@@ -18,7 +18,12 @@ final class PhysicalRidesUITests: XCTestCase {
 
         launchPhysicalApp()
         let current = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
-        XCTAssertTrue(current.waitForExistence(timeout: 30), "Paired Rides UI did not load")
+        let loaded = current.waitForExistence(timeout: 30)
+        if !loaded {
+            attach(app, name: "physical-bootstrap-failure")
+            print("PHYSICAL_INITIAL_UI: \(app.debugDescription)")
+        }
+        XCTAssertTrue(loaded, "Paired Rides UI did not load")
         XCTAssertTrue(app.buttons["detect-primary-action"].exists)
         XCTAssertTrue(waitForLoadedRideValue(current, timeout: 30), "Real Detect did not publish a ride count")
         let initial = rideValue(current)

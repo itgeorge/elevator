@@ -18,6 +18,13 @@ public enum RidesUIPhysicalAcceptanceCoordinator {
         guard ProcessInfo.processInfo.environment[bootstrapEnvironmentKey] == "1", !bootstrapped else { return }
         bootstrapped = true
         await model.detect()
+        if let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let receipt: [String: Any] = ["mode": "physical debug bootstrap; real Detect without fabricated calibration", "state": model.state.title, "message": model.message ?? "", "loadedKnownToken": model.loadedToken != nil]
+            if let data = try? JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: directory.appendingPathComponent("rides-ui-physical-bootstrap.json"), options: .atomic)
+            }
+        }
+        await checkpoint("bootstrap")
     }
 
     /// Run once per app process, only when explicitly enabled in a DEBUG build.
