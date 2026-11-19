@@ -1,4 +1,3 @@
-import Combine
 import CryptoKit
 import XCTest
 @testable import RidesTablet
@@ -199,11 +198,13 @@ final class ApartmentModelTests: XCTestCase {
         let presenceCall = await device.waitUntilPresenceStarts()
         XCTAssertEqual(presenceCall, 1)
         model.apartmentInput = "42"
-        let dismissed = expectation(description: "Save dismisses popup before waiting for presence")
-        let observation = model.$isApartmentSheetPresented.dropFirst().filter { !$0 }.sink { _ in dismissed.fulfill() }
         let saveTask = Task { await model.saveApartmentEntry() }
-        await fulfillment(of: [dismissed], timeout: 2)
-        withExtendedLifetime(observation) {}
+        var dismissed = false
+        for _ in 0..<2_000 {
+            if !model.isApartmentSheetPresented { dismissed = true; break }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(dismissed, "Save dismisses popup before waiting for presence")
         XCTAssertFalse(model.isApartmentSheetPresented)
         XCTAssertTrue(model.isBusy)
         await device.completePresence(1, outcome: .absent)
