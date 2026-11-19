@@ -1,4 +1,6 @@
-# Apartment-only edit latency: trace and safe follow-up
+# Apartment-only edit latency: historical trace
+
+**Superseded for apartment-only edits:** the operator-approved fast path is now deployed and physically verified. See [current receipt](rides-apartment-fastpath-deployment-2026-11-19.md). It uses one PM3-verified block-4 write without fresh Save-time detection, preflight, or duplicate readback. The trace below describes the previous, more conservative path; combined charge operations still use their conditional mutation path.
 
 ## Scope / evidence
 

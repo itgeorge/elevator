@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-19",
+  "integrationCommit": "7cb0043",
+  "physicalEvidenceSourceCommit": "a449fdd",
+  "status": "happy_path_verified_and_deployed",
+  "tests": {
+    "bridge": {"passed": 221},
+    "sdkNonIntegration": {"passed": 134, "skipped": 1},
+    "simulatorCombined": {"passed": 303, "failed": 0, "skipped": 2, "unitTotal": 285, "uiTotal": 20},
+    "physicalApartmentEdit": {"passed": 1, "failed": 0},
+    "fullSolution": "blocked_by_unrelated_test_host_dependency_errors"
+  },
+  "physicalOperation": {
+    "path": "real_iPad_to_native_RidesBridge_to_PM3",
+    "before": {"apartment": 43, "rides": 0, "pendingDelta": 0},
+    "afterSave": {"apartment": 44, "rides": 0, "pendingDelta": 0},
+    "externalFreshDetect": {"apartment": 44, "rides": 0, "pendingDelta": 0},
+    "historyPreserved": {"charges": 3, "amountEUR": "0.09"},
+    "saveInvocations": 1,
+    "automaticMutationRetries": 0,
+    "endpoint": "/api/v1/hardware/apartment/block4/write-verified",
+    "httpStatus": 200,
+    "httpElapsedMilliseconds": 835.193,
+    "nativeWriteElapsedMilliseconds": 816,
+    "nativeBlockWriteCommands": 1,
+    "block": 4,
+    "separateDetectOrReadCommandsDuringWriteInterval": 0,
+    "nativeSDKWriteVerification": true,
+    "backgroundPresenceRequestsBeforeSave": 7,
+    "packetLevelNativeTracing": false,
+    "readbackIsExternalTestOperationNotProductionSaveStep": true
+  },
+  "deployment": {
+    "normalDebugAppInstalledAndLaunched": true,
+    "physicalTestFlagsOnFinalLaunch": false,
+    "bridgePID": 62387,
+    "bridgeHealth": "HTTP_200_ok",
+    "pairingAndBridgeIdentityPreserved": true
+  },
+  "deferred": ["physical_token_removal_and_reappearance_check_when_user_returns"],
+  "absenceTestProvenance": "controlled_unit_and_simulator_fixtures_only",
+  "evidence": {
+    "receipt": ".docs/rides-apartment-fastpath-deployment-2026-11-19.md",
+    "screenshots": "RidesTablet/Screenshots/apartment-fastpath-2026-11-19/",
+    "simulatorResult": "/tmp/rides-apt-fastpath-simulator/combined-after-709a1d2.xcresult",
+    "physicalResult": "/tmp/rides-apt-fastpath-device/apartment-edit-physical.xcresult",
+    "finalNormalBuildLog": "/tmp/rides-apt-fastpath-device/final-normal-debug-build.log"
+  }
+}

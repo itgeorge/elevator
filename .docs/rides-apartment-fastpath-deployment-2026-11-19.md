@@ -1,4 +1,6 @@
-# Apartment fast-path deployment attempt — 19 Nov 2026
+# Apartment fast path — deployed and physically verified, 19 Nov 2026
+
+Machine-readable receipt: [JSON](rides-apartment-fastpath-deployment-2026-11-19.json). Physical token-removal/reappearance testing is deferred until the user returns; cancellation coverage so far is controlled unit/simulator testing.
 
 ## Validation
 
