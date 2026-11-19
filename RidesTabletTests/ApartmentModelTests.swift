@@ -1,3 +1,4 @@
+import Combine
 import CryptoKit
 import XCTest
 @testable import RidesTablet
@@ -153,17 +154,19 @@ final class ApartmentModelTests: XCTestCase {
         let model = RidesViewModel(device: device, sessionStore: FileChargeSessionStore(directory: directory), apartmentSecretStore: ApartmentSecretStore(secret: secret))
         await model.performPrimaryAction(); await model.performPrimaryAction(); await model.detect()
         await model.editApartment()
-        await device.waitUntilPresenceStarts()
+        let oldCall = await device.waitUntilPresenceStarts()
+        XCTAssertEqual(oldCall, 1)
         model.stopAutoScanning() // Invalidates the old generation without awaiting its native probe.
         await model.detect()
         await model.editApartment()
-        let presenceCalls = await device.waitForPresenceCalls(2)
-        XCTAssertEqual(presenceCalls, 2)
+        let newCall = await device.waitForPresenceCalls(2)
+        XCTAssertEqual(newCall, 2)
         XCTAssertTrue(model.isApartmentSheetPresented)
-        await device.completePresence(.absent)
-        for _ in 0..<100 { await Task.yield() }
+        await device.completePresence(1, outcome: .absent)
         XCTAssertTrue(model.isApartmentSheetPresented, "Late absence from the prior popup must not touch the fresh generation")
-        await model.cancelApartmentEntry()
+        let cancelTask = Task { await model.cancelApartmentEntry() }
+        await device.completePresence(2, outcome: .present)
+        await cancelTask.value
     }
 
     func testSecretAbortDuringPresenceStartupCannotLeaveSaveBusy() async throws {
@@ -193,12 +196,17 @@ final class ApartmentModelTests: XCTestCase {
         await model.performPrimaryAction(); await model.performPrimaryAction(); await model.detect()
         model.adjustRides(by: 10)
         await model.requestCharge()
-        await device.waitUntilPresenceStarts()
+        let presenceCall = await device.waitUntilPresenceStarts()
+        XCTAssertEqual(presenceCall, 1)
         model.apartmentInput = "42"
+        let dismissed = expectation(description: "Save dismisses popup before waiting for presence")
+        let observation = model.$isApartmentSheetPresented.dropFirst().filter { !$0 }.sink { _ in dismissed.fulfill() }
         let saveTask = Task { await model.saveApartmentEntry() }
+        await fulfillment(of: [dismissed], timeout: 2)
+        withExtendedLifetime(observation) {}
         XCTAssertFalse(model.isApartmentSheetPresented)
         XCTAssertTrue(model.isBusy)
-        await device.completePresence(.absent)
+        await device.completePresence(1, outcome: .absent)
         await saveTask.value
         let writeCount = await device.writeCount
         XCTAssertEqual(writeCount, 0)
@@ -440,11 +448,8 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
     private var didStart = false
     private var calibrationSamples = 0
     private let holdPresence: Bool
-    private var presenceContinuation: CheckedContinuation<TokenPresenceOutcome, Never>?
-    private var presenceStartedContinuation: CheckedContinuation<Void, Never>?
-    private var presenceStarted = false
+    private var presenceContinuations: [Int: CheckedContinuation<TokenPresenceOutcome, Never>] = [:]
     private var presenceCallCount = 0
-    private var heldPresenceReleased = false
     private(set) var writeCount = 0
 
     init(token: Token, holdPresence: Bool = false) { self.token = token; self.holdPresence = holdPresence }
@@ -452,23 +457,20 @@ private actor HeldApartmentWriteDevice: RideTokenDevice {
     func scan() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func measureTokenPresence() async -> TokenPresenceOutcome {
         presenceCallCount += 1
-        guard holdPresence, !heldPresenceReleased else { return .present }
-        presenceStarted = true
-        presenceStartedContinuation?.resume(); presenceStartedContinuation = nil
-        return await withCheckedContinuation { presenceContinuation = $0 }
+        let call = presenceCallCount
+        guard holdPresence else { return .present }
+        return await withCheckedContinuation { presenceContinuations[call] = $0 }
     }
-    func waitUntilPresenceStarts() async {
-        if presenceStarted { return }
-        await withCheckedContinuation { presenceStartedContinuation = $0 }
+    func waitUntilPresenceStarts() async -> Int? { await waitForPresenceCalls(1) }
+    func waitForPresenceCalls(_ count: Int) async -> Int? {
+        let deadline = Date().addingTimeInterval(2)
+        while presenceCallCount < count && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return presenceCallCount >= count ? count : nil
     }
-    func waitForPresenceCalls(_ count: Int) async -> Int {
-        for _ in 0..<10_000 where presenceCallCount < count { await Task.yield() }
-        return presenceCallCount
-    }
-    func completePresence(_ outcome: TokenPresenceOutcome) {
-        heldPresenceReleased = true
-        presenceContinuation?.resume(returning: outcome)
-        presenceContinuation = nil
+    func completePresence(_ call: Int, outcome: TokenPresenceOutcome) {
+        presenceContinuations.removeValue(forKey: call)?.resume(returning: outcome)
     }
     func scanForApartmentSnapshot() async -> ScanOutcome { .known(token, signalMillivolts: 420) }
     func measureCalibrationSignal() async -> CalibrationSignalOutcome {
