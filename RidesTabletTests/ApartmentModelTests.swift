@@ -166,6 +166,25 @@ final class ApartmentModelTests: XCTestCase {
         await model.cancelApartmentEntry()
     }
 
+    func testSecretAbortDuringPresenceStartupCannotLeaveSaveBusy() async throws {
+        let context = try await makeModel(secret: secret, apartment: 17)
+        defer { try? FileManager.default.removeItem(at: context.directory) }
+        await context.model.editApartment()
+        context.model.apartmentInput = "18"
+        context.secretStore.setSecret("replacement-secret")
+        let saveTask = Task { await context.model.saveApartmentEntry() }
+        var settled = false
+        for _ in 0..<10_000 {
+            await Task.yield()
+            if !context.model.isBusy && !context.model.isApartmentSheetPresented { settled = true; break }
+        }
+        XCTAssertTrue(settled, "Secret abort must release a Save waiting for the initial presence probe")
+        if settled { await saveTask.value }
+        XCTAssertFalse(context.model.isBusy)
+        XCTAssertFalse(context.model.isApartmentSheetPresented)
+        XCTAssertEqual(context.fake.writeCallCount, 0)
+    }
+
     func testAbsentPresenceArrivingWhileSaveIsDrainingPreventsWrite() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ApartmentHeldPresence-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }

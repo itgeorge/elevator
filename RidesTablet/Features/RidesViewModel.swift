@@ -477,6 +477,8 @@ public final class RidesViewModel: ObservableObject {
     private func abortApartmentPopup(generation: Int, message: String) async {
         guard apartmentPopupGeneration == generation else { return }
         apartmentPopupGeneration += 1
+        apartmentPresenceStartWaiter?.resume()
+        apartmentPresenceStartWaiter = nil
         apartmentPresenceTask = nil
         isApartmentSheetPresented = false
         editingApartment = false
