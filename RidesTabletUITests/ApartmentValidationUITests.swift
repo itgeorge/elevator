@@ -93,7 +93,7 @@ final class ApartmentValidationUITests: XCTestCase {
         XCTAssertNotNil(pendingBefore)
 
         app.buttons["clear-apartment-number"].tap()
-        for digit in ["5", "3"] { app.buttons["apartment-key-\\(digit)"].tap() }
+        for digit in ["5", "3"] { app.buttons["apartment-key-\(digit)"].tap() }
         app.buttons["apartment-save"].tap()
 
         XCTAssertTrue(number.waitForNonExistence(timeout: 10))
@@ -104,6 +104,54 @@ final class ApartmentValidationUITests: XCTestCase {
         XCTAssertTrue(app.buttons.matching(NSPredicate(
             format: "label CONTAINS %@", "Apartment number 53"
         )).firstMatch.waitForExistence(timeout: 10))
+#endif
+    }
+
+    func testMockedPresenceLossAbortsChargeAndReappearanceAllowsFreshPrompt() throws {
+#if !targetEnvironment(simulator)
+        throw XCTSkip("This explicitly mocked presence sequence is simulator-only.")
+#else
+        continueAfterFailure = false
+        let app = launch(scene: "apartment-charge", presenceSequence: "present,absent,present")
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForNonExistence(timeout: 12),
+                      "The mocked absent probe must abort the whole charge popup, not invoke Skip")
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists)
+
+        app.buttons["detect-primary-action"].tap()
+        XCTAssertTrue(app.buttons["pending-rides-plus-1"].waitForExistence(timeout: 15))
+        app.buttons["pending-rides-plus-1"].tap()
+        app.buttons["Charge token"].tap()
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 15),
+                      "The scripted reappearance should allow a fresh prompt after a new Detect")
+        app.buttons["apartment-cancel"].tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists)
+#endif
+    }
+
+    func testMockedPresenceLossAbortsApartmentEditAndReappearanceAllowsFreshEdit() throws {
+#if !targetEnvironment(simulator)
+        throw XCTSkip("This explicitly mocked presence sequence is simulator-only.")
+#else
+        continueAfterFailure = false
+        // The edit fixture's initial Save and the popup's first healthy probe consume
+        // two presents; the visible popup then observes present → absent → present.
+        let app = launch(scene: "apartment-edit", presenceSequence: "present,present,absent,present")
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForNonExistence(timeout: 12),
+                      "The mocked absent probe must abort the entire apartment edit")
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists)
+
+        app.buttons["detect-primary-action"].tap()
+        let apartmentButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 52")).firstMatch
+        XCTAssertTrue(apartmentButton.waitForExistence(timeout: 15))
+        apartmentButton.tap()
+        XCTAssertTrue(app.staticTexts["apartment-number-input"].waitForExistence(timeout: 15),
+                      "The scripted reappearance should allow a fresh edit after a new Detect")
+        app.buttons["apartment-cancel"].tap()
+        XCTAssertTrue(app.staticTexts["TOTAL · 0 charges"].exists)
 #endif
     }
 
@@ -163,11 +211,18 @@ final class ApartmentValidationUITests: XCTestCase {
 #endif
     }
 
-    private func launch(scene: String, orientation: UIDeviceOrientation = .portrait) -> XCUIApplication {
+    private func launch(
+        scene: String,
+        orientation: UIDeviceOrientation = .portrait,
+        presenceSequence: String? = nil
+    ) -> XCUIApplication {
         XCUIDevice.shared.orientation = orientation
         let app = XCUIApplication()
         app.launchEnvironment["RIDES_SIMULATOR_FAKE_READER"] = "1"
         app.launchEnvironment["RIDES_SCREENSHOT_SCENE"] = scene
+        if let presenceSequence {
+            app.launchEnvironment["RIDES_SIMULATOR_PRESENCE_SEQUENCE"] = presenceSequence
+        }
         app.launch()
         return app
     }

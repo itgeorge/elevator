@@ -31,6 +31,9 @@ struct RidesRootView: View {
     @State private var isDiagnosticsPresented = false
     @State private var usesFakeReader = false
 #if DEBUG
+    @State private var simulatorPresenceFixtureDevice: SimulatorPresenceSequenceDevice?
+#endif
+#if DEBUG
     @State private var didStartReadOnlyAutoSmoke = false
     @State private var didFinishLaunchConnectionSetup = false
 #endif
@@ -69,6 +72,9 @@ struct RidesRootView: View {
             if launchConfiguration.simulatorFakeReaderEnabled {
                 bootstrapSimulatorFakeReader()
                 if let scene = launchConfiguration.screenshotScene, let ridesModel {
+                    if ProcessInfo.processInfo.environment["RIDES_SIMULATOR_PRESENCE_SEQUENCE"] != nil {
+                        await prepareSimulatorPresenceFixture(ridesModel)
+                    }
                     await applySimulatorScreenshotScene(scene, to: ridesModel)
                 }
             } else {
@@ -274,24 +280,52 @@ struct RidesRootView: View {
 
     private func bootstrapSimulatorFakeReader() {
         usesFakeReader = true
+        let fake = FakeProxmark(scanDelay: simulatorScanDelay)
+        let presenceFixture = simulatorPresenceSequence.map {
+            SimulatorPresenceSequenceDevice(base: fake, sequence: $0)
+        }
+        simulatorPresenceFixtureDevice = presenceFixture
+        let device: any RideTokenDevice = presenceFixture ?? fake
         if launchConfiguration.screenshotScene != nil {
             let fixtureDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("RidesTablet-ScreenshotChargeSessions", isDirectory: true)
             try? FileManager.default.removeItem(at: fixtureDirectory)
             try? FileManager.default.createDirectory(at: fixtureDirectory, withIntermediateDirectories: true)
             ridesModel = RidesViewModel(
-                device: FakeProxmark(scanDelay: simulatorScanDelay),
+                device: device,
                 configuration: .load(),
                 sessionStore: FileChargeSessionStore(directory: fixtureDirectory)
             )
         } else {
-            ridesModel = RidesViewModel(device: FakeProxmark(scanDelay: simulatorScanDelay), configuration: .load())
+            ridesModel = RidesViewModel(device: device, configuration: .load())
         }
+    }
+
+    private var simulatorPresenceSequence: [TokenPresenceOutcome]? {
+        guard launchConfiguration.simulatorFakeReaderEnabled,
+              let raw = ProcessInfo.processInfo.environment["RIDES_SIMULATOR_PRESENCE_SEQUENCE"] else { return nil }
+        let outcomes = raw.split(separator: ",").compactMap { item -> TokenPresenceOutcome? in
+            switch item.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "present": .present
+            case "absent": .absent
+            case "failure": .failure("simulated probe failure")
+            default: nil
+            }
+        }
+        return outcomes.isEmpty ? nil : outcomes
     }
 
     private var simulatorScanDelay: TimeInterval {
         let rawValue = ProcessInfo.processInfo.environment["RIDES_SIMULATOR_SCAN_DELAY_MS"]
         guard let milliseconds = rawValue.flatMap(Int.init) else { return 0 }
         return Double(min(max(milliseconds, 0), 5_000)) / 1_000
+    }
+
+    private func prepareSimulatorPresenceFixture(_ model: RidesViewModel) async {
+        simulatorPresenceFixtureDevice?.setScenario(.noChip)
+        await model.performPrimaryAction()
+        simulatorPresenceFixtureDevice?.setScenario(.goodToken)
+        await model.performPrimaryAction()
+        await model.detect()
     }
 
     private func applySimulatorScreenshotScene(_ scene: SimulatorScreenshotScene, to model: RidesViewModel) async {
@@ -355,6 +389,7 @@ struct RidesRootView: View {
             ApartmentSecretStore.shared.setSecret("rides-demo-secret")
             await model.detect()
             model.adjustRides(by: 50)
+            await model.editApartment()
             model.apartmentInput = "52"
             await model.saveApartmentEntry()
             await model.editApartment()
@@ -364,3 +399,42 @@ struct RidesRootView: View {
     }
 #endif
 }
+
+#if DEBUG
+/// Explicitly mocked popup-presence sequence used only by deterministic simulator UI tests.
+/// All reads/writes are delegated to FakeProxmark; only token-presence probes are scripted.
+private final class SimulatorPresenceSequenceDevice: RideTokenDevice, @unchecked Sendable {
+    private let base: FakeProxmark
+    private let sequence: [TokenPresenceOutcome]
+    private let lock = NSLock()
+    private var nextIndex = 0
+
+    init(base: FakeProxmark, sequence: [TokenPresenceOutcome]) {
+        self.base = base
+        self.sequence = sequence
+    }
+
+    func setScenario(_ scenario: SimulationScenario) { base.apply(scenario) }
+    func scan() async -> ScanOutcome { await base.scan() }
+    func measureTokenPresence() async -> TokenPresenceOutcome {
+        let (outcome, shouldDelay) = nextOutcome()
+        if shouldDelay { try? await Task.sleep(for: .seconds(5)) }
+        return outcome
+    }
+
+    private func nextOutcome() -> (TokenPresenceOutcome, Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        let shouldDelay = nextIndex > 0
+        let outcome = sequence[min(nextIndex, sequence.count - 1)]
+        nextIndex += 1
+        return (outcome, shouldDelay)
+    }
+    func scanForApartmentSnapshot() async -> ScanOutcome { await base.scanForApartmentSnapshot() }
+    func measureCalibrationSignal() async -> CalibrationSignalOutcome { await base.measureCalibrationSignal() }
+    func measureSignal() async -> TuneOutcome { await base.measureSignal() }
+    func writeRideMirrors(_ request: RideMirrorWriteRequest) async -> WriteOutcome { await base.writeRideMirrors(request) }
+    func reset(_ request: ResetMutationRequest) async -> ResetOutcome { await base.reset(request) }
+    func writeApartment(_ request: ApartmentMutationRequest) async -> WriteOutcome { await base.writeApartment(request) }
+}
+#endif
