@@ -253,6 +253,61 @@ final class PhysicalRidesUITests: XCTestCase {
         app.buttons["Done"].tap()
     }
 
+    func testApartmentOnlyEdit43To44PreservesRidesHistoryAndPending() throws {
+        continueAfterFailure = false
+        let runnerOptIn = ProcessInfo.processInfo.environment["TEST_RUNNER_RIDES_UI_PHYSICAL_TEST"]
+            ?? ProcessInfo.processInfo.environment["RIDES_UI_PHYSICAL_TEST"]
+        guard runnerOptIn == "1" else { throw XCTSkip("Set TEST_RUNNER_RIDES_UI_PHYSICAL_TEST=1 to opt in.") }
+        XCTAssertTrue(secret == requiredPhysicalSecret, "Set the fresh physical-test secret through the test-runner environment.")
+
+        launchPhysicalApp()
+        let current = app.descendants(matching: .any).matching(identifier: "current-rides-display").firstMatch
+        XCTAssertTrue(current.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForLoadedRideValue(current, timeout: 30), "Initial physical Detect did not finish")
+        saveSecretThroughConnectionSheet()
+        let initialRides = rideValue(current)
+        let pending = app.descendants(matching: .any)["pending-rides-display"]
+        XCTAssertTrue(pending.exists)
+        let initialPending = pending.value as? String
+        let initialChargeTotal = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "TOTAL · ")).firstMatch.label
+        let initialHistoryCount = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "charge-eur-")).count
+        let apartment43 = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 43")).firstMatch
+        XCTAssertTrue(apartment43.waitForExistence(timeout: 15), "Preflight must confirm Apt 43 before the single mutation")
+        XCTAssertEqual(initialRides, 0, "Unexpected ride count; stop before mutation")
+        XCTAssertNotNil(initialPending)
+        XCTAssertTrue(initialChargeTotal.hasPrefix("TOTAL · "))
+
+        apartment43.tap()
+        let input = app.staticTexts["apartment-number-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        attach(app, name: "physical-apartment-43-before-edit")
+        app.buttons["clear-apartment-number"].tap()
+        enterApartment(44)
+        attach(app, name: "physical-apartment-44-before-save")
+        app.buttons["apartment-save"].tap() // Exactly one write attempt; never retry on an ambiguous result.
+        XCTAssertTrue(input.waitForNonExistence(timeout: 30), "Apartment save did not complete; inspect token state before any retry")
+        XCTAssertEqual(rideValue(current), initialRides, "Apartment-only save changed rides")
+        XCTAssertEqual(pending.value as? String, initialPending, "Apartment-only save changed pending rides")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "TOTAL · ")).firstMatch.label, initialChargeTotal,
+                       "Apartment-only save changed charge history")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "charge-eur-")).count, initialHistoryCount)
+        attach(app, name: "physical-apartment-only-save-preserved-state")
+
+        // Separate ordinary full Detect from save traffic to read back the new apartment.
+        let status = app.descendants(matching: .any)["token-operation-status"]
+        app.buttons["detect-primary-action"].tap()
+        let detecting = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS[c] %@", "Detecting"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [detecting], timeout: 10), .completed, "External readback Detect did not start")
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT (value CONTAINS[c] %@)", "Detecting"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 30), .completed, "External readback Detect did not finish")
+        XCTAssertEqual(rideValue(current), initialRides)
+        XCTAssertEqual(pending.value as? String, initialPending)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "TOTAL · ")).firstMatch.label, initialChargeTotal)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Apartment number 44")).firstMatch.waitForExistence(timeout: 15),
+                       "Separate fresh Detect did not read back Apt 44")
+        attach(app, name: "physical-external-detect-apartment-44-preserved-history")
+    }
+
     private func launchPhysicalApp() {
         app = XCUIApplication()
         app.launchEnvironment["RIDES_UI_PHYSICAL_BOOTSTRAP"] = "1"
